@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- RoundedProgressBar 本地替代实现所需的自定义属性（原库属性子集） -->
+    <declare-styleable name="RoundedProgressBar">
+        <attr name="rpbBackgroundColor" format="color" />
+        <attr name="rpbBackgroundTextColor" format="color" />
+        <attr name="rpbShowProgressText" format="boolean" />
+        <attr name="rpbCornerRadius" format="dimension" />
+        <attr name="rpbProgressColor" format="color" />
+        <attr name="rpbProgressTextColor" format="color" />
+        <attr name="rpbTextPadding" format="dimension" />
+        <attr name="rpbAnimationLength" format="integer" />
+    </declare-styleable>
+</resources>

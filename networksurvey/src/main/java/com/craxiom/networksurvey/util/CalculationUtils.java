@@ -1,0 +1,220 @@
+package com.craxiom.networksurvey.util;
+
+import android.telephony.AccessNetworkConstants;
+import android.telephony.NetworkRegistrationInfo;
+import android.telephony.TelephonyDisplayInfo;
+import android.telephony.TelephonyManager;
+
+import com.craxiom.networksurvey.constants.NetworkSurveyConstants;
+
+/**
+ * A utils class for calculations used throughout the app, as well as some validation logic.
+ *
+ * @since 0.0.5
+ */
+public final class CalculationUtils
+{
+    /**
+     * Checks to make sure the provide LTE Cell ID is with in the valid range as defined by the 3GPP specification (0-268435455).
+     *
+     * @param cellId The LTE Cell ID to validate.
+     * @return True if the LTE Cell ID is valid, false otherwise.
+     */
+    public static boolean isLteCellIdValid(int cellId)
+    {
+        return cellId >= 0 && cellId <= 268_435_455;
+    }
+
+    /**
+     * Pulls the Macro eNodeB ID from an LTE Cell Id.  The Macro eNB ID is the first 20 bits of the Cell Identity.
+     *
+     * @param cellId The LTE Cell ID to pull the Macro eNodeB ID from.
+     * @return The Macro eNodeB ID (first 20 bits).
+     */
+    public static int getEnodebIdFromCellId(int cellId)
+    {
+        return cellId >> 8;
+    }
+
+    /**
+     * Pulls the sector ID from an LTE Cell Id.  The sectorID is the last 8 bits of the Cell Identity.
+     *
+     * @param cellId The LTE Cell ID to pull the sector ID from.
+     * @return The sector ID (last 8 bits).
+     */
+    public static int getSectorIdFromCellId(int cellId)
+    {
+        return cellId & 0xFF;
+    }
+
+    /**
+     * Pulls the sector ID (aka short cell ID) from a UMTS long CID. The short cell ID is the last 16 bits of the
+     * long CID.
+     *
+     * @param longCid The UMTS CID to pull the sector ID from.
+     * @return The short cell ID (last 8 bits).
+     */
+    public static int getUmtsShortCellIdFromCid(int longCid)
+    {
+        return longCid & 0xFFFF;
+    }
+
+    /**
+     * Pulls the UMTS Radio Network Controller (RNC) from a UMTS long CID. The RNC is the first 12 bits of the long CID.
+     *
+     * @param longCid The UMTS Cell ID to pull the RNC from.
+     * @return The RNC (first 12 bits).
+     */
+    public static int getUmtsRncFromCid(int longCid)
+    {
+        return longCid >> 16;
+    }
+
+    /**
+     * Pulls the Primary Sync Sequence (PSS) from an LTE Physical Cell ID (PCI).
+     *
+     * @param pci The LTE Physical Cell ID to pull the PSS from.
+     * @return The PSS.
+     */
+    public static int getPrimarySyncSequence(int pci)
+    {
+        return pci % 3;
+    }
+
+    /**
+     * Pulls the Secondary Sync Sequence (SSS) from an LTE Physical Cell ID (PCI).
+     *
+     * @param pci The LTE Physical Cell ID to pull the SSS from.
+     * @return The PSS.
+     */
+    public static int getSecondarySyncSequence(int pci)
+    {
+        return pci / 3;
+    }
+
+    /**
+     * Pulls the gNB ID from a 5G NR Cell Identifier (NCI). The gNB ID is the first 22 to 32 bits of the NCI.
+     *
+     * @param nci       The NR Cell ID to pull the gNB ID from.
+     * @param gnbIdBits The number of bits for the gNB ID.
+     * @return The gNB ID.
+     */
+    public static long getGnbIdFromNci(long nci, int gnbIdBits)
+    {
+        if (gnbIdBits < 22 || gnbIdBits > 32)
+        {
+            throw new IllegalArgumentException("gnbIdBits must be between 22 and 32.");
+        }
+        return nci >> (36 - gnbIdBits);
+    }
+
+    /**
+     * Pulls the sector ID from a 5G NR Cell Identifier (NCI). The sector ID is the remaining bits after the gNB ID.
+     *
+     * @param nci       The NR Cell ID to pull the sector ID from.
+     * @param gnbIdBits The number of bits for the gNB ID.
+     * @return The sector ID.
+     */
+    public static long getSectorIdFromNci(long nci, int gnbIdBits)
+    {
+        if (gnbIdBits < 22 || gnbIdBits > 32)
+        {
+            throw new IllegalArgumentException("gnbIdBits must be between 22 and 32.");
+        }
+        int sectorIdBits = 36 - gnbIdBits;
+        return nci & ((1L << sectorIdBits) - 1);
+    }
+
+    /**
+     * Given the Android int value for a network type, return the String value that it represents.
+     *
+     * @param networkType The network type in integer form as reported by Android.
+     * @return The human friendly String representation of the network type int value.
+     * @see TelephonyManager#getNetworkType()
+     */
+    public static String getNetworkType(int networkType)
+    {
+        return switch (networkType)
+        {
+            case 1 -> NetworkSurveyConstants.GPRS;
+            case 2 -> NetworkSurveyConstants.EDGE;
+            case 3 -> NetworkSurveyConstants.UMTS;
+            case 4 -> NetworkSurveyConstants.CDMA;
+            case 5 -> NetworkSurveyConstants.EVDO_0;
+            case 6 -> NetworkSurveyConstants.EVDO_A;
+            case 7 -> NetworkSurveyConstants.RTT1x;
+            case 8 -> NetworkSurveyConstants.HSDPA;
+            case 9 -> NetworkSurveyConstants.HSUPA;
+            case 10 -> NetworkSurveyConstants.HSPA;
+            case 11 -> NetworkSurveyConstants.IDEN;
+            case 12 -> NetworkSurveyConstants.EVDO_B;
+            case 13 -> NetworkSurveyConstants.LTE;
+            case 14 -> NetworkSurveyConstants.EHRPD;
+            case 15 -> NetworkSurveyConstants.HSPAP;
+            case 16 -> NetworkSurveyConstants.GSM;
+            case 17 -> NetworkSurveyConstants.TD_SCDMA;
+            case 18 -> NetworkSurveyConstants.IWLAN;
+            case 19 -> NetworkSurveyConstants.LTE_CA;
+            case 20 -> NetworkSurveyConstants.NR;
+            default -> NetworkSurveyConstants.UNKNOWN;
+        };
+    }
+
+    /**
+     * Given the Android int value for an override network type, return the String value that it represents.
+     *
+     * @param networkType The override network type in integer form as reported by Android.
+     * @return The human friendly String representation of the override network type int value.
+     * @see TelephonyDisplayInfo#getOverrideNetworkType()
+     */
+    public static String getOverrideNetworkType(int networkType)
+    {
+        return switch (networkType)
+        {
+            case TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NONE -> "None";
+            case TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_LTE_CA -> "LTE-CA";
+            case TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_LTE_ADVANCED_PRO -> "LTE Adv Pro";
+            case TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA -> "NR NSA";
+            case TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA_MMWAVE -> "NR NSA mmWave";
+            case TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_ADVANCED -> "NR Advanced";
+            default -> NetworkSurveyConstants.UNKNOWN;
+        };
+    }
+
+    /**
+     * Given the Android int value for a network registration domain, return the String value that
+     * it represents.
+     *
+     * @param domain The domain in integer form as reported by Android.
+     * @return The human friendly String representation of the domain int value.
+     * @see NetworkRegistrationInfo#getDomain()
+     */
+    public static String getDomainName(int domain)
+    {
+        return switch (domain)
+        {
+            case NetworkRegistrationInfo.DOMAIN_CS -> "CS";
+            case NetworkRegistrationInfo.DOMAIN_PS -> "PS";
+            case NetworkRegistrationInfo.DOMAIN_CS_PS -> "CS+PS";
+            default -> NetworkSurveyConstants.UNKNOWN;
+        };
+    }
+
+    /**
+     * Given the Android int value for a network transport type, return the String value that it
+     * represents.
+     *
+     * @param transportType The transport type in integer form as reported by Android.
+     * @return The human friendly String representation of the transport type int value.
+     * @see NetworkRegistrationInfo#getTransportType()
+     */
+    public static String getTransportTypeName(int transportType)
+    {
+        return switch (transportType)
+        {
+            case AccessNetworkConstants.TRANSPORT_TYPE_WWAN -> "WWAN";
+            case AccessNetworkConstants.TRANSPORT_TYPE_WLAN -> "WLAN";
+            default -> NetworkSurveyConstants.UNKNOWN;
+        };
+    }
+}

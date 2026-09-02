@@ -1,0 +1,8 @@
+.gradle/
+build/
+networksurvey/build/
+local.properties
+*.apk
+build-log.txt
+.idea/
+*.iml
