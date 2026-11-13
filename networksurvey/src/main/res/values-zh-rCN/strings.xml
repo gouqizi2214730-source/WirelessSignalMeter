@@ -195,6 +195,7 @@
     <string name="card_title_mqtt_details">MQTT 连接</string>
     <string name="cellular_title">蜂窝网络</string>
     <string name="home_signal">信号</string>
+    <string name="sim_switch">切换 SIM 卡</string>
     <string name="serving_signal_strength">信号强度</string>
     <string name="cellular_trend">信号趋势</string>
     <string name="cellular_trend_window">%1$s · 最近 2 分钟</string>
@@ -210,6 +211,8 @@
     <string name="cell_site_latitude">基站纬度</string>
     <string name="home_tools">工具</string>
     <string name="professional_tools_title">专业工具</string>
+    <string name="tower_map_search_action">搜索工参</string>
+    <string name="tower_map_layers_action">地图图层与打点</string>
     <string name="tool_tower_map_title">基站地图</string>
     <string name="tool_tower_map_description">基站与扇区分布、当前小区连线、实时轨迹打点</string>
     <string name="tool_gnss_title">GNSS 卫星</string>

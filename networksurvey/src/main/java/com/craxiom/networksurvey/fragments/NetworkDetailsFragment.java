@@ -151,8 +151,10 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
         sharedViewModel = new ViewModelProvider(requireActivity()).get(SharedViewModel.class);
 
         // 全 Compose 渲染：将蜂窝详情 UI 装入 ComposeView
+        Fragment parent = getParentFragment();
         CellularDetailsCompose.setContent(binding.cellularDetailsComposeView, viewModel, chartViewModel,
-                this::showCellularInfoDialog, this::showNetworkTechnologyInfoDialog, this::showNrDetailsInfoDialog);
+                this::showCellularInfoDialog, this::showNetworkTechnologyInfoDialog, this::showNrDetailsInfoDialog,
+                parent instanceof MainCellularFragment ? ((MainCellularFragment) parent).getTopBarScroll() : null);
 
         return binding.getRoot();
     }

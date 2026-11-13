@@ -500,7 +500,7 @@ private fun SurveyMapTab(
 ) {
     // 使用百度地图基站地图页（已替代旧 MapLibre TowerMapScreen）
     BaiduTowerMapScreen(
-        onBackButtonPressed = { /* Tab already has back button */ },
+        onBackButtonPressed = null,
         servingCellInfo = servingCellInfo
     )
 }

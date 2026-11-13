@@ -4,8 +4,13 @@ import android.content.Context
 import android.content.ContextWrapper
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,6 +27,8 @@ import com.craxiom.networksurvey.Application
 import com.craxiom.networksurvey.R
 import com.craxiom.networksurvey.databinding.ContainerGnssFragmentBinding
 import com.craxiom.networksurvey.databinding.ContainerWifiFragmentBinding
+import com.craxiom.networksurvey.fragments.MainGnssFragment
+import com.craxiom.networksurvey.fragments.WifiNetworksFragment
 import com.craxiom.networksurvey.gpstest.model.GnssType
 import com.craxiom.networksurvey.gpstest.util.LibUIUtils
 import com.craxiom.networksurvey.ui.main.appbar.AppBarAction
@@ -29,20 +36,25 @@ import com.craxiom.networksurvey.ui.main.appbar.TitleBar
 import com.craxiom.networksurvey.ui.wifi.components.WifiFilterSheet
 import com.craxiom.networksurvey.ui.wifi.model.WifiListViewModel
 import com.craxiom.networksurvey.util.PreferenceUtils
-import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 
 @Composable
 internal fun WifiToolScreen(navController: NavHostController) {
+    val scrollBehavior = MiuixScrollBehavior()
     val activity = LocalContext.current.findComponentActivity()
     val wifiViewModel: WifiListViewModel? = activity?.let { viewModel(viewModelStoreOwner = it) }
     val state = wifiViewModel?.uiState?.collectAsStateWithLifecycle()?.value
     var showFilter by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             val filterActive = state?.filter?.isActive == true
             TitleBar(
                 title = stringResource(R.string.tool_wifi_title),
+                scrollBehavior = scrollBehavior,
                 appBarActions = buildList {
                     add(
                         AppBarAction(
@@ -68,10 +80,12 @@ internal fun WifiToolScreen(navController: NavHostController) {
                 onBackClick = { navController.navigateUp() },
             )
         },
-        popupHost = {},
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
-            AndroidViewBinding(ContainerWifiFragmentBinding::inflate, Modifier.fillMaxSize())
+        Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
+            AndroidViewBinding(ContainerWifiFragmentBinding::inflate, Modifier.fillMaxSize()) {
+                wifiFragmentContainerView.getFragment<WifiNetworksFragment>()
+                    .topBarScroll.connection = scrollBehavior.nestedScrollConnection
+            }
         }
     }
 
@@ -94,13 +108,18 @@ internal fun WifiToolScreen(navController: NavHostController) {
 
 @Composable
 internal fun GnssToolScreen(onBack: () -> Unit) {
+    val scrollBehavior = MiuixScrollBehavior()
     var showFilter by rememberSaveable { mutableStateOf(false) }
     var showSort by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TitleBar(
                 title = stringResource(R.string.tool_gnss_title),
+                scrollBehavior = scrollBehavior,
                 appBarActions = listOf(
                     AppBarAction(
                         icon = R.drawable.ic_sort,
@@ -116,10 +135,12 @@ internal fun GnssToolScreen(onBack: () -> Unit) {
                 onBackClick = onBack,
             )
         },
-        popupHost = {},
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
-            AndroidViewBinding(ContainerGnssFragmentBinding::inflate, Modifier.fillMaxSize())
+        Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
+            AndroidViewBinding(ContainerGnssFragmentBinding::inflate, Modifier.fillMaxSize()) {
+                gnssFragmentContainerView.getFragment<MainGnssFragment>()
+                    .topBarScroll.connection = scrollBehavior.nestedScrollConnection
+            }
         }
     }
 

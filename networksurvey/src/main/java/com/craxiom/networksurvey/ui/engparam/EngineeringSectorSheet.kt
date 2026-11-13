@@ -5,6 +5,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -21,16 +22,34 @@ internal fun EngineeringSectorSheet(
     param: EngineeringParam,
     onDismiss: () -> Unit,
     onDelete: (() -> Unit)? = null,
+    nearbyPosition: Pair<Int, Int>? = null,
+    onPreviousSector: () -> Unit = {},
+    onNextSector: () -> Unit = {},
 ) {
     val colors = MaterialTheme.colorScheme
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        val scroll = rememberScrollState()
+        LaunchedEffect(param.id) { scroll.scrollTo(0) }
         Column(
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text("扇区详情", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-            Surface(shape = DashboardCardDefaults.shape, color = DashboardCardDefaults.cardContainerColor()) {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp)) {
+            if (nearbyPosition != null) {
+                val (position, total) = nearbyPosition
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically) {
+                    FilledTonalButton(onClick = onPreviousSector) { Text("上一个扇区") }
+                    Text("$position / $total", style = MaterialTheme.typography.labelMedium)
+                    FilledTonalButton(onClick = onNextSector) { Text("下一个扇区") }
+                }
+            }
+            Surface(
+                modifier = Modifier.weight(1f, fill = false),
+                shape = DashboardCardDefaults.shape,
+                color = DashboardCardDefaults.cardContainerColor(),
+            ) {
+                Column(Modifier.fillMaxWidth().verticalScroll(scroll).padding(horizontal = 14.dp, vertical = 6.dp)) {
                     ImportFieldSpec.FIELDS.forEachIndexed { index, field ->
                         if (index > 0) HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.45f))
                         Row(

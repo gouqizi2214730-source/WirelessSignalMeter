@@ -65,6 +65,7 @@ import top.yukonga.miuix.kmp.blur.highlight.BloomStroke
 import top.yukonga.miuix.kmp.blur.highlight.Highlight
 import top.yukonga.miuix.kmp.blur.highlight.LightPosition
 import top.yukonga.miuix.kmp.blur.highlight.LightSource
+import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.blur.sensor.rememberDeviceTilt
@@ -197,9 +198,10 @@ fun FloatingBottomBar(
 
     val isInDark = effSurface.luminance() < 0.5f
     val pillShape = remember { CircleShape }
-    val containerColor = if (isBlurEnabled) effSurface.copy(0.4f) else effSurface
+    val useBackdrop = isBlurEnabled && backdrop != null && isRuntimeShaderSupported()
+    val containerColor = if (useBackdrop) effSurface.copy(alpha = if (isInDark) 0.53f else 0.47f) else effSurface
 
-    val tabsBackdrop = rememberLayerBackdrop()
+    val tabsBackdrop = if (useBackdrop) rememberLayerBackdrop() else null
     val density = LocalDensity.current
     val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
     val animationScope = rememberCoroutineScope()
@@ -302,7 +304,7 @@ fun FloatingBottomBar(
         }
     }
 
-    val interactiveHighlight = remember(animationScope, tabWidthPx) {
+    val interactiveHighlight = if (useBackdrop) remember(animationScope, tabWidthPx, isLtr, dampedDragAnimation) {
         InteractiveHighlight(
             animationScope = animationScope,
             position = { size, _ ->
@@ -313,9 +315,8 @@ fun FloatingBottomBar(
                 )
             }
         )
-    }
+    } else null
 
-    val useBackdrop = isBlurEnabled && backdrop != null
     val baseHighlight = if (useBackdrop) {
         rememberGravityRotatedHighlight(iosIndicatorSpecular, extraDegrees = -45f)
     } else {
@@ -327,7 +328,9 @@ fun FloatingBottomBar(
         iosIndicatorSpecular
     }
 
-    val combinedBackdrop = if (backdrop != null) rememberCombinedBackdrop(backdrop, tabsBackdrop) else null
+    val combinedBackdrop = if (backdrop != null && tabsBackdrop != null) {
+        rememberCombinedBackdrop(backdrop, tabsBackdrop)
+    } else null
 
     // 底栏适配可用宽度，左右各留 28dp，最大宽度 360dp。
     Box(
@@ -358,7 +361,7 @@ fun FloatingBottomBar(
                     onClick = {}
                 )
                 .then(
-                    if (isBlurEnabled && backdrop != null) {
+                    if (useBackdrop && backdrop != null) {
                         Modifier.drawBackdrop(
                             backdrop = backdrop,
                             shape = { pillShape },
@@ -383,14 +386,14 @@ fun FloatingBottomBar(
                         Modifier.background(containerColor, pillShape)
                     }
                 )
-                .then(if (isBlurEnabled && backdrop != null) interactiveHighlight.modifier else Modifier)
+                .then(interactiveHighlight?.modifier ?: Modifier)
                 .height(64.dp)
                 .padding(4.dp),
             verticalAlignment = Alignment.CenterVertically,
             content = { content(::activateTab) }
         )
 
-        if (isBlurEnabled && backdrop != null) {
+        if (useBackdrop && backdrop != null && tabsBackdrop != null) {
             CompositionLocalProvider(
                 LocalFloatingBottomBarTabScale provides {
                     lerp(1f, 1.2f, dampedDragAnimation.pressProgress)
@@ -416,7 +419,7 @@ fun FloatingBottomBar(
                             },
                             onDrawSurface = { drawRect(containerColor) },
                         )
-                        .then(interactiveHighlight.modifier)
+                        .then(interactiveHighlight?.modifier ?: Modifier)
                         .height(56.dp)
                         .padding(horizontal = 4.dp)
                         .graphicsLayer(colorFilter = ColorFilter.tint(effAccent)),
@@ -428,7 +431,7 @@ fun FloatingBottomBar(
 
         if (tabWidthPx > 0f) {
             val tabWidthDp = with(density) { tabWidthPx.toDp() }
-            if (isBlurEnabled && combinedBackdrop != null) {
+            if (useBackdrop && combinedBackdrop != null) {
                 Box(
                     Modifier
                         .padding(horizontal = 4.dp)
@@ -436,7 +439,7 @@ fun FloatingBottomBar(
                             val progressOffset = dampedDragAnimation.value * tabWidthPx
                             translationX = if (isLtr) progressOffset + panelOffset else -progressOffset + panelOffset
                         }
-                        .then(interactiveHighlight.gestureModifier)
+                        .then(interactiveHighlight?.gestureModifier ?: Modifier)
                         .then(dampedDragAnimation.modifier)
                         .drawBackdrop(
                             backdrop = combinedBackdrop,

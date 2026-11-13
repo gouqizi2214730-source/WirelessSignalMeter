@@ -30,6 +30,7 @@ import com.craxiom.networksurvey.model.WifiNetwork;
 import com.craxiom.networksurvey.model.WifiRecordWrapper;
 import com.craxiom.networksurvey.services.NetworkSurveyService;
 import com.craxiom.networksurvey.ui.main.SharedViewModel;
+import com.craxiom.networksurvey.ui.main.appbar.FragmentTopBarScroll;
 import com.craxiom.networksurvey.ui.wifi.WifiNetworksCompose;
 import com.craxiom.networksurvey.ui.wifi.model.WifiListViewModel;
 import com.craxiom.networksurvey.ui.wifi.model.WifiNetworkInfoList;
@@ -54,7 +55,12 @@ import timber.log.Timber;
 public class WifiNetworksFragment extends AServiceDataFragment implements IWifiSurveyRecordListener
 {
     private FragmentWifiNetworksListBinding binding;
+    private final FragmentTopBarScroll topBarScroll = new FragmentTopBarScroll();
     private final Handler uiThreadHandler;
+
+    public FragmentTopBarScroll getTopBarScroll() {
+        return topBarScroll;
+    }
 
     private WifiListViewModel viewModel;
 
@@ -100,7 +106,8 @@ public class WifiNetworksFragment extends AServiceDataFragment implements IWifiS
                 composeView,
                 viewModel,
                 this::navigateToWifiDetails,
-                this::handleTogglePause);
+                this::handleTogglePause,
+                topBarScroll);
 
         return binding.getRoot();
     }

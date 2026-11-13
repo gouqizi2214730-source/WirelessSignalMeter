@@ -54,10 +54,9 @@ internal fun ToolsScreen(
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
             modifier = Modifier.widthIn(max = 600.dp).fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = bottomPadding),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = bottomPadding),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item { HomePageTitle(R.string.professional_tools_title) }
             item {
                 ToolCard(
                     R.string.tool_tower_map_title, R.string.tool_tower_map_description,

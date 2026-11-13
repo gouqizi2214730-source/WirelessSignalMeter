@@ -1,9 +1,12 @@
 package com.craxiom.networksurvey.ui.wifi
 
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import com.craxiom.networksurvey.model.WifiNetwork
+import com.craxiom.networksurvey.ui.main.appbar.FragmentTopBarScroll
+import com.craxiom.networksurvey.ui.main.appbar.fragmentTopBarScroll
 import com.craxiom.networksurvey.ui.theme.NsTheme
 import com.craxiom.networksurvey.ui.wifi.model.WifiListViewModel
 
@@ -19,6 +22,7 @@ object WifiNetworksCompose {
         viewModel: WifiListViewModel,
         onNetworkSelected: WifiNetworkSelected,
         onTogglePause: Runnable,
+        topBarScroll: FragmentTopBarScroll,
     ) {
         composeView.setViewCompositionStrategy(
             ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
@@ -29,6 +33,7 @@ object WifiNetworksCompose {
                     viewModel = remember { viewModel },
                     onNetworkSelected = { network -> onNetworkSelected.invoke(network) },
                     onTogglePause = { onTogglePause.run() },
+                    modifier = Modifier.fragmentTopBarScroll(topBarScroll),
                 )
             }
         }

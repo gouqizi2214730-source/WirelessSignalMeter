@@ -418,14 +418,7 @@ fun EngineeringParamsInCompose(mainNavController: NavHostController) {
 
 @Composable
 fun SpeedTestInCompose(mainNavController: NavHostController) {
-    Scaffold(
-        topBar = { TitleBar(stringResource(R.string.tool_speed_test_title)) { mainNavController.navigateUp() } },
-        popupHost = { },
-    ) { innerPadding ->
-        Box(modifier = Modifier.padding(paddingValues = innerPadding)) {
-            SpeedTestScreen()
-        }
-    }
+    SpeedTestScreen(onBack = { mainNavController.navigateUp() })
 }
 
 @Composable
@@ -458,14 +451,7 @@ fun SettingsFragmentInCompose(mainNavController: NavHostController) {
  */
 @Composable
 fun ColorPaletteInCompose(mainNavController: NavHostController) {
-    Scaffold(
-        topBar = { TitleBar("主题") { mainNavController.navigateUp() } },
-        popupHost = { },
-    ) { innerPadding ->
-        Box(modifier = Modifier.padding(paddingValues = innerPadding)) {
-            ColorPaletteScreen()
-        }
-    }
+    ColorPaletteScreen(onBack = { mainNavController.navigateUp() })
 }
 
 @Composable

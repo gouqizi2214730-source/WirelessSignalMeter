@@ -1,6 +1,5 @@
 package com.craxiom.networksurvey.ui.cellular.baidumap
 
-import android.content.res.Resources
 import androidx.compose.runtime.withFrameNanos
 import android.graphics.Bitmap
 import kotlinx.coroutines.Dispatchers
@@ -9,13 +8,17 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
 import android.graphics.RectF
+import android.location.Location
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
-import android.text.TextUtils
 import android.util.LruCache
+import android.util.TypedValue
 import com.baidu.mapapi.map.BaiduMap
+import com.baidu.mapapi.map.BitmapDescriptor
 import com.baidu.mapapi.map.BitmapDescriptorFactory
 import com.baidu.mapapi.map.Marker
 import com.baidu.mapapi.map.MarkerOptions
@@ -28,16 +31,49 @@ import com.craxiom.networksurvey.model.EngineeringParam
 import com.craxiom.networksurvey.model.MapPointRecord
 import com.craxiom.networksurvey.util.CoordConverter
 import com.craxiom.networksurvey.util.SignalGrade
+import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.cos
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.roundToInt
+import kotlin.math.sin
 
 class BaiduMapArea(val mapView: TextureMapView) {
     val baiduMap: BaiduMap get() = mapView.map
 
-    private data class SectorStyle(val color: Int, val selected: Boolean, val labeled: Boolean, val radius: Int)
+    private data class SectorStyle(
+        val color: Int,
+        val selected: Boolean,
+        val radius: Int,
+    )
     private data class SectorMarker(val marker: Marker, val style: SectorStyle)
+    private data class LabelKey(val name: String, val selected: Boolean)
+    private data class SectorLabel(
+        val key: LabelKey,
+        val latitude: Double,
+        val longitude: Double,
+        val xOffset: Int,
+        val yOffset: Int,
+    ) {
+        fun position() = LatLng(latitude, longitude)
+    }
+    private data class LabelMarker(val marker: Marker, val label: SectorLabel)
+    private data class SectorIconKey(val style: SectorStyle, val bearing: Float)
+    private val labelBitmaps = object : LruCache<LabelKey, Bitmap>(4 * 1024 * 1024) {
+        override fun sizeOf(key: LabelKey, value: Bitmap) = value.byteCount
+    }
+    private val density = mapView.resources.displayMetrics.density
+    private val metrics = mapView.resources.displayMetrics
+    private val labelTextSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 10f, metrics)
+    private val sectorIcons = object : LruCache<SectorIconKey, Bitmap>(24 * 1024 * 1024) {
+        override fun sizeOf(key: SectorIconKey, value: Bitmap) = value.byteCount
+    }
+    private val pointIcons = HashMap<Int, BitmapDescriptor>()
     private val sectors = HashMap<Long, SectorMarker>()
+    private val sectorLabels = HashMap<Long, LabelMarker>()
     private val markerParams = HashMap<Marker, EngineeringParam>()
 
     fun paramOf(marker: Marker): EngineeringParam? = markerParams[marker]
@@ -47,6 +83,7 @@ class BaiduMapArea(val mapView: TextureMapView) {
     private var linkPolyline: Polyline? = null
     private var linkMarker: Marker? = null
     private var locMarker: Marker? = null
+    private var lastLinkPoints: List<LatLng>? = null
 
     private val pointMarkers = HashMap<Long, Marker>()
     private var pointMetric: String? = null
@@ -55,21 +92,12 @@ class BaiduMapArea(val mapView: TextureMapView) {
         const val SECTOR_ZOOM = 11f
         const val CLOSE_ZOOM = 17f
         private const val LABEL_ZOOM = 17f
+        private const val SAME_SITE_DISTANCE_METERS = 10f
+        private const val SITE_LATITUDE_BUCKET = 0.0001
         const val MAP_MIN_ZOOM = 4f
 
-        private val sectorCache = object : LruCache<String, Bitmap>(16 * 1024 * 1024) {
-            // 缓存上限 16MB：标签位图尺寸较大（含文字区域），按字节数限制而非张数。
-            // 超限时 LruCache 自动淘汰最旧条目，被淘汰位图不回收（可能仍被 Marker 引用）。
-            override fun sizeOf(key: String, value: Bitmap): Int {
-                return value.byteCount
-            }
-        }
-        // 非标签模式共享位图：同一运营商颜色 + 选中状态 → 同一张扇区位图（方位角只影响朝向指示线，
-        // 而方位角通过 Marker 旋转实现，不再绘制在 Bitmap 内，故可共享）
-        private val sectorCacheNoLabel = LruCache<String, Bitmap>(80)
         private val dotCache = LruCache<Long, Bitmap>(64)
         private var locIconBitmap: Bitmap? = null
-        private val density: Float get() = Resources.getSystem().displayMetrics.density
 
         // ==================== 扇区配色方案 ====================
         // 运营商品牌色（替代旧 PCI mod 3 红绿蓝，更专业、更有辨识度）
@@ -177,13 +205,12 @@ class BaiduMapArea(val mapView: TextureMapView) {
         showLabels: Boolean,
     ) {
         val keep = params.mapTo(HashSet()) { it.id }
-        val iterator = sectors.iterator()
-        while (iterator.hasNext()) {
-            val (id, entry) = iterator.next()
-            if (id !in keep) {
+        for (batch in sectors.keys.filter { it !in keep }.chunked(48)) {
+            withFrameNanos { }
+            for (id in batch) {
+                val entry = sectors.remove(id) ?: continue
                 entry.marker.remove()
                 markerParams.remove(entry.marker)
-                iterator.remove()
             }
         }
 
@@ -191,33 +218,28 @@ class BaiduMapArea(val mapView: TextureMapView) {
         val radius = (16f * 1.19f.pow((zoom - 15).toFloat())).toInt().coerceIn(8, 46)
         val changed = params.mapNotNull { param ->
             val selected = param.id == selectedId || param.id == servingId
-            val labeled = showLabels && (selected || viewport.zoom >= LABEL_ZOOM)
-            val style = SectorStyle(operatorColor(param.mcc, param.mnc, param.netType), selected, labeled, radius)
+            val style = SectorStyle(operatorColor(param.mcc, param.mnc, param.netType), selected, radius)
             (param to style).takeIf { sectors[param.id]?.style != style }
         }
-        for (batch in changed.chunked(if (showLabels && viewport.zoom >= LABEL_ZOOM) 14 else 48)) {
+        for (batch in changed.chunked(40)) {
+            val bitmaps = withContext(Dispatchers.Default) {
+                batch.map { (param, style) -> makeSectorIcon(style, param.azimuth) }
+            }
             withFrameNanos { }
             val pending = ArrayList<Triple<EngineeringParam, SectorStyle, MarkerOptions>>()
-            val bitmaps = withContext(Dispatchers.Default) {
-                batch.map { (param, style) ->
-                    makeSectorBitmap(style.color, style.selected, style.labeled, param.displayName, param.azimuth, style.radius)
-                }
-            }
             for ((index, entry) in batch.withIndex()) {
                 val (param, style) = entry
-                val icon = BitmapDescriptorFactory.fromBitmap(bitmaps[index])
-                val angle = if (style.labeled || !param.azimuth.isFinite()) 0f
-                else (((param.azimuth % 360.0) + 360.0) % 360.0).toFloat()
+                val bitmap = bitmaps[index]
+                val icon = BitmapDescriptorFactory.fromBitmap(bitmap)
                 val z = if (style.selected) 3 else 1
                 val previous = sectors[param.id]
                 if (previous != null) {
                     previous.marker.icon = icon
-                    previous.marker.setRotate(angle)
                     previous.marker.zIndex = z
                     sectors[param.id] = SectorMarker(previous.marker, style)
                 } else {
                     val option = MarkerOptions().position(toBd09LatLng(param.lat, param.lon))
-                        .icon(icon).anchor(0.5f, 0.5f).rotate(angle).zIndex(z)
+                        .icon(icon).anchor(0.5f, 0.5f).zIndex(z)
                     pending.add(Triple(param, style, option))
                 }
             }
@@ -229,33 +251,147 @@ class BaiduMapArea(val mapView: TextureMapView) {
                 markerParams[marker] = param
             }
         }
+
+        val showAllLabels = viewport.zoom >= LABEL_ZOOM
+        val labels = if (showLabels && (showAllLabels || selectedId != null || servingId != null)) {
+            withContext(Dispatchers.Default) {
+                layoutSectorLabels(params, radius, showAllLabels, selectedId, servingId)
+            }
+        } else emptyList()
+        renderSectorLabels(labels)
     }
 
-    internal fun renderPoints(points: List<MapPointRecord>, metric: String) {
-        val keep = points.mapTo(HashSet()) { it.id }
-        val iterator = pointMarkers.iterator()
-        while (iterator.hasNext()) {
-            val (id, marker) = iterator.next()
-            if (id !in keep || pointMetric != metric) {
-                marker.remove()
-                iterator.remove()
+    private fun layoutSectorLabels(
+        params: List<EngineeringParam>,
+        radius: Int,
+        showAll: Boolean,
+        selectedId: Long?,
+        servingId: Long?,
+    ): List<Pair<EngineeringParam, SectorLabel>> {
+        val distance = FloatArray(1)
+        val ordered = params.sortedWith(compareBy<EngineeringParam> { it.lat }.thenBy { it.lon }.thenBy { it.id })
+        val groups = ordered.groupBy { bearingOf(it.azimuth) }
+        val lineOverlap = ceil(3f * density).toInt() // Only the transparent bitmap padding can overlap.
+        val clearance = (radius * 1.16f + 3f) * density
+
+        return buildList {
+            for ((bearing, sectorsInDirection) in groups) {
+                val sitesByLatitude = mutableMapOf<Int, MutableList<MutableList<EngineeringParam>>>()
+                // Match nearby coordinates within this direction, without projecting into the viewport.
+                for (param in sectorsInDirection) {
+                    val bucket = floor(param.lat / SITE_LATITUDE_BUCKET).toInt()
+                    val current = sitesByLatitude.getOrPut(bucket) { mutableListOf() }
+                    fun matches(site: List<EngineeringParam>): Boolean {
+                        val anchor = site.first()
+                        Location.distanceBetween(anchor.lat, anchor.lon, param.lat, param.lon, distance)
+                        return distance[0] <= SAME_SITE_DISTANCE_METERS
+                    }
+                    val site = sitesByLatitude[bucket - 1]?.firstOrNull(::matches) ?: current.firstOrNull(::matches)
+                    if (site == null) current.add(mutableListOf(param)) else site.add(param)
+                }
+
+                val radians = Math.toRadians(bearing.toDouble())
+                val east = sin(radians).toFloat()
+                val south = -cos(radians).toFloat()
+                for (sites in sitesByLatitude.values) {
+                    for (site in sites) {
+                        val names = site.sortedWith(compareBy<EngineeringParam> { it.sectorId }.thenBy { it.id })
+                            .mapNotNull { param ->
+                                val selected = param.id == selectedId || param.id == servingId
+                                val name = param.displayName
+                                if ((showAll || selected) && name.isNotBlank()) param to LabelKey(name, selected) else null
+                            }
+                        if (names.isEmpty()) continue
+                        val bitmaps = names.map { (_, key) -> labelBitmap(key) }
+                        val width = bitmaps.maxOf { it.width }
+                        val height = bitmaps.sumOf { it.height } - lineOverlap * (bitmaps.size - 1)
+                        val offset = clearance + abs(east) * width / 2 + abs(south) * height / 2
+                        val xOffset = (east * offset).roundToInt()
+                        var yOffset = (south * offset - height / 2f).roundToInt()
+                        val anchor = site.first()
+                        val position = toBd09LatLng(anchor.lat, anchor.lon)
+                        names.forEachIndexed { index, (param, key) ->
+                            add(param to SectorLabel(key, position.latitude, position.longitude, xOffset, yOffset))
+                            yOffset += bitmaps[index].height - lineOverlap
+                        }
+                    }
+                }
             }
         }
+    }
 
+    private suspend fun renderSectorLabels(labels: List<Pair<EngineeringParam, SectorLabel>>) {
+        val keep = labels.mapTo(HashSet()) { it.first.id }
+        for (batch in sectorLabels.keys.filter { it !in keep }.chunked(48)) {
+            withFrameNanos { }
+            for (id in batch) {
+                val entry = sectorLabels.remove(id) ?: continue
+                entry.marker.remove()
+                markerParams.remove(entry.marker)
+            }
+        }
+        val changed = labels.filter { (param, label) -> sectorLabels[param.id]?.label != label }
+        for (batch in changed.chunked(24)) {
+            val needsIcon = batch.map { (param, label) -> sectorLabels[param.id]?.label?.key != label.key }
+            val bitmaps = withContext(Dispatchers.Default) {
+                batch.mapIndexed { index, (_, label) -> if (needsIcon[index]) labelBitmap(label.key) else null }
+            }
+            withFrameNanos { }
+            val pending = ArrayList<Triple<EngineeringParam, SectorLabel, MarkerOptions>>()
+            batch.forEachIndexed { index, (param, label) ->
+                val previous = sectorLabels[param.id]
+                val icon = bitmaps[index]?.let(BitmapDescriptorFactory::fromBitmap)
+                val z = if (label.key.selected) 3 else 2
+                if (previous != null) {
+                    if (icon != null) previous.marker.icon = icon
+                    if (previous.label.latitude != label.latitude || previous.label.longitude != label.longitude) {
+                        previous.marker.position = label.position()
+                    }
+                    if (previous.label.xOffset != label.xOffset) previous.marker.xOffset = label.xOffset
+                    if (previous.label.yOffset != label.yOffset) previous.marker.yOffset = label.yOffset
+                    if (previous.label.key.selected != label.key.selected) previous.marker.zIndex = z
+                    sectorLabels[param.id] = LabelMarker(previous.marker, label)
+                } else if (icon != null) {
+                    val option = MarkerOptions().position(label.position()).icon(icon)
+                        .anchor(0.5f, 0f).xOffset(label.xOffset).yOffset(label.yOffset).zIndex(z)
+                    pending.add(Triple(param, label, option))
+                }
+            }
+            if (pending.isEmpty()) continue
+            val added = baiduMap.addOverlays(pending.map { it.third })
+            pending.forEachIndexed { index, (param, label, _) ->
+                val marker = added.getOrNull(index) as? Marker ?: return@forEachIndexed
+                sectorLabels[param.id] = LabelMarker(marker, label)
+                markerParams[marker] = param
+            }
+        }
+    }
+
+    internal suspend fun renderPoints(points: List<MapPointRecord>, metric: String) {
+        val keep = points.mapTo(HashSet()) { it.id }
+        val reset = pointMetric != metric
+        for (batch in pointMarkers.keys.filter { reset || it !in keep }.chunked(48)) {
+            withFrameNanos { }
+            batch.forEach { pointMarkers.remove(it)?.remove() }
+        }
         pointMetric = metric
         val sinr = metric == "SINR"
-        val options = points.filter { it.id !in pointMarkers }.mapNotNull { point ->
-            val value = if (sinr) point.sinr else point.rsrp
-            if (sinr && value !in -40..50 || !sinr && value !in -160..-20) return@mapNotNull null
-            val position = toBd09LatLng(point.latitude, point.longitude)
-            point.id to MarkerOptions().position(position)
-                .icon(BitmapDescriptorFactory.fromBitmap(dotBitmap(gradeColor(value, sinr), (5 * density).toInt())))
-                .anchor(0.5f, 0.5f).zIndex(4)
-        }
-        for (batch in options.chunked(48)) {
-            val added = baiduMap.addOverlays(batch.map { it.second })
-            batch.forEachIndexed { index, (id, _) ->
-                (added.getOrNull(index) as? Marker)?.let { pointMarkers[id] = it }
+        val additions = points.filter { it.id !in pointMarkers }
+        for (batch in additions.chunked(48)) {
+            val positions = withContext(Dispatchers.Default) {
+                batch.map { toBd09LatLng(it.latitude, it.longitude) }
+            }
+            withFrameNanos { }
+            val options = batch.mapIndexed { index, point ->
+                val color = gradeColor(if (sinr) point.sinr else point.rsrp, sinr)
+                val icon = pointIcons.getOrPut(color) {
+                    BitmapDescriptorFactory.fromBitmap(dotBitmap(color, (5 * density).toInt()))
+                }
+                MarkerOptions().position(positions[index]).icon(icon).anchor(0.5f, 0.5f).zIndex(4)
+            }
+            val added = baiduMap.addOverlays(options)
+            batch.forEachIndexed { index, point ->
+                (added.getOrNull(index) as? Marker)?.let { pointMarkers[point.id] = it }
             }
         }
     }
@@ -275,6 +411,7 @@ class BaiduMapArea(val mapView: TextureMapView) {
             if (!showLink) {
                 linkOutline?.let { if (!it.isRemoved) it.remove() }
                 linkOutline = null
+                lastLinkPoints = null
                 linkPolyline?.let { if (!it.isRemoved) it.remove() }
                 linkPolyline = null
                 linkMarker?.let { if (!it.isRemoved) it.remove() }
@@ -284,15 +421,16 @@ class BaiduMapArea(val mapView: TextureMapView) {
             val sel = selected
             val target = toBd09LatLng(sel.lat, sel.lon)
             val pts = listOf(LatLng(curLat, curLon), target)
+            if (pts == lastLinkPoints) return
             if (linkPolyline == null || linkPolyline!!.isRemoved) {
                 val color = Color.rgb(0, 91, 211)
                 linkOutline = bmap.addOverlay(
-                    PolylineOptions().points(pts).color(Color.WHITE).width((6 * density).toInt()).zIndex(5)
+                    PolylineOptions().points(pts).color(Color.WHITE).width((2.7f * density).toInt().coerceAtLeast(2)).zIndex(5)
                 ) as Polyline
                 linkPolyline = bmap.addOverlay(
-                    PolylineOptions().points(pts).color(color).width((3.5f * density).toInt()).zIndex(6)
+                    PolylineOptions().points(pts).color(color).width((1.5f * density).toInt().coerceAtLeast(1)).zIndex(6)
                 ) as Polyline
-                val bmp = dotBitmap(color, (5 * density).toInt())
+                val bmp = dotBitmap(color, (3.5f * density).toInt())
                 linkMarker = bmap.addOverlay(
                     MarkerOptions()
                         .position(target)
@@ -305,6 +443,7 @@ class BaiduMapArea(val mapView: TextureMapView) {
                 linkPolyline?.setPoints(pts)
                 linkMarker?.setPosition(target)
             }
+            lastLinkPoints = pts
         } catch (e: Throwable) {
         }
     }
@@ -335,101 +474,66 @@ class BaiduMapArea(val mapView: TextureMapView) {
 
     /* ============ Bitmap 工厂 ============ */
 
-    private fun makeSectorBitmap(
-        color: Int,
-        selected: Boolean,
-        showLabel: Boolean,
-        name: String,
-        azimuth: Double,
-        radius: Int,
-    ): Bitmap {
-        // 非标签模式：颜色+选中状态即可共享位图（方位角不画进 Bitmap，由 marker.setRotate 实现）
-        if (!showLabel) {
-            val shareKey = "$color|$selected|$radius"
-            sectorCacheNoLabel.get(shareKey)?.let { return it }
-            // 非标签模式固定 az=0 绘制，朝向由 marker.setRotate(azimuth) 控制
-            val bmp = drawSectorBitmap(color, selected, showLabel, name, 0.0, radius)
-            sectorCacheNoLabel.put(shareKey, bmp)
-            return bmp
+    private fun labelBitmap(key: LabelKey): Bitmap {
+        labelBitmaps.get(key)?.let { return it }
+        val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (key.selected) Color.rgb(16, 65, 135) else Color.rgb(22, 28, 38)
+            textSize = labelTextSize
         }
+        val width = (148f * density).toInt().coerceAtLeast(1)
+        val layout = StaticLayout.Builder.obtain(key.name, 0, key.name.length, textPaint, width)
+            .setAlignment(Layout.Alignment.ALIGN_CENTER)
+            .setIncludePad(false)
+            .build()
+        val textWidth = (0 until layout.lineCount).maxOfOrNull(layout::getLineWidth) ?: 0f
+        val padding = ceil(4f * density).toInt()
+        val bitmapWidth = ceil(min(textWidth, width.toFloat())).toInt() + 2 * padding
+        val bitmapHeight = layout.height + 2 * padding
+        val glyphs = Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888)
+        val textCanvas = Canvas(glyphs)
+        textCanvas.translate((bitmapWidth - width) / 2f, padding.toFloat())
+        layout.draw(textCanvas)
 
-        // 标签模式：继续用完整 key 缓存（含 name/azimuth）
-        val az = if (azimuth.isFinite()) (((azimuth % 360.0) + 360.0) % 360.0).toFloat() else 0f
-        val cacheKey = "$color|$selected|$name|$az|$radius"
-        sectorCache.get(cacheKey)?.let { if (!it.isRecycled) return it }
-        val bmp = drawSectorBitmap(color, selected, showLabel, name, azimuth, radius)
-        sectorCache.put(cacheKey, bmp)
-        return bmp
+        // Build the halo from the rendered glyphs so CJK fallback fonts get the same outline.
+        val bitmap = Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val outline = Paint(Paint.FILTER_BITMAP_FLAG).apply {
+            colorFilter = PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
+        }
+        val outlineRadius = 2f * density
+        for (direction in 0 until 8) {
+            val angle = direction * Math.PI / 4
+            canvas.drawBitmap(
+                glyphs,
+                cos(angle).toFloat() * outlineRadius,
+                sin(angle).toFloat() * outlineRadius,
+                outline,
+            )
+        }
+        canvas.drawBitmap(glyphs, 0f, 0f, null)
+        glyphs.recycle()
+        labelBitmaps.put(key, bitmap)
+        return bitmap
     }
 
-    // 扇区中心与地图锚点对齐，标签沿扇区方位角偏移。
-    private fun drawSectorBitmap(
-        color: Int,
-        selected: Boolean,
-        showLabel: Boolean,
-        name: String,
-        azimuth: Double,
-        radius: Int,
-    ): Bitmap {
-        val az = if (azimuth.isFinite()) (((azimuth % 360.0) + 360.0) % 360.0).toFloat() else 0f
+    private fun bearingOf(azimuth: Double): Float =
+        if (azimuth.isFinite()) ((azimuth % 360.0 + 360.0) % 360.0).toFloat() else 0f
 
-        val radiusDp = if (selected) radius * 1.16f else radius.toFloat()
-        val radiusPx = radiusDp * density
-        val marginPx = 4f * density
-        val gapPx = 6f * density
+    private fun makeSectorIcon(style: SectorStyle, azimuth: Double): Bitmap {
+        val key = SectorIconKey(style, bearingOf(azimuth))
+        return sectorIcons.get(key) ?: drawSectorIcon(key).also { sectorIcons.put(key, it) }
+    }
 
-        // 先计算标签文字布局（文字块尺寸决定画布大小与偏移量）
-        var textW = 0f
-        var textH = 0f
-        var textOffset = 0f   // 圆心 → 文字块中心距离（沿方位角方向）
-        var tp: TextPaint? = null
-        var layout: StaticLayout? = null
-        if (name.isNotEmpty() && showLabel) {
-            tp = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                isFakeBoldText = true
-                this.color = color
-                textAlign = Paint.Align.CENTER
-                textSize = (if (selected) 20f else 18f) * density
-            }
-            val labelWidthDp = if (radius >= 26) 174f else 142f
-            val maxTextW = (labelWidthDp * density).toInt().coerceAtLeast(1)
-            layout = try {
-                StaticLayout.Builder.obtain(name, 0, name.length, tp, maxTextW)
-                    .setAlignment(Layout.Alignment.ALIGN_CENTER)
-                    .setMaxLines(2)
-                    .setEllipsize(TextUtils.TruncateAt.END)
-                    .build()
-            } catch (e: Throwable) {
-                null
-            }
-            if (layout != null) {
-                textW = (0 until layout.lineCount).maxOfOrNull(layout::getLineWidth) ?: 0f
-                textH = layout.height.toFloat()
-            } else {
-                textW = tp.measureText(name)
-                textH = tp.descent() - tp.ascent()
-            }
-            // 文字块内缘紧贴扇区外沿（圆心 + 6dp 间隙）
-            val radians = Math.toRadians(az.toDouble())
-            textOffset = radiusPx + gapPx +
-                (kotlin.math.abs(Math.sin(radians)) * textW + kotlin.math.abs(Math.cos(radians)) * textH).toFloat() / 2f
-        }
-        // 文字块中心相对圆心的偏移（Canvas 坐标系 y 向下，方位 0°=北=上，故 dy = -cos）
-        val azRad = Math.toRadians(az.toDouble())
-        val textDX = (textOffset * Math.sin(azRad)).toFloat()
-        val textDY = (-textOffset * Math.cos(azRad)).toFloat()
-
-        // 对称画布：半宽/半高取“扇区圆外沿”与“圆心到文字块最远角”的双向最大值，
-        // 保证圆心恒在位图正中心（锚点恒 0.5/0.5），任何朝向都不裁剪
-        val rExt = radiusPx + marginPx
-        val halfW = max(rExt, kotlin.math.abs(textDX) + textW / 2f + marginPx)
-        val halfH = max(rExt, kotlin.math.abs(textDY) + textH / 2f + marginPx)
-        val w = (2f * halfW).toInt().coerceIn(1, 1024)
-        val h = (2f * halfH).toInt().coerceIn(1, 1024)
-        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    private fun drawSectorIcon(key: SectorIconKey): Bitmap {
+        val (style, az) = key
+        val (color, selected, radius) = style
+        val radiusPx = (if (selected) radius * 1.16f else radius.toFloat()) * density
+        val center = ceil(radiusPx + 5f * density)
+        val size = (2 * center).toInt()
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
-        val cx = w / 2f
-        val cy = h / 2f
+        val cx = center
+        val cy = center
 
         // 扇区弧形：azimuth 中心 ±30°（60° 张角）
         // Android Canvas drawArc 的 0° = 东（3 点钟），地理方位角 0° = 北（12 点钟），差 90°
@@ -454,53 +558,7 @@ class BaiduMapArea(val mapView: TextureMapView) {
         paint.color = Color.WHITE
         canvas.drawCircle(cx, cy, dotR * 0.4f, paint)
 
-        // 白色描边可让小区名称在卫星底图和浅色底图上保持可读。
-        if (name.isNotEmpty() && showLabel && tp != null) {
-            if (layout != null) {
-                canvas.save()
-                canvas.translate(cx + textDX, cy + textDY - textH / 2f)
-                tp.style = Paint.Style.STROKE
-                tp.strokeWidth = 2.5f * density
-                tp.color = Color.WHITE
-                drawLayoutCentered(canvas, layout, tp, 0f)
-                tp.style = Paint.Style.FILL
-                tp.strokeWidth = 0f
-                tp.color = Color.rgb(22, 28, 38)
-                drawLayoutCentered(canvas, layout, tp, 0f)
-                canvas.restore()
-            } else {
-                // 极少数 StaticLayout 失败兜底：单行绘制，同样双 pass
-                val baseline = (cy + textDY) - (tp.ascent() + tp.descent()) / 2f
-                tp.style = Paint.Style.STROKE
-                tp.strokeWidth = 2.5f * density
-                tp.color = Color.WHITE
-                canvas.drawText(name, cx + textDX, baseline, tp)
-                tp.style = Paint.Style.FILL
-                tp.strokeWidth = 0f
-                tp.color = Color.rgb(22, 28, 38)
-                canvas.drawText(name, cx + textDX, baseline, tp)
-            }
-        }
-
         return bmp
-    }
-
-    private fun drawLayoutCentered(canvas: Canvas, layout: StaticLayout, tp: TextPaint, cx: Float) {
-        tp.textAlign = Paint.Align.LEFT
-        val count = layout.lineCount
-        for (i in 0 until count) {
-            val lineWidth = layout.getLineWidth(i)
-            val start = layout.getLineStart(i)
-            val ellipsis = layout.getEllipsisCount(i)
-            val text = if (ellipsis == 0) {
-                layout.text.subSequence(start, layout.getLineEnd(i)).toString()
-            } else {
-                layout.text.subSequence(start, start + layout.getEllipsisStart(i)).toString() + "…"
-            }
-            canvas.drawText(text, cx - minOf(lineWidth, layout.width.toFloat()) / 2f,
-                layout.getLineBaseline(i).toFloat(), tp)
-        }
-        tp.textAlign = Paint.Align.CENTER
     }
 
     private fun dotBitmap(color: Int, size: Int): Bitmap {

@@ -15,6 +15,7 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,7 +33,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -40,9 +42,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Search
@@ -50,6 +54,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -66,6 +72,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -74,6 +81,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -87,15 +96,21 @@ import com.baidu.mapapi.map.MapStatus
 import com.baidu.mapapi.map.MapStatusUpdateFactory
 import com.baidu.mapapi.map.TextureMapView
 import com.baidu.mapapi.model.LatLng
+import com.craxiom.networksurvey.R
 import com.craxiom.networksurvey.db.EngineeringParamDbHelper
 import com.craxiom.networksurvey.ui.engparam.EngineeringSectorSheet
 import com.craxiom.networksurvey.db.MapPointDbHelper
 import com.craxiom.networksurvey.listeners.ICellularSurveyRecordListener
 import com.craxiom.networksurvey.model.CellularRecordWrapper
 import com.craxiom.networksurvey.model.EngineeringParam
+import com.craxiom.networksurvey.model.StationInfo
+import com.craxiom.networksurvey.ui.dashboard.DashboardCardDefaults
+import com.craxiom.networksurvey.ui.main.appbar.AppBarAction
+import com.craxiom.networksurvey.ui.main.appbar.TitleBar
 import com.craxiom.networksurvey.services.NetworkSurveyService
 import com.craxiom.networksurvey.ui.cellular.model.ServingCellInfo
 import com.craxiom.networksurvey.util.CoordConverter
+import com.craxiom.networksurvey.util.SignalGrade
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -105,11 +120,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.io.File
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BaiduTowerMapScreen(
-    onBackButtonPressed: () -> Unit,
+    onBackButtonPressed: (() -> Unit)?,
     servingCellInfo: ServingCellInfo? = null,
     subscriptionId: Int? = null,
 ) {
@@ -133,10 +149,13 @@ fun BaiduTowerMapScreen(
     var servingParam by remember { mutableStateOf<EngineeringParam?>(null) }
     var selected by remember { mutableStateOf<EngineeringParam?>(null) }
     var detail by remember { mutableStateOf<EngineeringParam?>(null) }
+    var detailOrigin by remember { mutableStateOf<EngineeringParam?>(null) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
     var showLayers by rememberSaveable { mutableStateOf(false) }
+    var showLocationInfo by rememberSaveable { mutableStateOf(false) }
     var confirmClear by rememberSaveable { mutableStateOf(false) }
     var cameraPositioned by remember { mutableStateOf(false) }
+    var lastCameraFix by remember { mutableStateOf<Location?>(null) }
     val trackRevision by MapTrack.revision.collectAsStateWithLifecycle()
     var autoTrack by remember { mutableStateOf(MapTrack.isEnabled(context)) }
     var pointCount by remember { mutableStateOf(0) }
@@ -186,32 +205,38 @@ fun BaiduTowerMapScreen(
 
     val map = area
     val currentViewport = viewport
-    LaunchedEffect(map, ready, currentViewport, netFilter, selected?.id, servingParam?.id, showLabels, paramsCount) {
-        if (map == null || !ready || currentViewport == null) return@LaunchedEffect
-        delay(100L)
-        val important = setOfNotNull(selected?.id, servingParam?.id)
-        val (visible, displayed) = withContext(Dispatchers.IO) {
-            val candidates = if (currentViewport.zoom >= BaiduMapArea.SECTOR_ZOOM && (paramsCount ?: 0) > 0) {
+    val sectorCandidates by produceState(emptyList<EngineeringParam>(), currentViewport, netFilter, paramsCount) {
+        val bounds = currentViewport
+        value = if (bounds == null || bounds.zoom < BaiduMapArea.SECTOR_ZOOM || (paramsCount ?: 0) == 0) {
+            emptyList()
+        } else {
+            delay(100L)
+            withContext(Dispatchers.IO) {
                 runCatching {
-                    with(currentViewport) {
-                        db.getByRange(
-                            minLat - latSpan * 0.12, minLon - lonSpan * 0.12,
-                            maxLat + latSpan * 0.12, maxLon + lonSpan * 0.12,
-                        )
-                    }.filter { param ->
-                        BaiduMapArea.isValid(param.lat, param.lon) &&
-                            (netFilter == "全部" || BaiduMapArea.netTypeLabel(param.netType) == netFilter)
-                    }.sortedWith(
-                        compareBy<EngineeringParam> { it.id !in important }
-                            .thenBy { !currentViewport.contains(it.lat, it.lon) }
-                            .thenBy { currentViewport.distanceFromCenter(it.lat, it.lon) },
-                    )
+                    db.getByRange(
+                        bounds.minLat - bounds.latSpan * 0.16, bounds.minLon - bounds.lonSpan * 0.16,
+                        bounds.maxLat + bounds.latSpan * 0.16, bounds.maxLon + bounds.lonSpan * 0.16,
+                    ).filter {
+                        BaiduMapArea.isValid(it.lat, it.lon) &&
+                            (netFilter == "全部" || BaiduMapArea.netTypeLabel(it.netType) == netFilter)
+                    }
                 }.getOrDefault(emptyList())
-            } else {
-                emptyList()
             }
-            val limit = if (currentViewport.zoom < BaiduMapArea.CLOSE_ZOOM) 800 else Int.MAX_VALUE
-            candidates.count { currentViewport.contains(it.lat, it.lon) } to candidates.take(limit)
+        }
+    }
+    LaunchedEffect(map, ready, currentViewport, sectorCandidates, selected?.id, servingParam?.id, showLabels) {
+        if (map == null || !ready || currentViewport == null) return@LaunchedEffect
+        val important = setOfNotNull(selected?.id, servingParam?.id)
+        val candidates = sectorCandidates
+        val (visible, displayed) = withContext(Dispatchers.Default) {
+            val within = candidates.count { currentViewport.contains(it.lat, it.lon) }
+            val far = currentViewport.zoom < BaiduMapArea.CLOSE_ZOOM
+            val sorted = if (far && candidates.size > 800) {
+                candidates.sortedWith(compareBy<EngineeringParam> { it.id !in important }
+                    .thenBy { !currentViewport.contains(it.lat, it.lon) }
+                    .thenBy { currentViewport.distanceFromCenter(it.lat, it.lon) }).take(800)
+            } else candidates
+            within to sorted
         }
         map.renderSectors(displayed, currentViewport, selected?.id, servingParam?.id, showLabels)
         renderedSectors = displayed.count { currentViewport.contains(it.lat, it.lon) }
@@ -270,7 +295,10 @@ fun BaiduTowerMapScreen(
         if (current != null) {
             map.updateLocation(current.latitude, current.longitude, true, 0f)
             map.updateLink(servingParam, current.latitude, current.longitude, showLink)
-            if (follow) {
+            val fix = location
+            val previous = lastCameraFix
+            if (follow && fix != null && (!cameraPositioned || previous == null || previous.distanceTo(fix) >= 6f)) {
+                lastCameraFix = fix
                 if (!cameraPositioned) {
                     cameraPositioned = true
                     map.baiduMap.animateMapStatus(MapStatusUpdateFactory.newLatLngZoom(current, 16f))
@@ -320,6 +348,7 @@ fun BaiduTowerMapScreen(
             return
         }
         follow = true
+        lastCameraFix = location
         if (coordinate == null) {
             Toast.makeText(context, "正在等待定位", Toast.LENGTH_SHORT).show()
         } else {
@@ -328,190 +357,173 @@ fun BaiduTowerMapScreen(
     }
 
     val colors = MaterialTheme.colorScheme
-    Box(Modifier.fillMaxSize().background(colors.surface)) {
-        AndroidView(
-            factory = { ctx ->
-                TextureMapView(ctx).apply {
-                    showZoomControls(false)
-                    val renderer = BaiduMapArea(this)
-                    val baidu = renderer.baiduMap
-                    baidu.setBuildingsEnabled(false)
-                    baidu.setIndoorEnable(false)
-                    baidu.setMaxAndMinZoomLevel(21f, BaiduMapArea.MAP_MIN_ZOOM)
-                    baidu.setOnMapLoadedCallback {
-                        ready = true
-                        viewport = renderer.viewport(baidu.mapStatus)
-                    }
-                    baidu.setOnMapStatusChangeListener(object : BaiduMap.OnMapStatusChangeListener {
-                        override fun onMapStatusChangeStart(status: MapStatus?) = Unit
-                        override fun onMapStatusChangeStart(status: MapStatus?, reason: Int) {
-                            if (reason == BaiduMap.OnMapStatusChangeListener.REASON_GESTURE) {
-                                follow = false
-                                cameraPositioned = true
-                            }
-                        }
-                        override fun onMapStatusChange(status: MapStatus?) = Unit
-                        override fun onMapStatusChangeFinish(status: MapStatus?) {
-                            if (ready) viewport = renderer.viewport(status)
-                        }
-                    })
-                    baidu.setOnMarkerClickListener { marker ->
-                        val param = renderer.paramOf(marker) ?: return@setOnMarkerClickListener false
-                        selected = param
-                        detail = param
-                        true
-                    }
-                    area = renderer
-                }
-            },
-            modifier = Modifier.fillMaxSize(),
-            onRelease = { it.onDestroy() },
-        )
-
-        if (!ready) {
-            CircularProgressIndicator(Modifier.align(Alignment.Center).size(28.dp), strokeWidth = 3.dp)
+    val sectorStatus = when {
+        paramsLoaded && paramsCount == null -> "无法读取工参"
+        paramsCount == 0 -> "未导入工参"
+        currentViewport != null && currentViewport.zoom < BaiduMapArea.SECTOR_ZOOM -> "放大查看扇区"
+        visibleSectors == null -> null
+        renderedSectors < (visibleSectors ?: 0) -> "$renderedSectors / $visibleSectors 个扇区"
+        else -> "视野内 $visibleSectors 个扇区"
+    }
+    val linkStatus = when {
+        !permissions -> "等待定位权限"
+        coordinate == null -> "等待定位"
+        servingStation == null -> "等待服务小区"
+        !showLink -> "连线已关闭"
+        servingParam == null -> "未匹配工参"
+        else -> "已匹配服务小区"
+    }
+    val trackingLabel = when {
+        !autoTrack -> "打点已暂停"
+        !permissions -> "授予定位权限"
+        coordinate == null || servingStation == null -> "等待打点"
+        else -> "自动打点"
+    }
+    fun toggleTracking() {
+        if (permissions || !autoTrack) {
+            autoTrack = !autoTrack
+            MapTrack.setEnabled(context, autoTrack)
         }
+        if (autoTrack && !permissions) requestLocation.launch(arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+        ))
+    }
 
-        Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(12.dp)) {
-            Column(
-                modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = colors.background,
+        contentWindowInsets = WindowInsets.safeDrawing,
+        topBar = {
+            TitleBar(
+                title = stringResource(R.string.tool_tower_map_title),
+                compact = true,
+                onBackClick = onBackButtonPressed,
+                appBarActions = listOf(
+                    AppBarAction(R.drawable.ic_search_24, R.string.tower_map_search_action, onClick = { showSearch = true }),
+                    AppBarAction(R.drawable.ic_layers, R.string.tower_map_layers_action, onClick = { showLayers = true }),
+                ),
+            )
+        },
+    ) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
+            MapSignalCard(
+                station = servingStation,
+                cell = servingParam,
+                linkStatus = linkStatus,
+                pointCount = pointCount,
+                tracking = autoTrack && permissions,
+                trackingLabel = trackingLabel,
+                onTracking = ::toggleTracking,
+                onOpenCell = {
+                    servingParam?.let { param ->
+                        selected = param
+                        detailOrigin = param
+                        detail = param
+                    }
+                },
+                modifier = Modifier.padding(horizontal = DashboardCardDefaults.margin, vertical = 4.dp),
+            )
+            FlowRow(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = DashboardCardDefaults.margin),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.Center,
+                itemVerticalAlignment = Alignment.CenterVertically,
             ) {
-                Surface(shape = RoundedCornerShape(24.dp), shadowElevation = 3.dp, color = colors.surface) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onBackButtonPressed) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
-                        }
-                        Text("基站地图", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                        IconButton(onClick = { showSearch = true }) {
-                            Icon(Icons.Default.Search, "搜索工参")
-                        }
-                        IconButton(onClick = { showLayers = true }) {
-                            Icon(Icons.Default.Layers, "图层与打点设置")
-                        }
-                    }
+                listOf("全部", "4G", "5G").forEach { filter ->
+                    FilterChip(
+                        selected = netFilter == filter,
+                        onClick = {
+                            netFilter = filter
+                            selected = selected?.takeIf {
+                                filter == "全部" || BaiduMapArea.netTypeLabel(it.netType) == filter
+                            }
+                        },
+                        label = { Text(filter) },
+                    )
                 }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                    listOf("全部", "4G", "5G").forEach { filter ->
-                        FilterChip(
-                            selected = netFilter == filter,
-                            onClick = {
-                                netFilter = filter
-                                selected = selected?.takeIf {
-                                    filter == "全部" || BaiduMapArea.netTypeLabel(it.netType) == filter
-                                }
-                            },
-                            label = { Text(filter) },
-                            colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(containerColor = colors.surface),
-                        )
-                    }
-                }
-                val status = when {
-                    paramsLoaded && paramsCount == null -> "无法读取工参"
-                    paramsCount == 0 -> "未导入工参，可在设置中导入 CSV"
-                    currentViewport != null && currentViewport.zoom < BaiduMapArea.SECTOR_ZOOM -> "放大地图查看扇区"
-                    visibleSectors == 0 -> "当前视野无匹配扇区"
-                    visibleSectors != null && renderedSectors < (visibleSectors ?: 0) ->
-                        "显示 $renderedSectors / $visibleSectors 个扇区 · 放大查看"
-                    visibleSectors != null -> "视野内 $visibleSectors 个扇区"
-                    else -> null
-                }
-                if (status != null) {
-                    Surface(color = colors.surface, shape = CircleShape) {
-                        Text(status, Modifier.padding(horizontal = 12.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall)
-                    }
+                sectorStatus?.let {
+                    Text(it, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
                 }
             }
-
-            Column(
-                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Surface(
-                    shape = CircleShape,
-                    shadowElevation = 3.dp,
-                    color = if (follow && coordinate != null) colors.primaryContainer else colors.surface,
-                ) {
-                    IconButton(onClick = ::locate) {
-                        Icon(Icons.Default.MyLocation, if (follow) "回到当前位置" else "定位并跟随")
-                    }
-                }
-                Surface(shape = RoundedCornerShape(22.dp), shadowElevation = 3.dp, color = colors.surface) {
-                    Column {
-                        Row(
-                            Modifier.fillMaxWidth().padding(start = 15.dp, end = 10.dp, top = 8.dp, bottom = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                Text(
-                                    servingParam?.displayName ?: "当前服务小区",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                val linkStatus = when {
-                                    !permissions -> "等待定位权限"
-                                    coordinate == null -> "等待定位"
-                                    servingStation == null -> "等待服务小区"
-                                    !showLink -> "连线已关闭"
-                                    servingParam == null -> "未匹配服务小区工参"
-                                    else -> "已匹配服务小区"
-                                }
-                                Text(
-                                    "$linkStatus · $pointCount 个打点",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = colors.onSurfaceVariant,
-                                )
+            Box(Modifier.weight(1f).fillMaxWidth().background(colors.surfaceContainerLow)) {
+                AndroidView(
+                    factory = { ctx ->
+                        TextureMapView(ctx).apply {
+                            showZoomControls(false)
+                            val renderer = BaiduMapArea(this)
+                            val baidu = renderer.baiduMap
+                            baidu.setBuildingsEnabled(false)
+                            baidu.setIndoorEnable(false)
+                            baidu.uiSettings.setRotateGesturesEnabled(false)
+                            baidu.uiSettings.setOverlookingGesturesEnabled(false)
+                            baidu.setMaxAndMinZoomLevel(21f, BaiduMapArea.MAP_MIN_ZOOM)
+                            baidu.setOnMapLoadedCallback {
+                                ready = true
+                                viewport = renderer.viewport(baidu.mapStatus)
                             }
-                            val trackingLabel = when {
-                                !autoTrack -> "打点已暂停"
-                                !permissions -> "授予定位权限"
-                                coordinate == null || servingStation == null -> "等待打点"
-                                else -> "自动打点"
-                            }
-                            FilterChip(
-                                selected = autoTrack && permissions,
-                                onClick = {
-                                    if (autoTrack && !permissions) {
-                                        requestLocation.launch(arrayOf(
-                                            Manifest.permission.ACCESS_FINE_LOCATION,
-                                            Manifest.permission.ACCESS_COARSE_LOCATION,
-                                        ))
-                                    } else {
-                                        autoTrack = !autoTrack
-                                        MapTrack.setEnabled(context, autoTrack)
-                                        if (autoTrack && !permissions) {
-                                            requestLocation.launch(arrayOf(
-                                                Manifest.permission.ACCESS_FINE_LOCATION,
-                                                Manifest.permission.ACCESS_COARSE_LOCATION,
-                                            ))
-                                        }
+                            baidu.setOnMapStatusChangeListener(object : BaiduMap.OnMapStatusChangeListener {
+                                override fun onMapStatusChangeStart(status: MapStatus?) = Unit
+                                override fun onMapStatusChangeStart(status: MapStatus?, reason: Int) {
+                                    if (reason == BaiduMap.OnMapStatusChangeListener.REASON_GESTURE) {
+                                        follow = false
+                                        cameraPositioned = true
                                     }
-                                },
-                                label = { Text(trackingLabel) },
-                            )
-                        }
-                        servingStation?.let { station ->
-                            FlowRow(
-                                Modifier.fillMaxWidth().padding(start = 15.dp, end = 15.dp, bottom = 10.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                Text(BaiduMapArea.netTypeLabel(station.networkType), color = colors.primary, style = MaterialTheme.typography.labelMedium)
-                                val metrics = listOf(
-                                    "RSRP" to station.rsrp.takeIf { it in -160..-20 }?.let { "$it dBm" },
-                                    "RSRQ" to station.rsrq.takeIf { it in -45..10 }?.let { "$it dB" },
-                                    "SINR" to station.sinr.takeIf { it in -40..50 }?.let { "$it dB" },
-                                    "PCI" to station.pci.takeIf { it >= 0 }?.toString(),
-                                    "频点" to station.earfcn.takeIf { it >= 0 }?.toString(),
-                                )
-                                for ((label, value) in metrics) {
-                                    Text("$label ${value ?: "—"}", style = MaterialTheme.typography.labelMedium)
                                 }
+                                override fun onMapStatusChange(status: MapStatus?) = Unit
+                                override fun onMapStatusChangeFinish(status: MapStatus?) {
+                                    if (ready) viewport = renderer.viewport(status)
+                                }
+                            })
+                            baidu.setOnMarkerClickListener { marker ->
+                                val param = renderer.paramOf(marker) ?: return@setOnMarkerClickListener false
+                                selected = param
+                                detailOrigin = param
+                                detail = param
+                                true
                             }
+                            area = renderer
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                    onRelease = { it.onDestroy() },
+                )
+
+                if (!ready) {
+                    CircularProgressIndicator(Modifier.align(Alignment.Center).size(28.dp), strokeWidth = 3.dp)
+                }
+                location?.let { fix ->
+                    MapLocationCard(
+                        fix, showLocationInfo, onToggle = { showLocationInfo = !showLocationInfo },
+                        Modifier.align(Alignment.TopStart).padding(12.dp).widthIn(max = 264.dp),
+                    )
+                }
+                Column(
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    MapControl(
+                        icon = Icons.Default.MyLocation,
+                        description = if (follow) "回到当前位置" else "定位并跟随",
+                        selected = follow && coordinate != null,
+                        onClick = ::locate,
+                    )
+                    Surface(
+                        shape = DashboardCardDefaults.smallShape,
+                        color = DashboardCardDefaults.cardContainerColor(),
+                        border = BorderStroke(1.dp, DashboardCardDefaults.outlineVariant()),
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            IconButton(enabled = ready, onClick = {
+                                follow = false
+                                map?.baiduMap?.animateMapStatus(MapStatusUpdateFactory.zoomIn())
+                            }) { Icon(Icons.Default.Add, "放大地图") }
+                            androidx.compose.material3.HorizontalDivider(Modifier.width(30.dp), color = colors.outlineVariant)
+                            IconButton(enabled = ready, onClick = {
+                                follow = false
+                                map?.baiduMap?.animateMapStatus(MapStatusUpdateFactory.zoomOut())
+                            }) { Icon(Icons.Default.Remove, "缩小地图") }
                         }
                     }
                 }
@@ -525,6 +537,7 @@ fun BaiduTowerMapScreen(
             onResult = { param ->
                 showSearch = false
                 selected = param
+                detailOrigin = param
                 detail = param
                 if (BaiduMapArea.isValid(param.lat, param.lon)) {
                     follow = false
@@ -538,7 +551,44 @@ fun BaiduTowerMapScreen(
         )
     }
 
-    detail?.let { EngineeringSectorSheet(it, onDismiss = { detail = null }) }
+    val nearbySectors by produceState(emptyList<EngineeringParam>(), detailOrigin?.id, db) {
+        val origin = detailOrigin
+        value = if (origin == null) emptyList() else withContext(Dispatchers.IO) {
+            val latitudeRadius = 120.0 / 111_000.0
+            val longitudeRadius = latitudeRadius / kotlin.math.cos(Math.toRadians(origin.lat)).coerceAtLeast(0.01)
+            val distance = FloatArray(1)
+            val neighbors = runCatching {
+                db.getByRange(origin.lat - latitudeRadius, origin.lon - longitudeRadius,
+                    origin.lat + latitudeRadius, origin.lon + longitudeRadius)
+            }.getOrDefault(emptyList())
+                .filter { it.id != origin.id && BaiduMapArea.isValid(it.lat, it.lon) }
+                .map { candidate ->
+                    Location.distanceBetween(origin.lat, origin.lon, candidate.lat, candidate.lon, distance)
+                    candidate to distance[0]
+                }
+                .filter { it.second <= 120f }
+                .sortedWith(compareBy<Pair<EngineeringParam, Float>> { it.first.siteName != origin.siteName }
+                    .thenBy { it.second }.thenBy { it.first.azimuth }.thenBy { it.first.id })
+                .map { it.first }
+            listOf(origin) + neighbors
+        }
+    }
+    detail?.let { param ->
+        val index = nearbySectors.indexOfFirst { it.id == param.id }
+        fun selectNearby(offset: Int) {
+            val next = nearbySectors[(index + offset + nearbySectors.size) % nearbySectors.size]
+            selected = next
+            detail = next
+            if (netFilter != "全部" && netFilter != BaiduMapArea.netTypeLabel(next.netType)) netFilter = "全部"
+        }
+        EngineeringSectorSheet(
+            param,
+            onDismiss = { detail = null; detailOrigin = null },
+            nearbyPosition = if (index >= 0 && nearbySectors.size > 1) (index + 1) to nearbySectors.size else null,
+            onPreviousSector = { selectNearby(-1) },
+            onNextSector = { selectNearby(1) },
+        )
+    }
 
     if (showLayers) {
         MapLayerSheet(
@@ -593,6 +643,151 @@ fun BaiduTowerMapScreen(
                 }) { Text("清空", color = colors.error) }
             },
         )
+    }
+}
+
+@Composable
+private fun MapSignalCard(
+    station: StationInfo?,
+    cell: EngineeringParam?,
+    linkStatus: String,
+    pointCount: Int,
+    tracking: Boolean,
+    trackingLabel: String,
+    onTracking: () -> Unit,
+    onOpenCell: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = DashboardCardDefaults.shape,
+        color = DashboardCardDefaults.cardContainerColor(),
+        border = BorderStroke(1.dp, DashboardCardDefaults.outlineVariant()),
+    ) {
+        Column(Modifier.padding(horizontal = 13.dp, vertical = 8.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val technology = station?.let { BaiduMapArea.netTypeLabel(it.networkType) }
+                if (technology != null && technology != "未知") {
+                    Surface(shape = CircleShape, color = colors.primaryContainer, contentColor = colors.onPrimaryContainer) {
+                        Text(technology, Modifier.padding(horizontal = 7.dp, vertical = 5.dp),
+                            style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+                Column(
+                    Modifier.weight(1f).then(if (cell == null) Modifier else Modifier.clickable(onClick = onOpenCell)),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        cell?.displayName ?: "当前服务小区",
+                        maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text("$linkStatus · $pointCount 个打点", style = MaterialTheme.typography.labelSmall,
+                        color = colors.onSurfaceVariant)
+                }
+                FilterChip(selected = tracking, onClick = onTracking,
+                    label = { Text(trackingLabel, style = MaterialTheme.typography.labelMedium) })
+            }
+            if (station != null) {
+                val rsrp = station.rsrp.takeIf { it in -160..-20 }
+                val rsrq = station.rsrq.takeIf { it in -45..10 }
+                val sinr = station.sinr.takeIf { it in -40..50 }
+                val nr = BaiduMapArea.is5G(station.networkType)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MapSignalValue(if (nr) "SS-RSRP" else "RSRP", rsrp?.let { "$it dBm" },
+                        Modifier.weight(1.25f), rsrp?.let(SignalGrade::barRatioRsrp))
+                    MapSignalValue("RSRQ", rsrq?.let { "$it dB" },
+                        Modifier.weight(1f), rsrq?.let(SignalGrade::barRatioRsrq))
+                    MapSignalValue("SINR", sinr?.let { "$it dB" },
+                        Modifier.weight(1f), sinr?.let(SignalGrade::barRatioSinr))
+                    MapSignalValue("PCI", station.pci.takeIf { it >= 0 }?.toString(), Modifier.weight(0.65f))
+                }
+                FlowRow(
+                    Modifier.fillMaxWidth().padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    val channel = station.earfcn.takeIf { it >= 0 }
+                    if (channel != null) Text("频点 $channel", style = MaterialTheme.typography.labelSmall,
+                        color = colors.onSurfaceVariant)
+                    if (station.mcc > 0) Text("PLMN ${station.mcc}/${station.mnc}",
+                        style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                    if (station.tac > 0) Text("TAC ${station.tac}",
+                        style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MapSignalValue(label: String, value: String?, modifier: Modifier, progress: Float? = null) {
+    val colors = MaterialTheme.colorScheme
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant,
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(value ?: "—", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+        if (progress != null) LinearProgressIndicator(
+            progress = { progress }, modifier = Modifier.fillMaxWidth().height(3.dp),
+            color = colors.primary, trackColor = colors.surfaceContainerHighest,
+            gapSize = 0.dp, drawStopIndicator = {},
+        )
+    }
+}
+
+@Composable
+private fun MapLocationCard(fix: Location, expanded: Boolean, onToggle: () -> Unit, modifier: Modifier) {
+    val colors = MaterialTheme.colorScheme
+    val accuracy = if (fix.hasAccuracy()) " · ±${fix.accuracy.toInt()} 米" else ""
+    Surface(
+        modifier = modifier,
+        shape = DashboardCardDefaults.smallShape,
+        color = DashboardCardDefaults.cardContainerColor(),
+        border = BorderStroke(1.dp, DashboardCardDefaults.outlineVariant()),
+    ) {
+        Column {
+            Row(
+                Modifier.clickable(onClick = onToggle).padding(start = 10.dp, end = 8.dp, top = 9.dp, bottom = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Icon(Icons.Default.LocationOn, null, Modifier.size(15.dp), tint = colors.primary)
+                Text("定位$accuracy", style = MaterialTheme.typography.labelMedium)
+                Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    if (expanded) "收起定位信息" else "展开定位信息", Modifier.size(17.dp))
+            }
+            if (expanded) {
+                Column(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(String.format(Locale.ROOT, "纬度 %.6f°", fix.latitude), style = MaterialTheme.typography.bodySmall)
+                    Text(String.format(Locale.ROOT, "经度 %.6f°", fix.longitude), style = MaterialTheme.typography.bodySmall)
+                    if (fix.hasSpeed()) Text("速度 ${(fix.speed * 3.6f).toInt()} km/h", style = MaterialTheme.typography.bodySmall)
+                    if (fix.hasAltitude()) Text("高度 ${fix.altitude.toInt()} 米", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MapControl(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    description: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        shape = DashboardCardDefaults.smallShape,
+        color = if (selected) colors.primaryContainer else DashboardCardDefaults.cardContainerColor(),
+        contentColor = if (selected) colors.onPrimaryContainer else colors.onSurface,
+        border = BorderStroke(1.dp, DashboardCardDefaults.outlineVariant()),
+    ) {
+        IconButton(onClick = onClick) { Icon(icon, description) }
     }
 }
 

@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.FileUpload
+import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,6 +32,7 @@ import com.craxiom.networksurvey.ui.cellular.baidumap.BaiduMapArea
 import com.craxiom.networksurvey.ui.dashboard.DashboardCardDefaults
 import com.craxiom.networksurvey.ui.main.appbar.TitleBar
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
@@ -58,6 +60,19 @@ fun EngineeringParamsScreen(onNavigateUp: () -> Unit) {
         if (it != null) vm.onFileSelected(it)
     }
     val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val templateExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri != null) scope.launch {
+            val saved = withContext(Dispatchers.IO) {
+                runCatching {
+                    val stream = context.contentResolver.openOutputStream(uri, "wt")
+                        ?: error("无法打开保存位置")
+                    stream.bufferedWriter(Charsets.UTF_8).use { it.write(ImportFieldSpec.csvTemplate()) }
+                }.isSuccess
+            }
+            snackbar.showSnackbar(if (saved) "已导出工参模板" else "模板导出失败")
+        }
+    }
     LaunchedEffect(state.message) {
         state.message?.let {
             snackbar.showSnackbar(it, withDismissAction = true)
@@ -94,6 +109,16 @@ fun EngineeringParamsScreen(onNavigateUp: () -> Unit) {
                                 Spacer(Modifier.width(6.dp))
                                 Text(if (state.importing) "正在处理" else "导入 CSV")
                             }
+                            FilledTonalButton(
+                                onClick = { templateExporter.launch("基站工参模板.csv") },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                            ) {
+                                Icon(Icons.Rounded.FileDownload, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(5.dp))
+                                Text("导出模板")
+                            }
+                        }
+                        if (params.isNotEmpty()) {
                             TextButton(
                                 onClick = vm::onRequestClear,
                                 enabled = params.isNotEmpty() && !state.importing,

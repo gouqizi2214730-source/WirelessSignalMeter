@@ -36,6 +36,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.res.imageResource
@@ -79,6 +82,7 @@ internal fun GnssOverviewScreen(
     viewModel: SignalInfoViewModel,
     hasPermission: Boolean,
     locationEnabled: Boolean,
+    modifier: Modifier = Modifier,
     onEnableLocation: () -> Unit,
 ) {
     val statuses by viewModel.filteredStatuses.observeAsState(emptyList())
@@ -98,7 +102,7 @@ internal fun GnssOverviewScreen(
     var showLocation by rememberSaveable { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
 
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+    Box(modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
             modifier = Modifier.widthIn(max = 640.dp).fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
@@ -250,18 +254,22 @@ private fun SkyPlot(satellites: List<Pair<SatelliteStatus, Boolean>>) {
                                 if (flag == null) {
                                     drawCircle(tint, 4.dp.toPx(), position)
                                 } else {
-                                    val width = (if (used) 21.dp else 17.dp).toPx()
-                                    val height = width * flag.height / flag.width
-                                    val topLeft = position - Offset(width / 2f, height / 2f)
-                                    drawRect(colors.surface, topLeft - Offset(1f, 1f),
-                                        androidx.compose.ui.geometry.Size(width + 2f, height + 2f))
-                                    drawImage(flag,
-                                        dstOffset = IntOffset(topLeft.x.roundToInt(), topLeft.y.roundToInt()),
-                                        dstSize = IntSize(width.roundToInt(), height.roundToInt()),
-                                        alpha = if (used) 1f else 0.82f)
-                                    drawRect(if (used) colors.primary else colors.outline,
-                                        topLeft, androidx.compose.ui.geometry.Size(width, height),
-                                        style = Stroke((if (used) 1.5.dp else 0.75.dp).toPx()))
+                                    val radius = (if (used) 10.dp else 8.dp).toPx()
+                                    val diameter = (2 * radius).roundToInt()
+                                    val width = (diameter * flag.width.toFloat() / flag.height).roundToInt()
+                                        .coerceAtLeast(diameter)
+                                    val height = (diameter * flag.height.toFloat() / flag.width).roundToInt()
+                                        .coerceAtLeast(diameter)
+                                    drawCircle(colors.surface, radius + 1.dp.toPx(), position)
+                                    val circle = Path().apply { addOval(Rect(position, radius)) }
+                                    clipPath(circle) {
+                                        drawImage(flag,
+                                            dstOffset = IntOffset((position.x - width / 2f).roundToInt(),
+                                                (position.y - height / 2f).roundToInt()),
+                                            dstSize = IntSize(width, height))
+                                    }
+                                    drawCircle(if (used) colors.primary else colors.outline, radius, position,
+                                        style = Stroke((if (used) 1.7.dp else 0.8.dp).toPx()))
                                 }
                             }
                         }

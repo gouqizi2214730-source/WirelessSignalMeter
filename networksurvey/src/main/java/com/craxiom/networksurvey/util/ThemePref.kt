@@ -21,6 +21,7 @@ object ThemePref {
     const val KEY_MONET = "monet_enabled"
     const val KEY_SEED = "theme_seed"
     const val KEY_AMOLED = "amoled_enabled"
+    private const val KEY_LIQUID_GLASS = "liquid_glass_navigation"
     // KernelSU ColorPalette 扩展：配色风格 + 规格
     const val KEY_PALETTE_STYLE = "theme_palette_style"
     const val KEY_COLOR_SPEC = "theme_color_spec"
@@ -79,6 +80,14 @@ object ThemePref {
      */
     private val themeVersion = mutableIntStateOf(0)
     val currentThemeVersion: Int get() = themeVersion.intValue
+
+    fun isLiquidGlassEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_LIQUID_GLASS, true)
+
+    fun setLiquidGlassEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_LIQUID_GLASS, enabled).apply()
+        themeVersion.intValue++
+    }
 
     // AMOLED 纯黑模式（深色模式下将 background/surface 全替换为 Color.Black，省电+极致对比度）
     fun isAmoled(context: Context): Boolean =

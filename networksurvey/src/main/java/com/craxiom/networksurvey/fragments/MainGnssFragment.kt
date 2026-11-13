@@ -13,6 +13,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.content.ContextCompat
@@ -21,11 +22,14 @@ import androidx.fragment.app.activityViewModels
 import com.craxiom.networksurvey.Application
 import com.craxiom.networksurvey.gpstest.ui.gnss.model.SignalInfoViewModel
 import com.craxiom.networksurvey.ui.gnss.GnssOverviewScreen
+import com.craxiom.networksurvey.ui.main.appbar.FragmentTopBarScroll
+import com.craxiom.networksurvey.ui.main.appbar.fragmentTopBarScroll
 import com.craxiom.networksurvey.ui.theme.NsTheme
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainGnssFragment : Fragment() {
+    internal val topBarScroll = FragmentTopBarScroll()
     private val viewModel: SignalInfoViewModel by activityViewModels()
     private var hasPermission by mutableStateOf(false)
     private var locationEnabled by mutableStateOf(false)
@@ -39,7 +43,10 @@ class MainGnssFragment : Fragment() {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 NsTheme {
-                    GnssOverviewScreen(viewModel, hasPermission, locationEnabled) {
+                    GnssOverviewScreen(
+                        viewModel, hasPermission, locationEnabled,
+                        modifier = Modifier.fragmentTopBarScroll(topBarScroll),
+                    ) {
                         if (hasPermission) {
                             startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
                         } else {

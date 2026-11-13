@@ -2,16 +2,13 @@ package com.craxiom.networksurvey.ui.main
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -19,17 +16,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.Build
-import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SignalCellularAlt
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -47,10 +39,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -63,11 +52,19 @@ import com.craxiom.networksurvey.ui.cellular.model.ServingCellInfo
 import com.craxiom.networksurvey.ui.component.PagerSpringSpec
 import com.craxiom.networksurvey.ui.kernelsu.FloatingBottomBar
 import com.craxiom.networksurvey.ui.kernelsu.FloatingBottomBarItem
+import com.craxiom.networksurvey.ui.main.appbar.AppBarAction
+import com.craxiom.networksurvey.ui.main.appbar.TitleBar
 import com.craxiom.networksurvey.ui.settings.SettingsScreen
 import com.craxiom.networksurvey.update.UpdateChecker
 import com.craxiom.networksurvey.update.UpdateDialog
 import com.craxiom.networksurvey.update.UpdateDownloader
+import com.craxiom.networksurvey.util.ThemePref
+import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import kotlinx.coroutines.launch
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import kotlin.math.abs
 
 private enum class HomeTab(@StringRes val title: Int, val icon: ImageVector) {
@@ -101,6 +98,11 @@ fun HomeScreen(
     }
 
     val context = LocalContext.current
+    val themeVersion = ThemePref.currentThemeVersion
+    val glassEnabled = remember(context, themeVersion) {
+        ThemePref.isLiquidGlassEnabled(context) && isRuntimeShaderSupported()
+    }
+    val backdrop = if (glassEnabled) rememberLayerBackdrop() else null
     val pendingUpdate by UpdateChecker.pendingUpdate
     LaunchedEffect(Unit) {
         UpdateChecker.check(context, force = false)
@@ -120,41 +122,46 @@ fun HomeScreen(
         )
     }
 
-    Box(Modifier.fillMaxSize().background(background)) {
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier
-                .fillMaxSize()
-                .windowInsetsPadding(
-                    WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
-                ),
-            // Keep the Android fragment container mounted while switching between home tabs.
-            beyondViewportPageCount = HomeTab.entries.lastIndex,
-            overscrollEffect = null,
-        ) { page ->
-            when (HomeTab.entries[page]) {
-                HomeTab.Signal -> SignalTab(onOpenMap = openMap)
-                HomeTab.Tools -> ToolsScreen(
-                    bottomPadding = bottomPadding,
-                    onOpenMap = openMap,
-                    onOpenGnss = {
-                        mainNavController.navigate(NavOption.Gnss.name) { launchSingleTop = true }
-                    },
-                    onOpenSpeedTest = {
-                        mainNavController.navigate(NavDrawerOption.SpeedTest.name) { launchSingleTop = true }
-                    },
-                    onOpenWifi = {
-                        mainNavController.navigate(NavOption.Wifi.name) { launchSingleTop = true }
-                    },
-                )
-                HomeTab.Settings -> SettingsScreen(
-                    onNavigateToSsidExclusion = { mainNavController.navigate(NavOption.SsidExclusionList.name) },
-                    onNavigateToAcknowledgments = { mainNavController.navigate(NavOption.Acknowledgments.name) },
-                    onNavigateToEngParams = { mainNavController.navigate(NavDrawerOption.EngineeringParams.name) },
-                    onNavigateToTheme = { mainNavController.navigate(NavOption.ColorPalette.name) },
-                    bottomContentPadding = bottomPadding,
-                    header = { HomePageTitle(R.string.settings) },
-                )
+    Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier.fillMaxSize().then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
+                .background(background),
+        ) {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
+                // The signal page hosts an Android Fragment. Keep it mounted when switching tabs.
+                beyondViewportPageCount = HomeTab.entries.lastIndex,
+                overscrollEffect = null,
+            ) { page ->
+                when (HomeTab.entries[page]) {
+                    HomeTab.Signal -> SignalTab()
+                    HomeTab.Tools -> HomeTabPage(R.string.professional_tools_title) {
+                        ToolsScreen(
+                            bottomPadding = bottomPadding,
+                            onOpenMap = openMap,
+                            onOpenGnss = {
+                                mainNavController.navigate(NavOption.Gnss.name) { launchSingleTop = true }
+                            },
+                            onOpenSpeedTest = {
+                                mainNavController.navigate(NavDrawerOption.SpeedTest.name) { launchSingleTop = true }
+                            },
+                            onOpenWifi = {
+                                mainNavController.navigate(NavOption.Wifi.name) { launchSingleTop = true }
+                            },
+                        )
+                    }
+                    HomeTab.Settings -> HomeTabPage(R.string.settings) {
+                        SettingsScreen(
+                            onNavigateToSsidExclusion = { mainNavController.navigate(NavOption.SsidExclusionList.name) },
+                            onNavigateToAcknowledgments = { mainNavController.navigate(NavOption.Acknowledgments.name) },
+                            onNavigateToEngParams = { mainNavController.navigate(NavDrawerOption.EngineeringParams.name) },
+                            onNavigateToTheme = { mainNavController.navigate(NavOption.ColorPalette.name) },
+                            bottomContentPadding = bottomPadding,
+                        )
+                    }
+                }
             }
         }
 
@@ -170,7 +177,8 @@ fun HomeScreen(
                 pagerScope.launch { pagerState.animateScrollToPage(index, animationSpec = PagerSpringSpec) }
             },
             tabsCount = HomeTab.entries.size,
-            isBlurEnabled = false,
+            backdrop = backdrop,
+            isBlurEnabled = glassEnabled,
             accentColor = colors.primary,
             surfaceContainer = colors.surfaceContainer,
             onBubbleProgress = { bubbleProgress = it },
@@ -197,93 +205,45 @@ fun HomeScreen(
 }
 
 @Composable
-internal fun HomePageTitle(@StringRes title: Int) {
-    Text(
-        text = stringResource(title),
-        style = MaterialTheme.typography.headlineLarge,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(top = 16.dp, bottom = 12.dp).semantics { heading() },
-    )
+private fun HomeTabPage(
+    @StringRes title: Int,
+    actions: List<AppBarAction> = emptyList(),
+    content: @Composable (ScrollBehavior) -> Unit,
+) {
+    val scrollBehavior = MiuixScrollBehavior()
+    Column(Modifier.fillMaxSize()) {
+        TitleBar(
+            title = stringResource(title),
+            appBarActions = actions,
+            scrollBehavior = scrollBehavior,
+            onBackClick = null,
+        )
+        Box(Modifier.fillMaxWidth().weight(1f).nestedScroll(scrollBehavior.nestedScrollConnection)) {
+            content(scrollBehavior)
+        }
+    }
 }
 
 @Composable
-private fun SignalTab(onOpenMap: () -> Unit) {
+private fun SignalTab() {
     var fragment by remember { mutableStateOf<MainCellularFragment?>(null) }
     var simCount by remember { mutableIntStateOf(0) }
-    var simLabel by remember { mutableStateOf("") }
 
     DisposableEffect(fragment) {
         val cellular = fragment
-        cellular?.setSimSwitchCallback { _, count, label ->
-            simCount = count
-            simLabel = label
-        }
+        cellular?.setSimSwitchCallback { _, count, _ -> simCount = count }
         simCount = cellular?.simCount ?: 0
-        simLabel = cellular?.currentSimLabel.orEmpty()
         onDispose { cellular?.setSimSwitchCallback(null) }
     }
 
-    Column(Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            val label = simLabel.takeIf { simCount > 0 } ?: stringResource(R.string.home_signal)
-            if (simCount > 1) {
-                val switchSim = stringResource(R.string.sim_switch)
-                Surface(
-                    onClick = { fragment?.switchToNextSim() },
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.weight(1f, fill = false)
-                        .widthIn(max = 260.dp)
-                        .semantics { contentDescription = "$label, $switchSim" },
-                ) {
-                    Row(
-                        modifier = Modifier.padding(start = 16.dp, end = 10.dp, top = 10.dp, bottom = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(
-                            text = label,
-                            modifier = Modifier.weight(1f, fill = false),
-                            style = MaterialTheme.typography.labelLarge,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Icon(Icons.Rounded.ArrowDropDown, contentDescription = null)
-                    }
-                }
-            } else {
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.weight(1f, fill = false).widthIn(max = 260.dp),
-                ) {
-                    Text(
-                        label,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                        style = MaterialTheme.typography.labelLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-
-            IconButton(onClick = onOpenMap) {
-                Icon(Icons.Rounded.Map, contentDescription = stringResource(R.string.open_tower_map))
-            }
-        }
-
-        AndroidViewBinding(
-            factory = ContainerCellularFragmentBinding::inflate,
-            modifier = Modifier.fillMaxWidth().weight(1f),
-        ) {
-            fragment = cellularFragmentContainerView.getFragment<MainCellularFragment>()
+    val actions = if (simCount > 1) {
+        listOf(AppBarAction(R.drawable.ic_sim_switch, R.string.sim_switch, onClick = { fragment?.switchToNextSim() }))
+    } else emptyList()
+    HomeTabPage(R.string.home_signal, actions) { scrollBehavior ->
+        AndroidViewBinding(ContainerCellularFragmentBinding::inflate, Modifier.fillMaxSize()) {
+            val cellular = cellularFragmentContainerView.getFragment<MainCellularFragment>()
+            cellular.topBarScroll.connection = scrollBehavior.nestedScrollConnection
+            fragment = cellular
         }
     }
 }

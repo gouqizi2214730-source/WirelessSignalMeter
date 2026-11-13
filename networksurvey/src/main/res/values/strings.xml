@@ -266,6 +266,8 @@
     <string name="cell_site_latitude">Site latitude</string>
     <string name="home_tools">Tools</string>
     <string name="professional_tools_title">Professional tools</string>
+    <string name="tower_map_search_action">Search cell sites</string>
+    <string name="tower_map_layers_action">Map layers and survey points</string>
     <string name="tool_tower_map_title">Cell tower map</string>
     <string name="tool_tower_map_description">Cell sites, sectors, and live survey tracks</string>
     <string name="tool_gnss_title">GNSS satellites</string>

@@ -20,6 +20,7 @@ import com.craxiom.networksurvey.SimChangeReceiver;
 import com.craxiom.networksurvey.databinding.FragmentCellularSimpleBinding;
 import com.craxiom.networksurvey.services.NetworkSurveyService;
 import com.craxiom.networksurvey.services.controller.CellularController;
+import com.craxiom.networksurvey.ui.main.appbar.FragmentTopBarScroll;
 
 import java.util.List;
 
@@ -28,7 +29,7 @@ import java.util.List;
  * 蜂窝页面容器 Fragment。
  *
  * 不再使用 TabLayout + ViewPager2 切换 SIM 卡，改为只持有一个 {@link NetworkDetailsFragment}，
- * SIM 切换通过信号页顶部的运营商按钮完成（{@link #switchToNextSim()}），
+ * SIM 切换通过信号页顶栏的 SIM 按钮完成（{@link #switchToNextSim()}），
  * 由 Compose 层调用。
  */
 public class MainCellularFragment extends AServiceDataFragment
@@ -36,6 +37,7 @@ public class MainCellularFragment extends AServiceDataFragment
     private List<SubscriptionInfo> activeSubscriptionInfoList;
     private BroadcastReceiver simBroadcastReceiver;
     private FragmentCellularSimpleBinding binding;
+    private final FragmentTopBarScroll topBarScroll = new FragmentTopBarScroll();
 
     // 当前选中的 SIM 索引（静态，跨 Fragment 重建保持）
     private static int currentSimIndex = 0;
@@ -54,6 +56,10 @@ public class MainCellularFragment extends AServiceDataFragment
 
     public void setSimSwitchCallback(OnSimSwitchCallback callback) {
         this.simSwitchCallback = callback;
+    }
+
+    public FragmentTopBarScroll getTopBarScroll() {
+        return topBarScroll;
     }
 
     /** 获取当前 SIM 数量 */

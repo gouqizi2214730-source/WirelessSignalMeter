@@ -61,7 +61,6 @@ fun SettingsScreen(
     onNavigateToEngParams: () -> Unit = {},
     onNavigateToTheme: () -> Unit = {},
     bottomContentPadding: Dp = 24.dp,
-    header: @Composable () -> Unit = {},
 ) {
     val context = LocalContext.current
     val preferences = remember(context) { PreferenceManager.getDefaultSharedPreferences(context) }
@@ -74,7 +73,6 @@ fun SettingsScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = bottomContentPadding),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            item { header() }
             item {
                 SettingsGroup("常用") {
                     SettingsLink(Icons.Rounded.Palette, "外观", "深色模式、动态取色与主题色", onNavigateToTheme)

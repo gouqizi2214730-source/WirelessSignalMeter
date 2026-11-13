@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
+import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import androidx.compose.material3.MaterialTheme
 
@@ -108,25 +109,41 @@ fun AppBarAction(appBarAction: AppBarAction) {
 fun TitleBar(
     title: String,
     appBarActions: List<AppBarAction>? = null,
-    onBackClick: () -> Unit
+    compact: Boolean = false,
+    scrollBehavior: ScrollBehavior? = null,
+    onBackClick: (() -> Unit)?,
 ) {
-    TopAppBar(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
-        title = title,
-        navigationIcon = {
+    val colors = MaterialTheme.colorScheme
+    val navigation: @Composable () -> Unit = {
+        if (onBackClick != null) {
             IconButton(onClick = onBackClick) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                     contentDescription = stringResource(id = R.string.navigate_back),
-                    tint = MaterialTheme.colorScheme.onSurface
+                    tint = colors.onSurface,
                 )
             }
-        },
-        actions = {
-            appBarActions?.forEach { appBarAction ->
-                AppBarAction(appBarAction)
-            }
         }
-    )
+    }
+    val actions: @Composable () -> Unit = {
+        appBarActions?.forEach { AppBarAction(it) }
+    }
+    if (compact) {
+        SmallTopAppBar(
+            modifier = Modifier.fillMaxWidth(),
+            color = colors.background,
+            title = title,
+            navigationIcon = navigation,
+            actions = { actions() },
+        )
+    } else {
+        TopAppBar(
+            modifier = Modifier.fillMaxWidth(),
+            color = if (scrollBehavior == null) colors.surface else colors.background,
+            title = title,
+            scrollBehavior = scrollBehavior,
+            navigationIcon = navigation,
+            actions = { actions() },
+        )
+    }
 }

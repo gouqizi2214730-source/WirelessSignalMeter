@@ -31,6 +31,9 @@ object ImportFieldSpec {
         FieldDef(CsvParsingEngine.Col.TILT, "下倾角", true)
     )
 
+    /** UTF-8 BOM 便于 Excel 识别中文。模板只写表头，避免示例行误入库。 */
+    fun csvTemplate(): String = "\uFEFF" + FIELDS.joinToString(",") { it.label } + "\r\n"
+
     /** 根据字段定义构建「工参列索引 -> 显示名」的映射，供 UI 使用。 */
     fun labelOf(col: Int): String = FIELDS.firstOrNull { it.col == col }?.label ?: ""
 

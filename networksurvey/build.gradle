@@ -173,6 +173,7 @@ dependencies {
     implementation(libs.commons.csv)
     // 测速 FTP 客户端（Apache Commons Net）
     implementation 'commons-net:commons-net:3.13.0'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.recyclerview)

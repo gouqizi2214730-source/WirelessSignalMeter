@@ -1,8 +1,11 @@
 package com.craxiom.networksurvey.ui.cellular
 
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import com.craxiom.networksurvey.fragments.model.CellularViewModel
+import com.craxiom.networksurvey.ui.main.appbar.FragmentTopBarScroll
+import com.craxiom.networksurvey.ui.main.appbar.fragmentTopBarScroll
 import com.craxiom.networksurvey.ui.theme.NsTheme
 
 /**
@@ -20,6 +23,7 @@ object CellularDetailsCompose {
         onCellularInfoClick: Runnable,
         onTechnologyInfoClick: Runnable,
         onNrInfoClick: Runnable,
+        topBarScroll: FragmentTopBarScroll?,
     ) {
         composeView.setViewCompositionStrategy(
             ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
@@ -32,6 +36,7 @@ object CellularDetailsCompose {
                     onCellularInfoClick = { onCellularInfoClick.run() },
                     onTechnologyInfoClick = { onTechnologyInfoClick.run() },
                     onNrInfoClick = { onNrInfoClick.run() },
+                    modifier = Modifier.fragmentTopBarScroll(topBarScroll),
                 )
             }
         }
