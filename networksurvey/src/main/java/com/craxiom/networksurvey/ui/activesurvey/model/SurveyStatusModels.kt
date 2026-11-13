@@ -2,7 +2,7 @@ package com.craxiom.networksurvey.ui.activesurvey.model
 
 import androidx.compose.ui.graphics.Color
 import com.craxiom.networksurvey.model.SurveyTypes
-import org.maplibre.android.geometry.LatLng
+import com.baidu.mapapi.model.LatLng
 
 /**
  * Represents the current status of a survey type

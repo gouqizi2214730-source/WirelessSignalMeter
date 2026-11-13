@@ -1,5 +1,7 @@
 package com.craxiom.networksurvey.ui.theme
 
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 /**
@@ -10,19 +12,34 @@ import androidx.compose.ui.graphics.Color
  */
 object WifiTokens {
 
-    val SsidAccent = Color(0xFF03A9F4)
-    val SsidSoft = Color(0x2603A9F4)
+    /**
+     * 原来的固定青蓝 #03A9F4 不跟随自定义主题色。改为 @Composable 读
+     * MaterialTheme.colorScheme.primary，使 Wi-Fi/PLMN/Watchlist 模块的选中项、
+     * 光标色、强调色全部自动跟随用户在设置页选择的自定义主题色（蓝/绿/紫/橙）。
+     */
+    val SsidAccent: Color
+        @Composable get() = MaterialTheme.colorScheme.primary
+
+    val SsidSoft: Color
+        @Composable get() = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
 
     val PasspointBlue = Color(0xFF8FA0F0)
 
     val HiddenSsid = Color(0xFF90A4AE)
 
-    // Neutral text + surface tokens, hex from the handoff spec section 2. Scoped to Wi-Fi
-    // screens so the rest of the app's MaterialTheme neutrals stay authoritative.
-    val Ink = Color(0xFFE7EBF2)
-    val InkDim = Color(0xFFDDE1E8)
-    val InkMuted = Color(0xFFD6DAE2)
-    val InkFaint = Color(0xFFB0B6BF)
+    // Neutral text + surface tokens：随当前主题深浅自适应
+    // 浅色模式用深色文字，深色模式用浅色文字，避免在浅色模式下泛白看不清
+    val Ink: Color
+        @Composable get() = MaterialTheme.colorScheme.onSurface
+
+    val InkDim: Color
+        @Composable get() = MaterialTheme.colorScheme.onSurfaceVariant
+
+    val InkMuted: Color
+        @Composable get() = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
+
+    val InkFaint: Color
+        @Composable get() = MaterialTheme.colorScheme.outline
 
     val Band24 = Color(0xFFF2C94C)
     val Band5 = Color(0xFF56CCF2)

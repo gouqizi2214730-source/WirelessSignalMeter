@@ -33,15 +33,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
+import com.craxiom.networksurvey.ui.component.material.ExpressiveSwitch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -75,10 +75,8 @@ import androidx.preference.PreferenceManager
 import com.craxiom.networksurvey.R
 import com.craxiom.networksurvey.constants.NetworkSurveyConstants
 import com.craxiom.networksurvey.ui.activesurvey.model.ActiveSurveyState
-import com.craxiom.networksurvey.ui.cellular.MapContext
-import com.craxiom.networksurvey.ui.cellular.TowerMapScreen
+import com.craxiom.networksurvey.ui.cellular.baidumap.BaiduTowerMapScreen
 import com.craxiom.networksurvey.ui.cellular.model.ServingCellInfo
-import com.craxiom.networksurvey.ui.cellular.towermap.CameraMode
 import com.craxiom.networksurvey.ui.util.copyMissionIdToClipboard
 
 /**
@@ -176,12 +174,12 @@ fun SurveyMonitorScreen(
                 Tab(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    text = { Text("Status") }
+                    text = { Text("状态") }
                 )
                 Tab(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
-                    text = { Text("Map") }
+                    text = { Text("地图") }
                 )
             }
 
@@ -236,7 +234,7 @@ private fun ActiveSurveyTopBar(
     TopAppBar(
         title = {
             Text(
-                text = "Survey Monitor",
+                text = "测站监控",
                 fontWeight = FontWeight.Bold
             )
         },
@@ -244,7 +242,7 @@ private fun ActiveSurveyTopBar(
             IconButton(onClick = onBackPressed) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back"
+                    contentDescription = "返回"
                 )
             }
         }
@@ -288,7 +286,7 @@ private fun SurveyStatusTab(
                 )
 
                 Text(
-                    text = if (surveyState.isAnyActive) "Survey Running" else "Survey Stopped",
+                    text = if (surveyState.isAnyActive) "测量进行中" else "测量已停止",
                     style = MaterialTheme.typography.headlineMedium.copy(
                         fontWeight = FontWeight.Bold
                     ),
@@ -333,13 +331,9 @@ private fun SurveyStatusTab(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                    colors = CardDefaults.defaultColors(
+                        color = MaterialTheme.colorScheme.surfaceContainerLow
                     ),
-                    elevation = CardDefaults.cardElevation(
-                        defaultElevation = 0.dp
-                    )
                 ) {
                     Row(
                         modifier = Modifier
@@ -364,7 +358,7 @@ private fun SurveyStatusTab(
                                     }
                                 )
                                 Text(
-                                    text = "New Tower Alerts",
+                                    text = "新基站提醒",
                                     style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.Medium,
                                     color = if (surveyState.isUploadActive) {
@@ -387,21 +381,21 @@ private fun SurveyStatusTab(
                             }
                             if (!surveyState.isUploadActive) {
                                 Text(
-                                    text = "Requires upload scanning",
+                                    text = "需要开启上传扫描",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                     modifier = Modifier.padding(top = 4.dp, start = 28.dp)
                                 )
                             } else if (isNewTowerAlertsEnabled) {
                                 Text(
-                                    text = "Alerts when new towers are detected",
+                                    text = "检测到新基站时发出提醒",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(top = 4.dp, start = 28.dp)
                                 )
                             }
                         }
-                        Switch(
+                        ExpressiveSwitch(
                             checked = isNewTowerAlertsEnabled,
                             onCheckedChange = onNewTowerAlertsToggle,
                             enabled = surveyState.isUploadActive,
@@ -504,15 +498,10 @@ private fun SurveyMapTab(
     servingCellInfo: ServingCellInfo?,
     onNavigateToTowerMapSettings: () -> Unit
 ) {
-    // Use TowerMapScreen with Survey Monitor context and specific defaults
-    TowerMapScreen(
+    // 使用百度地图基站地图页（已替代旧 MapLibre TowerMapScreen）
+    BaiduTowerMapScreen(
         onBackButtonPressed = { /* Tab already has back button */ },
-        onNavigateToTowerMapSettings = onNavigateToTowerMapSettings,
-        mapContext = MapContext.SURVEY_MONITOR,
-        surveyTracks = surveyState.currentTrack?.let { listOf(it) },
-        // Don't override the saved preferences - let TowerMapScreen load them based on context
-        initialCameraMode = CameraMode.TRACKING,
-        externalServingCellInfo = servingCellInfo
+        servingCellInfo = servingCellInfo
     )
 }
 
@@ -646,9 +635,8 @@ private fun MissionIdRow(
 
     val copyMissionId = { copyMissionIdToClipboard(context, missionId) }
 
-    ElevatedCard(
+    Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp)
     ) {
         Column(
             modifier = Modifier
@@ -771,14 +759,10 @@ private fun SurveyStatistics(
         // Show different layouts based on active survey types
         if (hasNonUploadSurvey && isUploadActive) {
             // Both survey types active - show only Time Elapsed card
-            ElevatedCard(
+            Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.elevatedCardElevation(
-                    defaultElevation = 1.dp
-                ),
-                colors = CardDefaults.elevatedCardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                colors = CardDefaults.defaultColors(
+                    color = MaterialTheme.colorScheme.surfaceContainer
                 )
             ) {
                 Column(
@@ -788,7 +772,7 @@ private fun SurveyStatistics(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "Time Elapsed",
+                        text = "已用时长",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -817,14 +801,10 @@ private fun SurveyStatistics(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // Elapsed Time Card
-                ElevatedCard(
+                Card(
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(16.dp),
-                    elevation = CardDefaults.elevatedCardElevation(
-                        defaultElevation = 1.dp
-                    ),
-                    colors = CardDefaults.elevatedCardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer
+                    colors = CardDefaults.defaultColors(
+                        color = MaterialTheme.colorScheme.surfaceContainer
                     )
                 ) {
                     Column(
@@ -834,7 +814,7 @@ private fun SurveyStatistics(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "Time Elapsed",
+                            text = "已用时长",
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -859,14 +839,10 @@ private fun SurveyStatistics(
 
                 // Records Card (show either total or upload based on survey type)
                 if (hasNonUploadSurvey || isUploadActive) {
-                    ElevatedCard(
+                    Card(
                         modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(16.dp),
-                        elevation = CardDefaults.elevatedCardElevation(
-                            defaultElevation = 1.dp
-                        ),
-                        colors = CardDefaults.elevatedCardColors(
-                            containerColor = if (isUploadActive && !hasNonUploadSurvey) {
+                        colors = CardDefaults.defaultColors(
+                            color = if (isUploadActive && !hasNonUploadSurvey) {
                                 MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
                             } else {
                                 MaterialTheme.colorScheme.surfaceContainer
@@ -926,13 +902,9 @@ private fun SurveyStatistics(
                 // Regular Records Mini Card
                 Card(
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                    colors = CardDefaults.defaultColors(
+                        color = MaterialTheme.colorScheme.surfaceContainerLow
                     ),
-                    elevation = CardDefaults.cardElevation(
-                        defaultElevation = 0.dp
-                    )
                 ) {
                     Row(
                         modifier = Modifier.padding(12.dp),
@@ -947,7 +919,7 @@ private fun SurveyStatistics(
                         )
                         Column {
                             Text(
-                                text = "Logged",
+                                text = "已记录",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -964,13 +936,9 @@ private fun SurveyStatistics(
                 // Upload Records Mini Card
                 Card(
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.2f)
+                    colors = CardDefaults.defaultColors(
+                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.2f)
                     ),
-                    elevation = CardDefaults.cardElevation(
-                        defaultElevation = 0.dp
-                    )
                 ) {
                     Row(
                         modifier = Modifier.padding(12.dp),
@@ -985,7 +953,7 @@ private fun SurveyStatistics(
                         )
                         Column {
                             Text(
-                                text = "To Upload",
+                                text = "待上传",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onTertiaryContainer
                             )
@@ -1007,13 +975,9 @@ private fun SurveyStatistics(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 12.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
+                colors = CardDefaults.defaultColors(
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
                 ),
-                elevation = CardDefaults.cardElevation(
-                    defaultElevation = 0.dp
-                )
             ) {
                 Row(
                     modifier = Modifier.padding(12.dp),
@@ -1034,14 +998,14 @@ private fun SurveyStatistics(
                         )
                         Text(
                             text = if (surveyState.nsAnalyticsInfo.isRegistered) {
-                                "Queued: ${
+                                "队列待传: ${
                                     String.format(
                                         "%,d",
                                         surveyState.nsAnalyticsInfo.queuedRecords
                                     )
                                 }"
                             } else {
-                                "Not registered"
+                                "未注册"
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary
@@ -1054,7 +1018,7 @@ private fun SurveyStatistics(
         // Active survey types indicator
         if (activeSurveyTypes.isNotEmpty()) {
             Text(
-                text = "Active: ${activeSurveyTypes.joinToString(", ")}",
+                text = "进行中: ${activeSurveyTypes.joinToString(", ")}",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                 modifier = Modifier.padding(top = 4.dp)
@@ -1225,26 +1189,18 @@ private fun ServingCellCard(
         label = "container"
     )
 
-    ElevatedCard(
+    Card(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .then(
                 if (isNewTowerDetected) {
-                    Modifier.border(
-                        width = 2.dp,
-                        color = borderColor,
-                        shape = RoundedCornerShape(16.dp)
+                    Modifier.border(width = 2.dp, color = borderColor, shape = RoundedCornerShape(16.dp)
                     )
                 } else Modifier
             ),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.elevatedCardElevation(
-            defaultElevation = 2.dp,
-            pressedElevation = 4.dp
-        ),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = containerColor
+        colors = CardDefaults.defaultColors(
+            color = containerColor
         )
     ) {
         Column(
@@ -1266,7 +1222,7 @@ private fun ServingCellCard(
                     }
                 )
                 Text(
-                    text = "Serving Cell",
+                    text = "主服务小区",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(start = 8.dp)
@@ -1307,10 +1263,9 @@ private fun ServingCellCard(
                                     scaleY = scale * 1.2f,
                                     alpha = glowAlpha * 0.5f
                                 ),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.tertiary
+                            colors = CardDefaults.defaultColors(
+                                color = MaterialTheme.colorScheme.tertiary
                             ),
-                            shape = RoundedCornerShape(12.dp)
                         ) {
                             Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
                                 Text(
@@ -1328,13 +1283,9 @@ private fun ServingCellCard(
                                 scaleX = scale,
                                 scaleY = scale
                             ),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.tertiary
+                            colors = CardDefaults.defaultColors(
+                                color = MaterialTheme.colorScheme.tertiary
                             ),
-                            shape = RoundedCornerShape(12.dp),
-                            elevation = CardDefaults.cardElevation(
-                                defaultElevation = 2.dp
-                            )
                         ) {
                             Text(
                                 text = "NEW",
@@ -1415,11 +1366,9 @@ private fun ServingCellCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 12.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.5f)
+                    colors = CardDefaults.defaultColors(
+                        color = MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.5f)
                     ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Row(
                         modifier = Modifier
@@ -1429,7 +1378,7 @@ private fun ServingCellCard(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "TECHNOLOGY",
+                                text = "技术制式",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(bottom = 2.dp)
@@ -1441,10 +1390,9 @@ private fun ServingCellCard(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     // Technology badge
                                     Card(
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = MaterialTheme.colorScheme.primary
+                                        colors = CardDefaults.defaultColors(
+                                            color = MaterialTheme.colorScheme.primary
                                         ),
-                                        shape = RoundedCornerShape(8.dp)
                                     ) {
                                         Text(
                                             text = technology,
@@ -1465,7 +1413,7 @@ private fun ServingCellCard(
                         }
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "SIGNAL",
+                                text = "信号强度",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(bottom = 2.dp)
@@ -1545,7 +1493,7 @@ private fun ServingCellCard(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "NETWORK",
+                            text = "运营商网络",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(bottom = 2.dp)
@@ -1561,7 +1509,7 @@ private fun ServingCellCard(
                         Text(
                             text = if (protocol == com.craxiom.networksurvey.model.CellularProtocol.GSM ||
                                 protocol == com.craxiom.networksurvey.model.CellularProtocol.UMTS
-                            ) "LAC" else "TAC",
+                            ) "区域码 LAC" else "区域码 TAC",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(bottom = 2.dp)
@@ -1578,11 +1526,9 @@ private fun ServingCellCard(
                 // Cell ID with enhanced styling
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
+                    colors = CardDefaults.defaultColors(
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
                     ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Column(
                         modifier = Modifier
@@ -1590,7 +1536,7 @@ private fun ServingCellCard(
                             .padding(12.dp)
                     ) {
                         Text(
-                            text = "CELL ID",
+                            text = "小区编号 CELL ID",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(bottom = 2.dp)
@@ -1636,7 +1582,7 @@ private fun ServingCellCardSkeleton() {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "TECHNOLOGY",
+                    text = "技术制式",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 2.dp)
@@ -1650,7 +1596,7 @@ private fun ServingCellCardSkeleton() {
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "SIGNAL",
+                    text = "信号强度",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 2.dp)
@@ -1673,7 +1619,7 @@ private fun ServingCellCardSkeleton() {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "NETWORK",
+                    text = "运营商网络",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 2.dp)
@@ -1687,7 +1633,7 @@ private fun ServingCellCardSkeleton() {
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "TAC",
+                    text = "区域码",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 2.dp)
@@ -1704,7 +1650,7 @@ private fun ServingCellCardSkeleton() {
         // Cell ID
         Column(modifier = Modifier.fillMaxWidth()) {
             Text(
-                text = "CELL ID",
+                text = "小区编号 CELL ID",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 2.dp)

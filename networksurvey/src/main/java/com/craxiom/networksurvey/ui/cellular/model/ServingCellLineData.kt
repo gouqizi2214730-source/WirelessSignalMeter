@@ -1,6 +1,6 @@
 package com.craxiom.networksurvey.ui.cellular.model
 
-import org.maplibre.android.geometry.LatLng
+import com.baidu.mapapi.model.LatLng
 
 /**
  * Data class representing a line between user location and serving cell tower.

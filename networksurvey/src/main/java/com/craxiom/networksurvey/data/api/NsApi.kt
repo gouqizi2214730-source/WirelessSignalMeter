@@ -89,6 +89,12 @@ interface Api {
 private const val NS_TOWER_BASE_URL = "https://network-survey-gateway-2z7o328z.uc.gateway.dev/"
 private val NS_TOWER_HOST = NS_TOWER_BASE_URL.toHttpUrl().host
 
+/**
+ * OUI 查询服务（自建，部署在 rsrp.cn）。
+ * 零依赖 Node.js 后端，兼容 App 原有 v2/oui 协议，无需 API Key。
+ */
+private const val OUI_BASE_URL = "https://rsrp.cn/oui/"
+
 val okHttpClient: OkHttpClient = OkHttpClient.Builder()
     // Attach the API key only for requests to the NS tower gateway. OkHttp follows redirects
     // by default and does NOT strip arbitrary headers on cross-host redirects, sending
@@ -114,6 +120,16 @@ val retrofit: Retrofit = Retrofit.Builder()
     .build()
 
 /**
+ * 独立的 OUI 查询 Retrofit 实例，指向自建服务器 rsrp.cn/oui/。
+ * 共享 OkHttpClient（不加 API Key），超时等配置跟随 OkHttp 默认值。
+ */
+val ouiRetrofit: Retrofit = Retrofit.Builder()
+    .baseUrl(OUI_BASE_URL)
+    .client(okHttpClient)
+    .addConverterFactory(GsonConverterFactory.create())
+    .build()
+
+/**
  * The data class that represents a tower from the NS backend. Needs to stay in sync with the API.
  */
 data class Tower(
@@ -132,7 +148,11 @@ data class Tower(
     @SerializedName("updated_at") val updatedAt: Long,
     @SerializedName("radio") val radio: String,
     @SerializedName("source") val source: String,
-    @SerializedName("comments") val comments: String? = null
+    @SerializedName("comments") val comments: String? = null,
+    // 扇区渲染用：方位角(度)与下倾角(度)，本地工参导入时写入；远程塔库通常无此字段
+    @SerializedName("azimuth") val azimuth: Double = -1.0,
+    @SerializedName("tilt") val tilt: Double = 0.0,
+    @SerializedName("cell_name") val cellName: String? = null
 )
 
 /**

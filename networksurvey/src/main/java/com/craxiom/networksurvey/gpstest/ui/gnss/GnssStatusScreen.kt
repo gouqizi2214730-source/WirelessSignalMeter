@@ -15,6 +15,7 @@
  */
 package com.craxiom.networksurvey.gpstest.ui.gnss
 
+
 import android.location.Location
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
@@ -31,12 +32,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
+import com.craxiom.networksurvey.ui.dashboard.DashboardCardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -60,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.craxiom.networksurvey.Application
 import com.craxiom.networksurvey.R
+import com.craxiom.networksurvey.ui.dashboard.DashboardCardHeader
 import com.craxiom.networksurvey.model.DilutionOfPrecision
 import com.craxiom.networksurvey.gpstest.model.GnssType
 import com.craxiom.networksurvey.gpstest.model.SatelliteStatus
@@ -75,7 +80,11 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @Composable
-fun GnssStatusScreen(viewModel: SignalInfoViewModel) {
+fun GnssStatusScreen(
+    viewModel: SignalInfoViewModel,
+    heroContent: (@Composable () -> Unit)? = null,
+    trailingContent: (@Composable () -> Unit)? = null,
+) {
     //
     // Observe LiveData from ViewModel
     //
@@ -107,6 +116,7 @@ fun GnssStatusScreen(viewModel: SignalInfoViewModel) {
             .verticalScroll(rememberScrollState())
     ) {
         Column {
+            heroContent?.invoke()
             LocationCard(
                 location,
                 ttff,
@@ -125,6 +135,7 @@ fun GnssStatusScreen(viewModel: SignalInfoViewModel) {
             }
             GnssStatusCard(gnssStatuses)
             SbasStatusCard(sbasStatuses)
+            trailingContent?.invoke()
         }
     }
 }
@@ -148,7 +159,7 @@ fun Filter(totalNumSignals: Int, satelliteMetadata: SatelliteMetadata, onClick: 
             ),
             fontSize = 13.sp,
             fontStyle = FontStyle.Italic,
-            color = MaterialTheme.colorScheme.onBackground
+            color = DashboardCardDefaults.textSecondary()
         )
         Text(
             text = buildAnnotatedString {
@@ -188,22 +199,27 @@ fun StatusCard(
     satStatuses: List<SatelliteStatus>,
     isGnss: Boolean,
 ) {
-    var modifier = Modifier
+    val cardModifier = Modifier
         .fillMaxWidth()
-        .padding(5.dp)
-
-    if (showList(isGnss, satStatuses)) {
-        // Only scroll if we're showing satellites - we don't want "Not available" text to extend offscreen
-        modifier = modifier.horizontalScroll(rememberScrollState())
-    }
+        .padding(horizontal = DashboardCardDefaults.margin, vertical = 8.dp)
 
     Card(
-        modifier = modifier,
-        elevation = CardDefaults.cardElevation(),
-        colors = CardDefaults.elevatedCardColors()
+        modifier = cardModifier,
+        colors = CardDefaults.defaultColors(
+            color = DashboardCardDefaults.cardContainerColor(),
+        )
     ) {
+        DashboardCardHeader(
+            icon = if (isGnss) R.drawable.ic_gnss else R.drawable.ic_location_pin,
+            title = if (isGnss) "GNSS 卫星" else "SBAS 卫星"
+        )
         if (showList(isGnss, satStatuses)) {
-            Column {
+            // 表格内容区单独横向滚动（标题不参与滚动，避免标题文字被压缩成竖排）
+            Column(
+                modifier = Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .width(StatusTableContentWidth)
+            ) {
                 StatusRowHeader(isGnss)
                 satStatuses.forEach {
                     StatusRow(it)
@@ -215,6 +231,12 @@ fun StatusCard(
         }
     }
 }
+
+/**
+ * 表格内容固定宽度（dp）：8 列最小宽度合计 380 + 左右 padding 32 = 412。
+ * 固定宽度保证在横向滚动时所有行的列对齐（defaultMinSize 只保证不小于，不保证一致）。
+ */
+private val StatusTableContentWidth = 412.dp
 
 private fun showList(isGnss: Boolean, satStatuses: List<SatelliteStatus>): Boolean {
     return isGnss ||
@@ -345,7 +367,7 @@ fun FlagImage(@DrawableRes flagId: Int, @StringRes contentDescriptionId: Int, mo
     ) {
         Box(
             modifier = Modifier
-                .border(BorderStroke(1.dp, Color.Black))
+                .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outline))
         ) {
             Image(
                 painter = painterResource(id = flagId),
@@ -369,7 +391,8 @@ fun CarrierFrequency(satelliteStatus: SatelliteStatus, modifier: Modifier) {
                 text = String.format("%.3f", carrierMhz),
                 modifier = modifier.padding(start = 3.dp, end = 2.dp),
                 fontSize = 9.sp,
-                textAlign = TextAlign.Start
+                textAlign = TextAlign.Start,
+                color = DashboardCardDefaults.textPrimary()
             )
         }
     } else {
@@ -478,7 +501,8 @@ fun StatusLabel(@StringRes id: Int, modifier: Modifier = Modifier) {
         modifier = modifier.padding(start = 3.dp, end = 3.dp),
         fontWeight = FontWeight.Bold,
         fontSize = 13.sp,
-        textAlign = TextAlign.Start
+        textAlign = TextAlign.Start,
+        color = DashboardCardDefaults.textSecondary()
     )
 }
 
@@ -488,7 +512,8 @@ fun StatusValue(text: String, modifier: Modifier = Modifier) {
         text = text,
         modifier = modifier.padding(start = 3.dp, end = 3.dp),
         fontSize = 13.sp,
-        textAlign = TextAlign.Start
+        textAlign = TextAlign.Start,
+        color = DashboardCardDefaults.textPrimary()
     )
 }
 
@@ -508,7 +533,8 @@ fun NotAvailableText(text: String) {
         text = text,
         modifier = Modifier.padding(10.dp),
         fontSize = 13.sp,
-        textAlign = TextAlign.Center
+        textAlign = TextAlign.Center,
+        color = DashboardCardDefaults.textSecondary()
     )
 }
 

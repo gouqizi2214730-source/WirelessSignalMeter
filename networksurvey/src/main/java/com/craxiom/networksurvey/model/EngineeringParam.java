@@ -8,7 +8,7 @@ public class EngineeringParam {
     private String city;
     private String siteName;
     private String cellName;
-    private int ci;
+    private long ci;
     private int gnbId;
     private int sectorId;
     private int lac;
@@ -58,11 +58,17 @@ public class EngineeringParam {
         this.cellName = cellName;
     }
 
-    public int getCi() {
+    /**
+     * 完整小区标识：4G 为 ECI（= 基站ID × 256 + 小区ID），5G 为 NCI（= 基站ID × 4096 + 小区ID）。
+     *
+     * 必须是 long：5G 的 NCI 常见于 10^10 量级（例如基站ID 7 位时 NCI ≈ 4×10^9），
+     * 远超 int 上限 2,147,483,647，用 int 存储会静默溢出导致永远匹配不上。
+     */
+    public long getCi() {
         return this.ci;
     }
 
-    public void setCi(int ci) {
+    public void setCi(long ci) {
         this.ci = ci;
     }
 

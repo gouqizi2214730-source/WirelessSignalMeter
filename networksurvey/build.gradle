@@ -18,7 +18,7 @@ import com.github.jk1.license.filter.LicenseBundleNormalizer
 import com.github.jk1.license.render.SimpleHtmlReportRenderer
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
-def appVersion = "1.0.1"
+def appVersion = "1.2.0"
 base {
     archivesName = "$applicationName-$appVersion"
 }
@@ -50,7 +50,7 @@ android {
         applicationId "com.wireless.signalmeter.new"
         minSdkVersion 33
         targetSdkVersion 37
-        versionCode 101
+        versionCode 120
         versionName appVersion
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments clearPackageData: 'true'
@@ -145,6 +145,9 @@ dependencies {
     implementation 'top.yukonga.miuix.kmp:miuix-blur-android:0.9.2'
     implementation 'top.yukonga.miuix.kmp:miuix-ui-android:0.9.2'
 
+    // KernelSU 同款 materialkolor：Material You 动态取色 + PaletteStyle/ColorSpec 配色风格
+    implementation 'com.materialkolor:material-kolor:5.0.1'
+
     implementation(libs.androidx.localbroadcastmanager)
     implementation(libs.androidx.cardview)
     implementation(libs.androidx.preference.ktx)
@@ -189,10 +192,7 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 
-    implementation(libs.maplibre.android.sdk)
-    implementation(libs.maplibre.android.plugin.annotation)
-
-    // === 百度地图 SDK（v7.6.4 三件套，无线无忧地图页使用）===
+    // 百度地图 SDK（7.6.4 分体包：BaiduMapSDK_Map + base + common）
     implementation files('libs/BaiduMapSDK_Map-7.6.4.aar')
     implementation files('libs/base-7.6.4.aar')
     implementation files('libs/common-1.0.36.jar')

@@ -16,11 +16,15 @@
 
 package com.craxiom.networksurvey;
 
+import android.app.Activity;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
+import android.os.Bundle;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import androidx.preference.PreferenceManager;
 
@@ -30,11 +34,9 @@ import com.craxiom.networksurvey.services.watchlist.WatchlistNotificationHelper;
 import com.craxiom.networksurvey.update.UpdateDownloader;
 import com.craxiom.networksurvey.util.AppLogger;
 import com.craxiom.networksurvey.util.CredentialSecureStorage;
+import com.craxiom.networksurvey.util.ThemePref;
 
 import android.os.Build;
-
-import com.baidu.mapapi.CoordType;
-import com.baidu.mapapi.SDKInitializer;
 
 import dagger.hilt.android.HiltAndroidApp;
 import timber.log.Timber;
@@ -83,17 +85,36 @@ public class Application extends android.app.Application
 
         CredentialSecureStorage.INSTANCE.migrateFromPlainTextIfNeeded(this);
 
-        // 百度地图 SDK 初始化（BD-09LL 坐标系，无线无忧地图页使用）
-        try
+        // Material You（Monet）动态取色：在 Activity 创建前统一应用（XML 层：preference/dialog/fragment）
+        // - Android 12（API 31）+：从系统壁纸提取主色，覆盖到当前 Activity 主题；
+        // - 更低版本：DynamicColors 内部自动跳过，沿用 styles.xml 的静态配色；
+        // - 用户在设置中关闭开关时不应用，回退静态主题。
+        registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks()
         {
-            SDKInitializer.initialize(this);
-            SDKInitializer.setAgreePrivacy(this, true);
-            SDKInitializer.setCoordType(CoordType.BD09LL);
-        }
-        catch (Throwable t)
-        {
-            Timber.w(t, "百度地图 SDK 初始化失败");
-        }
+            @Override
+            public void onActivityPreCreated(@NonNull Activity activity, @Nullable Bundle savedInstanceState)
+            {
+                try
+                {
+                    if (ThemePref.INSTANCE.isMonet(activity))
+                    {
+                        com.google.android.material.color.DynamicColors.applyToActivityIfAvailable(activity);
+                    }
+                }
+                catch (Throwable t)
+                {
+                    Timber.w(t, "Monet 动态取色应用失败");
+                }
+            }
+
+            @Override public void onActivityCreated(@NonNull Activity activity, @Nullable Bundle savedInstanceState) {}
+            @Override public void onActivityStarted(@NonNull Activity activity) {}
+            @Override public void onActivityResumed(@NonNull Activity activity) {}
+            @Override public void onActivityPaused(@NonNull Activity activity) {}
+            @Override public void onActivityStopped(@NonNull Activity activity) {}
+            @Override public void onActivitySaveInstanceState(@NonNull Activity activity, @NonNull Bundle outState) {}
+            @Override public void onActivityDestroyed(@NonNull Activity activity) {}
+        });
 
         // 应用日志埋点：崩溃接管 + 日志落盘 filesDir/logs/app.log（供「上传日志」上报）
         try
@@ -108,6 +129,30 @@ public class Application extends android.app.Application
 
         // 注册更新下载完成广播（自动安装新版本）
         UpdateDownloader.INSTANCE.register(this);
+
+        // 百度地图 SDK + 腾讯瓦片代理放到后台线程初始化，避免阻塞主线程导致启动卡顿
+        // 百度 SDK 的 initialize 内部会加载 native 库，可能耗时 200-500ms
+        new Thread(() -> {
+            try
+            {
+                com.craxiom.networksurvey.util.TencentTileProxy.INSTANCE.start();
+            }
+            catch (Throwable t)
+            {
+                Timber.w(t, "TencentTileProxy 启动失败");
+            }
+
+            try
+            {
+                com.baidu.mapapi.SDKInitializer.initialize(getApplicationContext());
+                com.baidu.mapapi.SDKInitializer.setAgreePrivacy(getApplicationContext(), true);
+                com.baidu.mapapi.SDKInitializer.setCoordType(com.baidu.mapapi.CoordType.BD09LL);
+            }
+            catch (Throwable t)
+            {
+                Timber.w(t, "百度地图 SDK 初始化失败");
+            }
+        }, "MapSdkInit").start();
     }
 
     @Override

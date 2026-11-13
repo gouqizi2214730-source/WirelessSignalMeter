@@ -52,8 +52,8 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -68,6 +68,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import com.craxiom.networksurvey.ui.component.material.ExpressiveSwitch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -322,29 +323,28 @@ private fun NsAnalyticsConnectionContent(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("NS Analytics Details", color = Color.White) },
+                title = { Text("NS Analytics 详情") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateUp) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Navigate back",
-                            tint = Color.White
+                            contentDescription = "Navigate back"
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF1A1B1F)
+                    containerColor = MaterialTheme.colorScheme.surface
                 )
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = Color(0xFF121316)
+        containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(Color(0xFF121316))
+                .background(MaterialTheme.colorScheme.background)
         ) {
             if (uiState.isLoading) {
                 Box(
@@ -483,13 +483,13 @@ private fun NsAnalyticsHeroSection() {
             text = stringResource(R.string.ns_analytics),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
-            color = Color.White
+            color = MaterialTheme.colorScheme.onSurface
         )
 
         Text(
             text = stringResource(R.string.ns_analytics_tagline),
             style = MaterialTheme.typography.bodyMedium,
-            color = Color.Gray,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 16.dp)
         )
@@ -501,24 +501,24 @@ private fun NsAnalyticsHeroSection() {
  */
 @Composable
 private fun SetupGuideSection() {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1E1F24)
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.ns_analytics_setup_guide_title),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.defaultColors(
+                color = MaterialTheme.colorScheme.surfaceContainerLow
             )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.ns_analytics_setup_guide_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
 
             SetupStepItem(
                 stepNumber = 1,
@@ -565,8 +565,7 @@ private fun SetupStepItem(
             modifier = Modifier
                 .size(32.dp)
                 .background(
-                    color = Color(0xFF2A2B30),
-                    shape = MaterialTheme.shapes.small
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 ),
             contentAlignment = Alignment.Center
         ) {
@@ -586,13 +585,13 @@ private fun SetupStepItem(
                 text = title,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = Color.White
+                color = MaterialTheme.colorScheme.onSurface
             )
 
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -605,8 +604,8 @@ private fun SetupStepItem(
 private fun SetupTipBanner() {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        colors = CardDefaults.defaultColors(
+            color = MaterialTheme.colorScheme.secondaryContainer
         )
     ) {
         Row(
@@ -716,30 +715,30 @@ private fun CallToActionButtons(
  */
 @Composable
 private fun WhatHappensNextSection() {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1E1F24)
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.defaultColors(
+                color = MaterialTheme.colorScheme.surfaceContainerLow
+            )
         ) {
-            Text(
-                text = stringResource(R.string.ns_analytics_what_happens_next_title),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.ns_analytics_what_happens_next_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
 
-            Text(
-                text = stringResource(R.string.ns_analytics_what_happens_next_desc),
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray
-            )
+                Text(
+                    text = stringResource(R.string.ns_analytics_what_happens_next_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
         }
     }
 }
@@ -770,8 +769,8 @@ private fun WorkspaceStatusCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1E1F24)
+        colors = CardDefaults.defaultColors(
+            color = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Row(
@@ -795,16 +794,16 @@ private fun WorkspaceStatusCard(
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = "Workspace Registered",
+                    text = "工作区已注册",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Medium
                 )
 
                 Text(
-                    text = workspaceName ?: "Unknown Workspace",
+                    text = workspaceName ?: "未知工作区",
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(vertical = 4.dp)
                 )
@@ -821,16 +820,16 @@ private fun WorkspaceStatusCard(
                             )
                         }
                     ) {
-                        Text(
-                            text = "ID: ${id.take(8)}...",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Icon(
-                            painter = painterResource(R.drawable.ic_copy),
-                            contentDescription = "Copy ID",
-                            tint = Color.Gray,
+                                  Text(
+                    text = "ID: ${id.take(8)}...",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    painter = painterResource(R.drawable.ic_copy),
+                    contentDescription = "复制 ID",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(14.dp)
                         )
                     }
@@ -839,9 +838,9 @@ private fun WorkspaceStatusCard(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Ready to collect and upload survey data",
+                    text = "可开始采集并上传测量数据",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 workspaceId?.let { id ->
@@ -899,8 +898,8 @@ private fun UploadSettingsCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1E1F24)
+        colors = CardDefaults.defaultColors(
+            color = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Column(
@@ -909,9 +908,9 @@ private fun UploadSettingsCard(
                 .padding(16.dp)
         ) {
             Text(
-                text = "Upload Settings",
+                text = "上传设置",
                 style = MaterialTheme.typography.titleMedium,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Bold
             )
 
@@ -949,14 +948,14 @@ private fun UploadSettingsCard(
                 Text(
                     text = resultText,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 // Secondary line: exact timestamp
                 Text(
                     text = exactTime,
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.Gray.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
             }
 
@@ -976,7 +975,7 @@ private fun UploadSettingsCard(
                         .fillMaxWidth()
                         .height(6.dp),
                     color = MaterialTheme.colorScheme.primary,
-                    trackColor = Color.Gray.copy(alpha = 0.3f),
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
                     drawStopIndicator = {}
                 )
 
@@ -985,7 +984,7 @@ private fun UploadSettingsCard(
                 Text(
                     text = "$uploadedRecords / $totalRecordsToUpload records",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
@@ -999,17 +998,17 @@ private fun UploadSettingsCard(
             ) {
                 Column {
                     Text(
-                        text = "Auto Upload",
+                        text = "自动上传",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = if (autoUploadEnabled) "Every $uploadFrequencyMinutes min" else "Disabled",
+                        text = if (autoUploadEnabled) "每 $uploadFrequencyMinutes 分钟" else "已关闭",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Switch(
+                ExpressiveSwitch(
                     checked = autoUploadEnabled,
                     onCheckedChange = onToggleAutoUpload
                 )
@@ -1041,7 +1040,7 @@ private fun UploadSettingsCard(
                 if (uploadState == UploadState.UPLOADING) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(18.dp),
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onPrimary,
                         strokeWidth = 2.dp,
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -1069,7 +1068,7 @@ private fun UploadStatusRow(
     val statusColor = when (state) {
         UploadState.IDLE -> Color(0xFF4CAF50)  // Green
         UploadState.UPLOADING -> Color(0xFFFFC107)  // Yellow/Amber
-        UploadState.EMPTY -> Color.Gray
+        UploadState.EMPTY -> MaterialTheme.colorScheme.onSurfaceVariant
         UploadState.UNAVAILABLE -> Color(0xFFF44336)  // Red
     }
 
@@ -1088,7 +1087,7 @@ private fun UploadStatusRow(
         Text(
             text = statusMessage,
             style = MaterialTheme.typography.bodyMedium,
-            color = Color.White
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }
@@ -1107,8 +1106,7 @@ private fun QuotaPausedBanner(
 ) {
     val context = LocalContext.current
     Surface(
-        color = Color(0xFF3A2E12),
-        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -1123,7 +1121,7 @@ private fun QuotaPausedBanner(
                 Text(
                     text = stringResource(R.string.ns_analytics_upload_paused_banner_title),
                     style = MaterialTheme.typography.titleSmall,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -1134,7 +1132,7 @@ private fun QuotaPausedBanner(
                 text = quotaMessage?.takeIf { it.isNotBlank() }
                     ?: stringResource(R.string.ns_analytics_upload_paused_banner_body),
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.9f)
+                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.9f)
             )
 
             if (maxRecords > 0) {
@@ -1146,7 +1144,7 @@ private fun QuotaPausedBanner(
                         NsAnalyticsUtils.formatNumberWithThousandsSeparator(maxRecords)
                     ),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
+                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f)
                 )
             }
 
@@ -1175,8 +1173,8 @@ private fun ActiveProtocolsCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1E1F24)
+        colors = CardDefaults.defaultColors(
+            color = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Column(
@@ -1185,17 +1183,17 @@ private fun ActiveProtocolsCard(
                 .padding(16.dp)
         ) {
             Text(
-                text = "Active Protocols",
+                text = "启用协议",
                 style = MaterialTheme.typography.titleMedium,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Bold
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             ProtocolToggleRow(
-                label = "Cellular",
-                description = "GSM, CDMA, UMTS, LTE, NR",
+                label = "蜂窝网络",
+                description = "GSM、CDMA、UMTS、LTE、NR",
                 isEnabled = cellularEnabled,
                 enabled = !isSurveyActive,
                 onToggle = onToggleCellular
@@ -1204,8 +1202,8 @@ private fun ActiveProtocolsCard(
             Spacer(modifier = Modifier.height(12.dp))
 
             ProtocolToggleRow(
-                label = "Phone State",
-                description = "Serving cell, registration, and SIM changes",
+                label = "电话状态",
+                description = "主服务小区、注册与 SIM 变更",
                 isEnabled = phoneStateEnabled,
                 enabled = !isSurveyActive,
                 onToggle = onTogglePhoneState
@@ -1215,7 +1213,7 @@ private fun ActiveProtocolsCard(
 
             ProtocolToggleRow(
                 label = "Wi-Fi",
-                description = "802.11 networks and access points",
+                description = "802.11 网络与接入点",
                 isEnabled = wifiEnabled,
                 enabled = !isSurveyActive,
                 onToggle = onToggleWifi
@@ -1224,8 +1222,8 @@ private fun ActiveProtocolsCard(
             Spacer(modifier = Modifier.height(12.dp))
 
             ProtocolToggleRow(
-                label = "Bluetooth",
-                description = "BLE and classic devices",
+                label = "蓝牙",
+                description = "BLE 与经典设备",
                 isEnabled = bluetoothEnabled,
                 enabled = !isSurveyActive,
                 onToggle = onToggleBluetooth
@@ -1235,7 +1233,7 @@ private fun ActiveProtocolsCard(
 
             ProtocolToggleRow(
                 label = "GPS/GNSS",
-                description = "Satellite positioning data",
+                description = "卫星定位数据",
                 isEnabled = gnssEnabled,
                 enabled = !isSurveyActive,
                 onToggle = onToggleGnss
@@ -1263,18 +1261,17 @@ private fun ProtocolToggleRow(
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White
+                color = MaterialTheme.colorScheme.onSurface
             )
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Switch(
+        ExpressiveSwitch(
             checked = isEnabled,
             onCheckedChange = onToggle,
-            enabled = enabled
         )
     }
 }
@@ -1306,7 +1303,7 @@ private fun DangerZoneCard(
                 contentDescription = null,
                 modifier = Modifier.padding(end = 8.dp)
             )
-            Text("Clear Queue ($queuedRecords records)")
+            Text("清空队列（$queuedRecords 条记录）")
         }
 
         OutlinedButton(
@@ -1454,34 +1451,34 @@ private fun QuotaExceededDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Record Quota Exceeded") },
+        title = { Text("记录配额已超限") },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 Text(
-                    quotaMessage ?: "Your workspace has reached its record limit."
+                    quotaMessage ?: "您的工作区已达到记录上限。"
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    "Current usage: ${
+                    "当前用量：${
                         NsAnalyticsUtils.formatNumberWithThousandsSeparator(currentUsage)
                     } / ${
                         NsAnalyticsUtils.formatNumberWithThousandsSeparator(maxRecords)
-                    } records",
+                    } 条记录",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    "To continue uploading records, please:",
+                    "要继续上传记录，请：",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    "• Delete existing records in NS Analytics, or",
+                    "• 删除 NS Analytics 中的现有记录，或",
                     style = MaterialTheme.typography.bodySmall
                 )
                 Text(
-                    "• Upgrade to a higher subscription tier",
+                    "• 升级到更高的订阅档位",
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -1489,13 +1486,13 @@ private fun QuotaExceededDialog(
         confirmButton = {
             if (nsAnalyticsUrl != null) {
                 TextButton(onClick = onOpenNsAnalytics) {
-                    Text("Open NS Analytics")
+                    Text("打开 NS Analytics")
                 }
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Dismiss")
+                Text("关闭")
             }
         }
     )
@@ -1509,10 +1506,10 @@ private fun ClearQueueConfirmationDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Clear Upload Queue?") },
+        title = { Text("清空上传队列？") },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                Text("This will permanently delete $queueSize queued records that haven't been uploaded yet. This action cannot be undone.")
+                Text("这将永久删除 $queueSize 条尚未上传的排队记录。此操作无法撤销。")
             }
         },
         confirmButton = {
@@ -1522,7 +1519,7 @@ private fun ClearQueueConfirmationDialog(
                     contentColor = MaterialTheme.colorScheme.error
                 )
             ) {
-                Text("Clear Queue")
+                Text("清空队列")
             }
         },
         dismissButton = {
@@ -1671,7 +1668,7 @@ private fun RegistrationConfirmationDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Join Workspace?",
+                text = "加入工作区？",
                 style = MaterialTheme.typography.headlineSmall
             )
         },
@@ -1682,7 +1679,7 @@ private fun RegistrationConfirmationDialog(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    text = "You're about to join:",
+                    text = "您即将加入：",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1703,7 +1700,7 @@ private fun RegistrationConfirmationDialog(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = "Workspace",
+                            text = "工作区",
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -1717,7 +1714,7 @@ private fun RegistrationConfirmationDialog(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = "Workspace name not provided in link",
+                            text = "链接中未提供工作区名称",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                             fontStyle = FontStyle.Italic
@@ -1741,14 +1738,14 @@ private fun RegistrationConfirmationDialog(
                 )
             ) {
                 Text(
-                    text = "Join Workspace",
+                    text = "加入工作区",
                     fontWeight = FontWeight.SemiBold
                 )
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text("取消")
             }
         }
     )
@@ -1792,7 +1789,6 @@ private fun TechnicalDetailsSection(
         Surface(
             onClick = onToggle,
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(8.dp),
             color = toggleBackgroundColor
         ) {
             Row(
@@ -1803,14 +1799,14 @@ private fun TechnicalDetailsSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Technical Details",
+                    text = "技术详情",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Icon(
                     imageVector = Icons.Default.KeyboardArrowDown,
-                    contentDescription = if (isExpanded) "Collapse technical details" else "Expand technical details",
+                    contentDescription = if (isExpanded) "收起技术详情" else "展开技术详情",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
                         .size(18.dp)
@@ -1848,8 +1844,8 @@ private fun TechnicalDetailsSection(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                colors = CardDefaults.defaultColors(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 )
             ) {
                 Column(
@@ -1857,7 +1853,7 @@ private fun TechnicalDetailsSection(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     TechnicalDetailItem(
-                        label = "API URL",
+                        label = "API 地址",
                         value = apiUrl
                     )
                     HorizontalDivider(
@@ -1865,7 +1861,7 @@ private fun TechnicalDetailsSection(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                     )
                     TechnicalDetailItem(
-                        label = "Workspace ID",
+                        label = "工作区 ID",
                         value = workspaceId
                     )
                 }
@@ -1926,13 +1922,13 @@ private fun RegistrationSuccessDialog(
                     modifier = Modifier.size(32.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Registration Successful!")
+                Text("注册成功！")
             }
         },
         text = {
             Column {
                 Text(
-                    text = "You've successfully joined:",
+                    text = "您已成功加入：",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -1944,7 +1940,7 @@ private fun RegistrationSuccessDialog(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "Start a survey to begin collecting and uploading data.",
+                    text = "启动测量即可开始采集并上传数据。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1957,7 +1953,7 @@ private fun RegistrationSuccessDialog(
                     contentColor = MaterialTheme.colorScheme.primary
                 )
             ) {
-                Text("Done")
+                Text("完成")
             }
         }
     )
@@ -1987,13 +1983,13 @@ private fun RegistrationErrorDialog(
                     modifier = Modifier.size(32.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Registration Failed")
+                Text("注册失败")
             }
         },
         text = {
             Column {
                 Text(
-                    text = "Unable to register device:",
+                    text = "无法注册设备：",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -2012,12 +2008,12 @@ private fun RegistrationErrorDialog(
                     contentColor = MaterialTheme.colorScheme.primary
                 )
             ) {
-                Text("Retry")
+                Text("重试")
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text("取消")
             }
         }
     )
@@ -2132,7 +2128,7 @@ private fun NotConnectedCardPreview() {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF121316))
+                .background(MaterialTheme.colorScheme.background)
                 .padding(16.dp)
         ) {
             NotConnectedCard()

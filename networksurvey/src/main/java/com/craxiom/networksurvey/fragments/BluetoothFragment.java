@@ -38,6 +38,7 @@ import com.craxiom.networksurvey.fragments.model.BluetoothViewModel;
 import com.craxiom.networksurvey.listeners.IBluetoothSurveyRecordListener;
 import com.craxiom.networksurvey.model.SortedSet;
 import com.craxiom.networksurvey.services.NetworkSurveyService;
+import com.craxiom.networksurvey.ui.bluetooth.BluetoothNetworksCompose;
 import com.craxiom.networksurvey.ui.main.SharedViewModel;
 import com.craxiom.networksurvey.util.NsUtils;
 import com.craxiom.networksurvey.util.PreferenceUtils;
@@ -63,7 +64,7 @@ public class BluetoothFragment extends AServiceDataFragment implements IBluetoot
     private BluetoothViewModel viewModel;
 
     private Context applicationContext;
-    private BluetoothRecyclerViewAdapter bluetoothRecyclerViewAdapter;
+    // 蓝牙列表 UI 已 Compose 化（ui/bluetooth/BluetoothListScreen），无需 RecyclerView 适配器
 
     private int bluetoothScanRateMs;
 
@@ -103,27 +104,19 @@ public class BluetoothFragment extends AServiceDataFragment implements IBluetoot
         final SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(applicationContext);
         viewModel.setSortByIndex(preferences.getInt(NetworkSurveyConstants.PROPERTY_BLUETOOTH_DEVICES_SORT_ORDER, 0));
 
-        bluetoothRecyclerViewAdapter = new BluetoothRecyclerViewAdapter(bluetoothRecordSortedSet, getContext(), this, viewModel);
-        binding.bluetoothDeviceList.setAdapter(bluetoothRecyclerViewAdapter);
-
-        binding.bluetoothDeviceList.addItemDecoration(new DividerItemDecoration(binding.bluetoothDeviceList.getContext(), DividerItemDecoration.VERTICAL));
-
-        binding.pauseButton.setOnClickListener(v -> viewModel.toggleUpdatesPaused());
-        binding.sortButton.setOnClickListener(v -> showSortByDialog());
+        // 蓝牙列表 UI 已 Compose 化：状态条(设备数/扫描状态/排序/暂停)与列表都在
+        // ui/bluetooth/BluetoothListScreen 内渲染，并通过 ViewModel 的 LiveData 观察状态。
+        BluetoothNetworksCompose.setContent(
+                binding.bluetoothListComposeView,
+                viewModel,
+                record -> navigateToBluetoothDetails(record.getData()),
+                () -> viewModel.toggleUpdatesPaused(),
+                this::showSortByDialog);
 
         initializeView();
 
-        final Context context = requireContext();
-
-        final LifecycleOwner viewLifecycleOwner = getViewLifecycleOwner();
-        viewModel.getScanStatusId().observe(viewLifecycleOwner,
-                scanStatusId -> binding.scanStatus.setText(context.getString(scanStatusId)));
-
-        viewModel.getDevicesInScan().observe(viewLifecycleOwner,
-                count -> binding.btDevicesInScan.setText(context.getString(R.string.bluetooth_devices_in_scan, count)));
-
-        viewModel.areUpdatesPaused().observe(viewLifecycleOwner,
-                paused -> binding.pauseButton.setBackgroundResource(paused ? R.drawable.ic_play : R.drawable.ic_pause));
+        // 列表发生变化时递增版本号，驱动 Compose 列表重组
+        viewModel.bumpListVersion();
 
         return binding.getRoot();
     }
@@ -227,10 +220,8 @@ public class BluetoothFragment extends AServiceDataFragment implements IBluetoot
 
                 checkAndRemoveStaleRecords();
 
-                if (bluetoothRecyclerViewAdapter != null)
-                {
-                    bluetoothRecyclerViewAdapter.notifyDataSetChanged();
-                }
+                // 通知 Compose 列表刷新（原 notifyDataSetChanged）
+                viewModel.bumpListVersion();
 
                 viewModel.setDevicesInScan(bluetoothRecordSortedSet.size());
             }
@@ -262,10 +253,8 @@ public class BluetoothFragment extends AServiceDataFragment implements IBluetoot
 
                 checkAndRemoveStaleRecords();
 
-                if (bluetoothRecyclerViewAdapter != null)
-                {
-                    bluetoothRecyclerViewAdapter.notifyDataSetChanged();
-                }
+                // 通知 Compose 列表刷新（原 notifyDataSetChanged）
+                viewModel.bumpListVersion();
 
                 viewModel.setDevicesInScan(bluetoothRecordSortedSet.size());
             }
@@ -293,25 +282,12 @@ public class BluetoothFragment extends AServiceDataFragment implements IBluetoot
     }
 
     /**
-     * Updates the view with the information stored in the view model.
-     *
-     * @since 1.11
+     * 蓝牙页的状态文本（设备数 / 扫描状态）已由 Compose 列表页通过 ViewModel 的
+     * LiveData 直接观察渲染，这里仅保留钩子以便将来需要时做一次性初始化。
      */
     private void initializeView()
     {
-        final Context context = requireContext();
-
-        final Integer scanStatusId = viewModel.getScanStatusId().getValue();
-        if (scanStatusId != null)
-        {
-            binding.scanStatus.setText(context.getString(scanStatusId));
-        }
-
-        final Integer count = viewModel.getDevicesInScan().getValue();
-        if (count != null)
-        {
-            binding.btDevicesInScan.setText(context.getString(R.string.bluetooth_devices_in_scan, count));
-        }
+        // no-op：状态显示已迁移到 ui/bluetooth/BluetoothListScreen
     }
 
     /**
@@ -490,10 +466,8 @@ public class BluetoothFragment extends AServiceDataFragment implements IBluetoot
 
             bluetoothRecordSortedSet.endBatchedUpdates();
 
-            if (bluetoothRecyclerViewAdapter != null)
-            {
-                bluetoothRecyclerViewAdapter.notifyDataSetChanged();
-            }
+            // 排序后通知 Compose 列表刷新（原 notifyDataSetChanged）
+            viewModel.bumpListVersion();
         }
     }
 

@@ -6,3 +6,14 @@ local.properties
 build-log.txt
 .idea/
 *.iml
+.kotlin/
+.temp/
+/released_apks/
+/deploy_v4.py
+/deploy_v5.py
+*.aab
+*.jks
+*.keystore
+*.p12
+*.pfx
+/networksurvey/google-services.json

@@ -3,6 +3,7 @@ package com.craxiom.networksurvey.ui.watchlist
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.AnchoredDraggableState
 import androidx.compose.foundation.gestures.animateTo
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
@@ -17,6 +19,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,8 +39,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.craxiom.networksurvey.R
-import com.craxiom.networksurvey.ui.cellular.MapButton
-import com.craxiom.networksurvey.ui.cellular.TopAppBarOverlay
 import com.craxiom.networksurvey.ui.common.dialogs.NsConfirmationDialog
 import com.craxiom.networksurvey.ui.theme.WifiTokens
 
@@ -121,7 +125,18 @@ fun WatchlistHistoryDetailScreen(
         }
 
         // Scrim behind the floating controls so the title stays legible over the map.
-        TopAppBarOverlay(statusBarHeight + 56.dp)
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .fillMaxWidth()
+                .height(statusBarHeight + 56.dp)
+                .background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        0f to MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                        1f to MaterialTheme.colorScheme.surface.copy(alpha = 0f)
+                    )
+                )
+        )
 
         Row(
             modifier = Modifier
@@ -130,13 +145,15 @@ fun WatchlistHistoryDetailScreen(
                 .padding(top = statusBarHeight + 4.dp, start = 8.dp, end = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            MapButton(
-                icon = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = stringResource(R.string.watchlist_navigate_back),
+            FloatingActionButton(
                 onClick = onNavigateUp,
+                shape = CircleShape,
                 containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface
-            )
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(44.dp)
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.watchlist_navigate_back))
+            }
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -162,13 +179,15 @@ fun WatchlistHistoryDetailScreen(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            MapButton(
-                icon = Icons.Default.Delete,
-                contentDescription = stringResource(R.string.watchlist_history_clear),
+            FloatingActionButton(
                 onClick = { showClearDialog = true },
+                shape = CircleShape,
                 containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface
-            )
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(44.dp)
+            ) {
+                Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.watchlist_history_clear))
+            }
         }
 
         WatchlistDetailSheet(

@@ -103,7 +103,6 @@ internal fun LabeledCheckbox(
         Checkbox(
             checked = checked,
             onCheckedChange = onCheckedChange,
-            enabled = enabled,
         )
         Text(
             text = label,

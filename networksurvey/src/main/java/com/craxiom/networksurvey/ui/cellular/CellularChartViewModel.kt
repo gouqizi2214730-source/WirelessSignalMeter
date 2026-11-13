@@ -1,56 +1,57 @@
 package com.craxiom.networksurvey.ui.cellular
 
-
+import android.os.SystemClock
+import androidx.lifecycle.ViewModel
 import com.craxiom.networksurvey.model.CellularProtocol
-import com.craxiom.networksurvey.ui.ASignalChartViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-private const val INITIAL_CELL_ID = -1
+internal const val SIGNAL_WINDOW_MS = 120_000L
 
-/**
- * The view model for the Cellular Signals Chart.
- */
-class CellularChartViewModel : ASignalChartViewModel() {
+internal data class CellularSignalSample(
+    val time: Long,
+    val dbm: Int?,
+)
 
-    private val _chartTitle = MutableStateFlow("RSSI")
-    val chartTitle = _chartTitle.asStateFlow()
+internal data class CellularSignalHistory(
+    val title: String = "RSSI",
+    val samples: List<CellularSignalSample> = emptyList(),
+)
 
-    private var cellularProtocol = CellularProtocol.NONE
-    private var servingCellId = INITIAL_CELL_ID
+class CellularChartViewModel : ViewModel() {
+    private val historyState = MutableStateFlow(CellularSignalHistory())
+    internal val history = historyState.asStateFlow()
 
-    override fun getMarkerLabel(): String {
-        return "Serving Cell Change"
-    }
+    private var protocol = CellularProtocol.NONE
 
-    fun setChartTitle(title: String) {
-        _chartTitle.value = title
-    }
+    private fun CellularProtocol.isRsrp() = this == CellularProtocol.NR || this == CellularProtocol.LTE
 
-    /**
-     * Sets the cellular protocol to use for the chart. If the protocol is already set to the given
-     * protocol, then this method does nothing. Otherwise, it clears the chart. This is useful when
-     * switching between LTE and NR, for example.
-     */
-    fun setCellularProtocol(protocol: CellularProtocol) {
-        if (cellularProtocol == protocol) return
-        cellularProtocol = protocol
-        clearChart()
-    }
-
-    /**
-     * Sets the serving cell ID to use for the chart. If the serving cell ID is already set to the
-     * given ID, then this method does nothing. Otherwise, it adds a marker to the chart indicating
-     * a serving cell change occurred.
-     *
-     * The reason we are handling adding the marker here is because in the observer of
-     * {@link CellularViewModel#getCellId} in {@link NetworkDetailsFragment} is notified when the
-     * observer is added, which happens when the fragment is created. This means that a serving cell
-     * change marker is added every time the fragment is switched to, which is not what we want.
-     */
-    fun setServingCellId(cellId: Int) {
-        if (servingCellId == cellId) return
-        if (servingCellId != INITIAL_CELL_ID) addMarker()
-        servingCellId = cellId
+    @Synchronized
+    fun recordSignal(protocol: CellularProtocol, dbm: Int?) {
+        val previous = historyState.value
+        val now = SystemClock.elapsedRealtime()
+        val reading = dbm?.takeIf { it in -160..-20 }
+        val changedProtocol = protocol != CellularProtocol.NONE && protocol != this.protocol
+        val samples = if (!changedProtocol || (protocol.isRsrp() && this.protocol.isRsrp())) {
+            previous.samples
+        } else {
+            emptyList()
+        }
+        if (protocol != CellularProtocol.NONE) this.protocol = protocol
+        if (!changedProtocol && reading == null && samples.lastOrNull()?.dbm == null) return
+        val recentSamples = samples.dropWhile { it.time < now - SIGNAL_WINDOW_MS }
+        historyState.value = CellularSignalHistory(
+            title = when (protocol) {
+                CellularProtocol.NR -> "SS-RSRP"
+                CellularProtocol.LTE -> "RSRP"
+                CellularProtocol.UMTS -> "RSCP"
+                else -> previous.title.takeIf { protocol == CellularProtocol.NONE } ?: "RSSI"
+            },
+            samples = if (reading == null && recentSamples.isEmpty()) {
+                emptyList()
+            } else {
+                recentSamples + CellularSignalSample(now, reading)
+            },
+        )
     }
 }

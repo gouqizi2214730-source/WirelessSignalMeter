@@ -22,8 +22,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -316,7 +316,7 @@ private fun TowerDetailView(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Tower Information",
+                text = "基站信息",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -384,10 +384,9 @@ private fun NetworkIdentitySection(tower: Tower, onColorOverrideChanged: () -> U
 
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
+            colors = CardDefaults.defaultColors(
+                color = MaterialTheme.colorScheme.surface
             ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
         ) {
             SelectionContainer {
                 Column(
@@ -486,10 +485,9 @@ private fun LocationSection(tower: Tower) {
         SectionHeader("Location")
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
+            colors = CardDefaults.defaultColors(
+                color = MaterialTheme.colorScheme.surface
             ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
         ) {
             SelectionContainer {
                 Row(
@@ -525,10 +523,9 @@ private fun CommentsSection(comments: String) {
         SectionHeader("Comments")
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
+            colors = CardDefaults.defaultColors(
+                color = MaterialTheme.colorScheme.surface
             ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
         ) {
             SelectionContainer {
                 Text(
@@ -547,10 +544,9 @@ private fun MetadataSection(tower: Tower) {
         SectionHeader("Additional Information")
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
+            colors = CardDefaults.defaultColors(
+                color = MaterialTheme.colorScheme.surface
             ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
         ) {
             SelectionContainer {
                 Column(
@@ -641,9 +637,7 @@ internal fun ProtocolBadge(protocol: String) {
         else -> MaterialTheme.colorScheme.surface to MaterialTheme.colorScheme.onSurface
     }
 
-    Surface(
-        color = bgColor,
-        shape = RoundedCornerShape(4.dp)
+    Surface(color = bgColor,
     ) {
         Text(
             text = protocol.uppercase(),
@@ -657,9 +651,7 @@ internal fun ProtocolBadge(protocol: String) {
 
 @Composable
 private fun SourceBadge(source: String) {
-    Surface(
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        shape = RoundedCornerShape(4.dp)
+    Surface(color = MaterialTheme.colorScheme.secondaryContainer,
     ) {
         Text(
             text = source,

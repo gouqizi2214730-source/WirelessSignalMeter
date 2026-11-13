@@ -53,8 +53,6 @@ constraintlayout = "2.2.2"
 recyclerview = "1.4.0"
 vico = "3.2.3"
 zxing = "3.5.4"
-maplibre = "13.5.0"
-maplibreAnnotation = "4.0.0"
 retrofit = "3.0.0"
 snakeyaml = "2.6"
 workRuntime = "2.11.2"
@@ -114,6 +112,7 @@ compose-foundation = { module = "androidx.compose.foundation:foundation" }
 compose-foundation-layout = { module = "androidx.compose.foundation:foundation-layout" }
 compose-material3 = { module = "androidx.compose.material3:material3" }
 compose-material-icons-core = { module = "androidx.compose.material:material-icons-core" }
+compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
 androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose" }
 androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose" }
 
@@ -133,9 +132,6 @@ snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
 mqtt-library = { module = "com.craxiom:mqtt-library", version.ref = "mqtt" }
 network-survey-messaging = { module = "com.craxiom:network-survey-messaging", version.ref = "networkSurveyMessaging" }
 
-# Maps
-maplibre-android-sdk = { module = "org.maplibre.gl:android-sdk", version.ref = "maplibre" }
-maplibre-android-plugin-annotation = { module = "org.maplibre.gl:android-plugin-annotation", version.ref = "maplibreAnnotation" }
 
 # Misc
 material = { module = "com.google.android.material:material", version.ref = "material" }
@@ -202,6 +198,7 @@ compose = [
     "compose-foundation-layout",
     "compose-material3",
     "compose-material-icons-core",
+    "compose-material-icons-extended",
     "androidx-lifecycle-viewmodel-compose",
     "androidx-lifecycle-runtime-compose",
 ]

@@ -1,55 +1,40 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- 浅色主题色板(Light)；深色见 values-night/colors.xml -->
     <color name="colorPrimary">#4CAF50</color>
     <color name="colorAccent">#03A9F4</color>
-    <color name="colorBackground">#2C2C2C</color>
-    <color name="colorCardDark">#121212</color>
+    <color name="colorBackground">#F5FAFD</color>
+    <color name="colorCardDark">#FFFFFF</color>
     <color name="colorCardDarkTitle">#6603A9F4</color>
-
     <color name="colorAccentFaded">#6603A9F4</color>
-
-    <color name="activeTabColor">#FFFFFF</color>
-    <color name="inactiveTabColor">#A2A2A2</color>
+    <color name="activeTabColor">#171C1F</color>
+    <color name="inactiveTabColor">#606060</color>
     <color name="fadedGrayColor">#60A2A2A2</color>
     <color name="signalBarBackground">#00FFFFFF</color>
-
-
     <color name="connectionStatusDisconnected">#A21919</color>
     <color name="connectionStatusConnecting">#FF6D00</color>
     <color name="connectionStatusConnected">#00912F</color>
-
     <color name="body_text_2_light">#8a000000</color>
     <color name="body_text_1_dark">#deffffff</color>
-    <color name="normalText">#EFEFEF</color>
-    <color name="fadedText">#C2C1C1</color>
-
+    <color name="normalText">#171C1F</color>
+    <color name="fadedText">#6E6E6E</color>
     <color name="alert_red">#A21919</color>
-
-    <!-- Wi-Fi & Bluetooth RSSI color ranges -->
     <color name="rssi_green">#388E3C</color>
     <color name="rssi_yellow">#FBC02D</color>
     <color name="rssi_orange">#F57C00</color>
     <color name="rssi_red">#D32F2F</color>
     <color name="rssi_deep_red">#D50000</color>
-
-    <!-- GNSS Sky View -->
-    <color name="not_in_view_sat">#DDFFFFFF</color>
+    <color name="not_in_view_sat">#40000000</color>
     <color name="gray">#ff888888</color>
     <color name="red">#d50000</color>
     <color name="yellow">#ffb300</color>
     <color name="green">#009d00</color>
-
     <color name="cn0_meter_border">@color/body_text_2_light</color>
-
-    
     <color name="general_tower_dark">#DEE3E6</color>
     <color name="serving_cell_dark">#4DA6FF</color>
     <color name="general_tower_light">#606060</color>
     <color name="serving_cell_light">#005CBF</color>
-
     <color name="serving_cell_line">#80CFFF</color>
-
-    <!-- Coverage Circle Color Options -->
     <color name="coverage_circle_red">#FF4444</color>
     <color name="coverage_circle_green">#4CAF50</color>
     <color name="coverage_circle_orange">#FF9800</color>
@@ -57,38 +42,44 @@
     <color name="coverage_circle_yellow">#FFEB3B</color>
     <color name="coverage_circle_cyan">#00BCD4</color>
     <color name="coverage_circle_white">#FFFFFF</color>
-
-    <!-- AirTag indicator color -->
     <color name="airtag_purple">#BA68C8</color>
-
-    <color name="md_theme_primary">#20A1C7</color>
-    <color name="md_theme_onPrimary">#E1F2FA</color>
-    <color name="md_theme_primaryContainer">#004D63</color>
-    <color name="md_theme_onPrimaryContainer">#BCE9FF</color>
-    <color name="md_theme_secondary">#41CBF2</color>
-    <color name="md_theme_onSecondary">#1E333C</color>
-    <color name="md_theme_secondaryContainer">#303C50</color>
-    <color name="md_theme_onSecondaryContainer">#D4E3F1</color>
-    <color name="md_theme_tertiary">#87D6BC</color>
-    <color name="md_theme_onTertiary">#00382C</color>
-    <color name="md_theme_tertiaryContainer">#005140</color>
-    <color name="md_theme_onTertiaryContainer">#A3F2D8</color>
-    <color name="md_theme_error">#FFB4AB</color>
-    <color name="md_theme_onError">#690005</color>
-    <color name="md_theme_errorContainer">#93000A</color>
-    <color name="md_theme_onErrorContainer">#FFDAD6</color>
-    <color name="md_theme_background">#090D0E</color>
-    <color name="md_theme_onBackground">#DEE3E6</color>
-    <color name="md_theme_surface">#090D0E</color>
-    <color name="md_theme_cardBackground">#191E21</color>
-    <color name="md_theme_onSurface">#DEE3E6</color>
-    <color name="md_theme_surfaceVariant">#40484C</color>
-    <color name="md_theme_onSurfaceVariant">#CDD0DA</color>
-    <color name="md_theme_outline">#8A9296</color>
-    <color name="md_theme_outlineVariant">#40484C</color>
-    <color name="md_theme_inverseSurface">#DEE3E6</color>
-    <color name="md_theme_inverseOnSurface">#2C3134</color>
-    <color name="md_theme_inversePrimary">#0F6681</color>
+    <color name="battery_warning_background">#FFF8E1</color>
+    <color name="battery_paused_background">#FFEBEE</color>
+    <color name="battery_warning_text">#E65100</color>
+    <color name="battery_paused_text">#C62828</color>
+    <color name="battery_icon_warning">#FF6F00</color>
+    <color name="battery_icon_paused">#D32F2F</color>
+    <color name="queue_paused_background">#FFF3E0</color>
+    <color name="queue_paused_text">#E65100</color>
+    <color name="queue_paused_icon">#FF6D00</color>
+    <color name="md_theme_primary">#0F6681</color>
+    <color name="md_theme_onPrimary">#FFFFFF</color>
+    <color name="md_theme_primaryContainer">#BCE9FF</color>
+    <color name="md_theme_onPrimaryContainer">#001F29</color>
+    <color name="md_theme_secondary">#4D616B</color>
+    <color name="md_theme_onSecondary">#FFFFFF</color>
+    <color name="md_theme_secondaryContainer">#D0E6F2</color>
+    <color name="md_theme_onSecondaryContainer">#081E27</color>
+    <color name="md_theme_tertiary">#116B56</color>
+    <color name="md_theme_onTertiary">#FFFFFF</color>
+    <color name="md_theme_tertiaryContainer">#A3F2D8</color>
+    <color name="md_theme_onTertiaryContainer">#002018</color>
+    <color name="md_theme_error">#BA1A1A</color>
+    <color name="md_theme_onError">#FFFFFF</color>
+    <color name="md_theme_errorContainer">#FFDAD6</color>
+    <color name="md_theme_onErrorContainer">#410002</color>
+    <color name="md_theme_background">#F5FAFD</color>
+    <color name="md_theme_onBackground">#171C1F</color>
+    <color name="md_theme_surface">#F5FAFD</color>
+    <color name="md_theme_cardBackground">#F0F4F8</color>
+    <color name="md_theme_onSurface">#171C1F</color>
+    <color name="md_theme_surfaceVariant">#DCE4E9</color>
+    <color name="md_theme_onSurfaceVariant">#40484C</color>
+    <color name="md_theme_outline">#70787D</color>
+    <color name="md_theme_outlineVariant">#C0C8CC</color>
+    <color name="md_theme_inverseSurface">#2C3134</color>
+    <color name="md_theme_inverseOnSurface">#EDF1F5</color>
+    <color name="md_theme_inversePrimary">#8AD0EE</color>
     <color name="md_theme_primaryFixed">#BCE9FF</color>
     <color name="md_theme_onPrimaryFixed">#001F29</color>
     <color name="md_theme_primaryFixedDim">#8AD0EE</color>
@@ -101,24 +92,40 @@
     <color name="md_theme_onTertiaryFixed">#002018</color>
     <color name="md_theme_tertiaryFixedDim">#87D6BC</color>
     <color name="md_theme_onTertiaryFixedVariant">#005140</color>
-    <color name="md_theme_surfaceDim">#0F1417</color>
-    <color name="md_theme_surfaceBright">#353A3D</color>
-    <color name="md_theme_surfaceContainerLowest">#0A0F11</color>
-    <color name="md_theme_surfaceContainerLow">#171C1F</color>
-    <color name="md_theme_surfaceContainer">#10151C</color>
-    <color name="md_theme_surfaceContainerHigh">#262B2D</color>
-    <color name="md_theme_surfaceContainerHighest">#303538</color>
+    <color name="md_theme_surfaceDim">#D6DBDE</color>
+    <color name="md_theme_surfaceBright">#F5FAFD</color>
+    <color name="md_theme_surfaceContainerLowest">#FFFFFF</color>
+    <color name="md_theme_surfaceContainerLow">#F0F4F8</color>
+    <color name="md_theme_surfaceContainer">#EAEEF2</color>
+    <color name="md_theme_surfaceContainerHigh">#E4E9EC</color>
+    <color name="md_theme_surfaceContainerHighest">#DEE3E6</color>
 
-    <!-- Battery Management Colors -->
-    <color name="battery_warning_background">#FFF8E1</color>
-    <color name="battery_paused_background">#FFEBEE</color>
-    <color name="battery_warning_text">#E65100</color>
-    <color name="battery_paused_text">#C62828</color>
-    <color name="battery_icon_warning">#FF6F00</color>
-    <color name="battery_icon_paused">#D32F2F</color>
+    <!-- Seed 主题色（浅色）：用于 ThemeColorResolver 动态着色 XML 层控件，与 Compose seed 一致 -->
+    <color name="seed_teal_primary">#0F6681</color>
+    <color name="seed_teal_primary_dark">#20A1C7</color>
+    <color name="seed_teal_container">#6603A9F4</color>
+    <color name="seed_teal_container_dark">#6630A9C7</color>
 
-    <!-- Queue Backpressure Colors (Orange/Amber) -->
-    <color name="queue_paused_background">#FFF3E0</color>
-    <color name="queue_paused_text">#E65100</color>
-    <color name="queue_paused_icon">#FF6D00</color>
+    <color name="seed_blue_primary">#1565C0</color>
+    <color name="seed_blue_primary_dark">#90CAF9</color>
+    <color name="seed_blue_container">#66D6E4FF</color>
+    <color name="seed_blue_container_dark">#66004A8A</color>
+
+    <color name="seed_green_primary">#2E7D32</color>
+    <color name="seed_green_primary_dark">#9ED9A1</color>
+    <color name="seed_green_container">#66B9F0BB</color>
+    <color name="seed_green_container_dark">#661B5E20</color>
+
+    <color name="seed_purple_primary">#7B1FA2</color>
+    <color name="seed_purple_primary_dark">#CFBCF2</color>
+    <color name="seed_purple_container">#66E9DDFF</color>
+    <color name="seed_purple_container_dark">#665B1E7E</color>
+
+    <color name="seed_orange_primary">#E65100</color>
+    <color name="seed_orange_primary_dark">#FFB591</color>
+    <color name="seed_orange_container">#66FFDBC7</color>
+    <color name="seed_orange_container_dark">#667A3900</color>
+
+    <color name="seed_on_container">#FFFFFF</color>
+    <color name="seed_on_container_dark">#FFFFFF</color>
 </resources>

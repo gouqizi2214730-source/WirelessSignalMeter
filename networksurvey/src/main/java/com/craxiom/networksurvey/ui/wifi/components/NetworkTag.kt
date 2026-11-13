@@ -75,7 +75,6 @@ fun NetworkTag(
             .background(color = bg)
             .border(
                 border = BorderStroke(1.dp, borderColor),
-                shape = RoundedCornerShape(5.dp),
             )
             .heightIn(min = 19.dp)
             .padding(horizontal = 7.dp, vertical = 2.dp)

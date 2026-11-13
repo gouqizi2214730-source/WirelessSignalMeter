@@ -12,6 +12,7 @@ import android.view.animation.Transformation
 import android.widget.ImageView
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
@@ -24,8 +25,8 @@ import androidx.lifecycle.lifecycleScope
 import com.craxiom.networksurvey.Application
 import com.craxiom.networksurvey.R
 import com.craxiom.networksurvey.databinding.GpsSkyBinding
-import com.craxiom.networksurvey.databinding.GpsSkyLegendCardBinding
 import com.craxiom.networksurvey.databinding.GpsSkySignalMeterBinding
+import com.craxiom.networksurvey.databinding.GpsSkyLegendCardBinding
 import com.craxiom.networksurvey.gpstest.model.SatelliteStatus
 import com.craxiom.networksurvey.gpstest.ui.gnss.Filter
 import com.craxiom.networksurvey.gpstest.ui.gnss.data.FixState
@@ -34,6 +35,7 @@ import com.craxiom.networksurvey.gpstest.ui.gnss.model.SatelliteMetadata
 import com.craxiom.networksurvey.gpstest.ui.gnss.model.SignalInfoViewModel
 import com.craxiom.networksurvey.gpstest.util.LibUIUtils
 import com.craxiom.networksurvey.gpstest.util.MathUtils
+import com.craxiom.networksurvey.ui.gnss.GnssSkyCompose
 import com.craxiom.networksurvey.ui.theme.NsTheme
 import com.craxiom.networksurvey.util.PreferenceUtils.clearGnssFilter
 import com.craxiom.networksurvey.util.PreferenceUtils.gnssFilter
@@ -82,17 +84,19 @@ class SkyFragment : Fragment() {
         savedInstanceState: Bundle?
     ): View {
         _binding = GpsSkyBinding.inflate(inflater, container, false)
-        val v = binding!!.root
         meter = binding!!.skyCn0IndicatorCard.gpsSkySignalMeter
         legend = binding!!.skyLegendCard
 
-        initFilterView(viewModel)
+        initFilterView(binding!!)
 
         initLegendViews()
 
         observeLocationUpdateStates()
 
-        return v
+        // 卫星星座 / C·N0 指示条 / 图例等上游自绘 View 原样保留，套一层 KernelSU Compose 外壳
+        val composeView = ComposeView(requireContext())
+        GnssSkyCompose.setContent(composeView, viewModel) { _binding?.root }
+        return composeView
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -150,19 +154,39 @@ class SkyFragment : Fragment() {
         )
     }
 
-    private fun observeGnssStates() {
-        repository.fixState
-            .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
-            .onEach {
-                when (it) {
-                    is FixState.Acquired -> onGnssFixAcquired()
-                    is FixState.NotAcquired -> onGnssFixLost()
-                }
-            }
-            .launchIn(lifecycleScope)
+    private fun updateGnssStatus(statuses: List<SatelliteStatus>) {
+        binding?.skyView?.setStatus(statuses)
+        updateCn0AvgMeterText()
+        updateCn0Avgs()
     }
 
     @ExperimentalCoroutinesApi
+    private fun onGnssStarted() {
+        binding?.skyView?.setStarted()
+        // Activity or service is observing updates, so observe here too
+        observeGnssStatus()
+        observeSensorFlow()
+    }
+
+    private fun onGnssStopped() {
+        // Cancel updates (Note that these are canceled via trackingListener preference listener
+        // in the case where updates are stopped from the Activity UI switch).
+        sensorFlow?.cancel()
+        gnssFlow?.cancel()
+
+        binding?.skyView?.setStopped()
+    }
+
+    private fun onOrientationChanged(orientation: Double, tilt: Double) {
+        // For performance reasons, only proceed if this fragment is visible
+        // TODO - this is now deprecated and a no-op, update to newest code
+        if (!userVisibleHint) {
+            return
+        }
+        binding?.skyView?.onOrientationChanged(orientation, tilt)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeSensorFlow() {
         if (sensorFlow?.isActive == true) {
             // If we're already observing updates, don't register again
@@ -178,51 +202,9 @@ class SkyFragment : Fragment() {
             .launchIn(lifecycleScope)
     }
 
-    private fun onGnssFixAcquired() {
-        showHaveFix()
-    }
-
-    private fun onGnssFixLost() {
-        showLostFix()
-    }
-
-    private fun updateGnssStatus(statuses: List<SatelliteStatus>) {
-        binding?.skyView?.setStatus(statuses)
-        updateCn0AvgMeterText()
-        updateCn0Avgs()
-    }
-
-    @ExperimentalCoroutinesApi
-    private fun onGnssStarted() {
-        binding?.skyView?.setStarted()
-        // Activity or service is observing updates, so observe here too
-        observeGnssStatus()
-        observeGnssStates()
-        observeSensorFlow()
-    }
-
-    private fun onGnssStopped() {
-        // Cancel updates (Note that these are canceled via trackingListener preference listener
-        // in the case where updates are stopped from the Activity UI switch).
-        sensorFlow?.cancel()
-        gnssFlow?.cancel()
-
-        binding?.skyView?.setStopped()
-        binding?.skyLock?.visibility = View.GONE
-    }
-
-    private fun onOrientationChanged(orientation: Double, tilt: Double) {
-        // For performance reasons, only proceed if this fragment is visible
-        // TODO - this is now deprecated and a no-op, update to newest code
-        if (!userVisibleHint) {
-            return
-        }
-        binding?.skyView?.onOrientationChanged(orientation, tilt)
-    }
-
     @OptIn(ExperimentalCoroutinesApi::class)
-    private fun initFilterView(viewModel: SignalInfoViewModel) {
-        binding!!.filterView.apply {
+    private fun initFilterView(binding: GpsSkyBinding) {
+        binding.filterView.apply {
             // Dispose the Composition when the view's LifecycleOwner is destroyed
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
@@ -545,24 +527,6 @@ class SkyFragment : Fragment() {
         mutableAnimation.setDuration(300)
         mutableAnimation.interpolator = FastOutSlowInInterpolator()
         v.startAnimation(mutableAnimation)
-    }
-
-    private fun showHaveFix() {
-        binding?.let {
-            LibUIUtils.showViewWithAnimation(
-                it.skyLock,
-                LibUIUtils.ANIMATION_DURATION_SHORT_MS
-            )
-        }
-    }
-
-    private fun showLostFix() {
-        binding?.let {
-            LibUIUtils.hideViewWithAnimation(
-                it.skyLock,
-                LibUIUtils.ANIMATION_DURATION_SHORT_MS
-            )
-        }
     }
 
     companion object {

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -54,6 +55,10 @@ import timber.log.Timber
 fun DashboardScreen(
     sharedViewModel: SharedViewModel = viewModel(),
     dashboardViewModel: DashboardViewModel = viewModel(),
+    onCellularClick: () -> Unit = {},
+    onWifiClick: () -> Unit = {},
+    onBluetoothClick: () -> Unit = {},
+    onGnssClick: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -147,8 +152,21 @@ fun DashboardScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+            .verticalScroll(rememberScrollState())
+            .padding(top = 8.dp, bottom = 120.dp), // 预留底部 KernelSU 液态玻璃悬浮底栏间距，防止内容被遮挡
     ) {
+        // KernelSU 风格标志性主状态与统计卡片
+        MainHeroStatusCard(
+            loggingState = loggingState,
+            locationState = locationState,
+            mqttState = mqttState,
+            nsAnalyticsState = nsAnalyticsState,
+            onCellularClick = onCellularClick,
+            onWifiClick = onWifiClick,
+            onBluetoothClick = onBluetoothClick,
+            onGnssClick = onGnssClick,
+        )
+
         // Battery card (animated visibility handled internally)
         BatteryCard(state = batteryState)
 

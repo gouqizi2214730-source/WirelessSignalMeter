@@ -130,17 +130,6 @@ class AcknowledgmentsRepository {
             )
             add(
                 LibraryAcknowledgment(
-                    name = "MapLibre GL",
-                    author = "MapLibre",
-                    description = "Open-source map rendering engine",
-                    sourceUrl = "https://github.com/maplibre/maplibre-gl-native",
-                    licenseName = "BSD 2-Clause License",
-                    licenseUrl = "https://opensource.org/licenses/BSD-2-Clause",
-                    category = LibraryCategory.UI_LIBRARIES
-                )
-            )
-            add(
-                LibraryAcknowledgment(
                     name = "Vico Charts",
                     author = "Patryk Goworowski and Patrick Michalik",
                     description = "Compose chart library for data visualization",

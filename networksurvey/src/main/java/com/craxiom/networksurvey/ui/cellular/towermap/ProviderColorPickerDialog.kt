@@ -159,7 +159,7 @@ private fun RowScope.ColorCell(
                     imageVector = Icons.Default.Check,
                     contentDescription = stringResource(R.string.selected),
                     modifier = Modifier.size(18.dp),
-                    tint = Color.White
+                    tint = MaterialTheme.colorScheme.onPrimary
                 )
             }
         }

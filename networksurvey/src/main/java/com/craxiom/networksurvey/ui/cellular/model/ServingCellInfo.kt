@@ -10,5 +10,6 @@ data class ServingCellInfo(
 ) : Serializable {
     companion object {
         const val KEY = "servingCellInfo"
+        const val SUBSCRIPTION_KEY = "mapSubscriptionId"
     }
 }

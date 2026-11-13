@@ -209,7 +209,6 @@ private fun EmptyState() {
                 .size(56.dp)
                 .background(
                     color = MaterialTheme.colorScheme.primaryContainer,
-                    shape = RoundedCornerShape(12.dp),
                 ),
             contentAlignment = Alignment.Center,
         ) {

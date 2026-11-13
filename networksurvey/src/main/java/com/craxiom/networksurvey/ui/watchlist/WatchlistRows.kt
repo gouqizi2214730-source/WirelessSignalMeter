@@ -11,14 +11,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
+import com.craxiom.networksurvey.ui.component.material.ExpressiveSwitch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -113,7 +114,7 @@ internal fun WatchlistRow(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+        colors = CardDefaults.defaultColors(color = MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
         Column(
             modifier = Modifier
@@ -135,7 +136,7 @@ internal fun WatchlistRow(
                         )
                     }
                 }
-                Switch(
+                ExpressiveSwitch(
                     checked = entry.enabled,
                     onCheckedChange = onToggleEnabled,
                     modifier = Modifier.semantics { contentDescription = enableForDescription }

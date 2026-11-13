@@ -1,11 +1,10 @@
 package com.craxiom.networksurvey.ui
 
 import androidx.compose.animation.core.snap
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.res.colorResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.craxiom.networksurvey.R
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.compose.cartesian.data.CartesianLayerRangeProvider
@@ -42,7 +41,7 @@ private fun ComposeChart(viewModel: ASignalChartViewModel) {
                 lineProvider = LineCartesianLayer.LineProvider.series(
                     LineCartesianLayer.Line(
                         fill = LineCartesianLayer.LineFill.single(
-                            Fill(colorResource(id = R.color.colorAccent))
+                            Fill(color = MaterialTheme.colorScheme.primary)
                         )
                     )
                 ),

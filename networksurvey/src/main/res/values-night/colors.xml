@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 深色主题色板(Night)：色值对齐 Compose ui/theme/Color.kt 的 *Dark 基值，
+         修复深色模式下 XML 层(设置页/服务小区详情卡片/进度条)仍为浅色的问题 -->
+    <color name="colorBackground">#090D0E</color>
+    <color name="colorCardDark">#10151C</color>
+    <color name="activeTabColor">#DEE3E6</color>
+    <color name="inactiveTabColor">#8A9296</color>
+    <color name="body_text_1_dark">#deffffff</color>
+    <color name="normalText">#DEE3E6</color>
+    <color name="fadedText">#9AA0A6</color>
+    <color name="not_in_view_sat">#66000000</color>
+    <color name="md_theme_primary">#20A1C7</color>
+    <color name="md_theme_onPrimary">#E1F2FA</color>
+    <color name="md_theme_primaryContainer">#004D63</color>
+    <color name="md_theme_onPrimaryContainer">#BCE9FF</color>
+    <color name="md_theme_secondary">#BA68C8</color>
+    <color name="md_theme_onSecondary">#1E333C</color>
+    <color name="md_theme_secondaryContainer">#303C50</color>
+    <color name="md_theme_onSecondaryContainer">#D4E3F1</color>
+    <color name="md_theme_tertiary">#87D6BC</color>
+    <color name="md_theme_onTertiary">#00382C</color>
+    <color name="md_theme_tertiaryContainer">#005140</color>
+    <color name="md_theme_onTertiaryContainer">#A3F2D8</color>
+    <color name="md_theme_error">#FFB4AB</color>
+    <color name="md_theme_onError">#690005</color>
+    <color name="md_theme_errorContainer">#93000A</color>
+    <color name="md_theme_onErrorContainer">#FFDAD6</color>
+    <color name="md_theme_background">#090D0E</color>
+    <color name="md_theme_onBackground">#DEE3E6</color>
+    <color name="md_theme_surface">#090D0E</color>
+    <color name="md_theme_cardBackground">#10151C</color>
+    <color name="md_theme_onSurface">#DEE3E6</color>
+    <color name="md_theme_surfaceVariant">#40484C</color>
+    <color name="md_theme_onSurfaceVariant">#CDD0DA</color>
+    <color name="md_theme_outline">#8A9296</color>
+    <color name="md_theme_outlineVariant">#40484C</color>
+    <color name="md_theme_inverseSurface">#DEE3E6</color>
+    <color name="md_theme_inverseOnSurface">#2C3134</color>
+    <color name="md_theme_inversePrimary">#0F6681</color>
+    <color name="md_theme_primaryFixed">#BCE9FF</color>
+    <color name="md_theme_onPrimaryFixed">#001F29</color>
+    <color name="md_theme_primaryFixedDim">#8AD0EE</color>
+    <color name="md_theme_onPrimaryFixedVariant">#004D63</color>
+    <color name="md_theme_secondaryFixed">#D0E6F2</color>
+    <color name="md_theme_onSecondaryFixed">#081E27</color>
+    <color name="md_theme_secondaryFixedDim">#B4CAD5</color>
+    <color name="md_theme_onSecondaryFixedVariant">#354A53</color>
+    <color name="md_theme_tertiaryFixed">#A3F2D8</color>
+    <color name="md_theme_onTertiaryFixed">#002018</color>
+    <color name="md_theme_tertiaryFixedDim">#87D6BC</color>
+    <color name="md_theme_onTertiaryFixedVariant">#005140</color>
+    <color name="md_theme_surfaceDim">#0F1417</color>
+    <color name="md_theme_surfaceBright">#353A3D</color>
+    <color name="md_theme_surfaceContainerLowest">#191E21</color>
+    <color name="md_theme_surfaceContainerLow">#191E21</color>
+    <color name="md_theme_surfaceContainer">#10151C</color>
+    <color name="md_theme_surfaceContainerHigh">#262B2D</color>
+    <color name="md_theme_surfaceContainerHighest">#303538</color>
+
+    <!-- 自定义强调色(深色版)：深色下用更亮的青蓝(对标 Compose primaryDark #20A1C7)，
+         保证对比度；colorCardDarkTitle 卡片头部带(半透明青蓝)深色下用亮青蓝 -->
+    <color name="colorPrimary">#20A1C7</color>
+    <color name="colorAccent">#20A1C7</color>
+    <color name="colorAccentFaded">#3320A1C7</color>
+    <color name="colorCardDarkTitle">#3320A1C7</color>
+
+    <!-- Seed 主题色(深色)：供 ThemeColorResolver 动态着色 XML 层控件，与 Compose seed 一致 -->
+    <color name="seed_teal_primary_dark">#20A1C7</color>
+    <color name="seed_teal_container_dark">#004D63</color>
+    <color name="seed_blue_primary_dark">#8DB8FF</color>
+    <color name="seed_blue_container_dark">#22406E</color>
+    <color name="seed_green_primary_dark">#8FD7A4</color>
+    <color name="seed_green_container_dark">#1F5130</color>
+    <color name="seed_purple_primary_dark">#D8B6FF</color>
+    <color name="seed_purple_container_dark">#503A70</color>
+    <color name="seed_orange_primary_dark">#FFB788</color>
+    <color name="seed_orange_container_dark">#5C3D1B</color>
+    <color name="seed_on_container_dark">#FFFFFF</color>
+</resources>

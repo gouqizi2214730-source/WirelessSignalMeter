@@ -27,7 +27,7 @@ import java.util.Map;
 public class EngineeringParamDbHelper
 extends SQLiteOpenHelper {
     private static final String DB_NAME = "engineering_param.db";
-    private static final int DB_VERSION = 5;
+    private static final int DB_VERSION = 6;
     public static final String TABLE = "eng_param";
     public static final String COL_ID = "id";
     public static final String COL_CITY = "city";
@@ -68,7 +68,7 @@ extends SQLiteOpenHelper {
     }
 
     public EngineeringParamDbHelper(Context context) {
-        super(context, DB_NAME, null, 5);
+        super(context, DB_NAME, null, DB_VERSION);
     }
 
     public void onCreate(SQLiteDatabase db) {
@@ -79,10 +79,38 @@ extends SQLiteOpenHelper {
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         if (oldVersion < 5) {
             this.createIndexes(db);
-        } else {
-            db.execSQL("DROP TABLE IF EXISTS eng_param");
-            this.onCreate(db);
         }
+        if (oldVersion < 6) {
+            // v6：就地修复历史错误列映射造成的小区标识脏数据，不丢表、不丢记录。
+            this.repairLegacyCellIdentity(db);
+        }
+    }
+
+    /**
+     * 修复历史版本的错误列映射造成的脏数据。
+     *
+     * 旧版本导入工参 CSV 时，把表头「小区ID / 小区标识 / CellId」误判为完整 CI 存入了 ci 列；
+     * 但它在现网工参表中实际是站内小区编号（即扇区号）。结果 sector_id 恒为 0、
+     * ci 列存着 1/2/3 这类小区编号，导致无论按 gnb_id+sector_id 还是按完整 ci 查询，
+     * 都永远匹配不上站名。
+     *
+     * 现网换算约定：4G ECI = 基站ID × 256 + 小区ID；5G NCI = 基站ID × 4096 + 小区ID。
+     * 这里把 ci 列里被误存的小区编号还原回 sector_id，再按制式重新合成完整的 ECI/NCI。
+     *
+     * 仅命中「有基站ID、无扇区号、且 ci 小于倍率（即不像一个完整 ECI/NCI）」的记录，
+     * 正常数据不会被误改。
+     */
+    private void repairLegacyCellIdentity(SQLiteDatabase db) {
+        // 4G：ci 列原本存的是小区编号（< 256）
+        db.execSQL(
+                "UPDATE eng_param SET sector_id = ci, ci = gnb_id * 256 + ci " +
+                        "WHERE gnb_id <> 0 AND (sector_id IS NULL OR sector_id = 0) AND ci > 0 AND ci < 256 " +
+                        "AND (net_type IS NULL OR (net_type NOT LIKE '%nr%' AND net_type NOT LIKE '%5g%'))");
+        // 5G：ci 列原本存的是小区编号（< 4096）
+        db.execSQL(
+                "UPDATE eng_param SET sector_id = ci, ci = gnb_id * 4096 + ci " +
+                        "WHERE gnb_id <> 0 AND (sector_id IS NULL OR sector_id = 0) AND ci > 0 AND ci < 4096 " +
+                        "AND (net_type LIKE '%nr%' OR net_type LIKE '%5g%')");
     }
 
     private void createIndexes(SQLiteDatabase db) {
@@ -96,6 +124,13 @@ extends SQLiteOpenHelper {
     public void clearAll() {
         SQLiteDatabase db = this.getWritableDatabase();
         db.delete(TABLE, null, null);
+        this.invalidateCache();
+    }
+
+    /** 按 id 删除单条工参（工参管理页单条删除用）。 */
+    public void deleteById(long id) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        db.delete(TABLE, COL_ID + " = ?", new String[]{String.valueOf(id)});
         this.invalidateCache();
     }
 
@@ -150,11 +185,104 @@ extends SQLiteOpenHelper {
         ArrayList<EngineeringParam> result = new ArrayList<EngineeringParam>();
         SQLiteDatabase db = this.getReadableDatabase();
         Cursor c = db.query(TABLE, null, null, null, null, null, "id ASC");
-        while (c.moveToNext()) {
-            result.add(this.fromCursor(c));
-        }
-        c.close();
+        this.fillListFromCursor(c, result);
         return result;
+    }
+
+    public List<EngineeringParam> search(String query, int limit) {
+        String escaped = "%" + query.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
+        String selection = COL_CELL + " LIKE ? ESCAPE '!' OR " + COL_SITE + " LIKE ? ESCAPE '!' OR " +
+                COL_CITY + " LIKE ? ESCAPE '!' OR " + COL_CI + " = ? OR " + COL_GNB_ID + " = ? OR " +
+                COL_PCI + " = ? OR " + COL_EARFCN + " = ? OR " + COL_SECTOR_ID + " = ?";
+        String[] args = {escaped, escaped, escaped, query, query, query, query, query};
+        ArrayList<EngineeringParam> result = new ArrayList<>();
+        Cursor cursor = getReadableDatabase().query(TABLE, null, selection, args, null, null,
+                COL_ID + " ASC", String.valueOf(limit));
+        fillListFromCursor(cursor, result);
+        return result;
+    }
+
+    /**
+     * 查询指定经纬度范围（bbox）内的所有工参。
+     * 供地图图层使用：把本地工参作为独立数据源叠加到塔库上，按可视区域取点。
+     *
+     * @param latMin 最小纬度（南）
+     * @param lonMin 最小经度（西）
+     * @param latMax 最大纬度（北）
+     * @param lonMax 最大经度（东）
+     * @return 范围内工参列表（空列表表示无数据）
+     */
+    public List<EngineeringParam> getByRange(double latMin, double lonMin, double latMax, double lonMax) {
+        ArrayList<EngineeringParam> result = new ArrayList<EngineeringParam>();
+        SQLiteDatabase db = this.getReadableDatabase();
+        String sel = COL_LAT + ">=? AND " + COL_LAT + "<=? AND " + COL_LON + ">=? AND " + COL_LON + "<=?";
+        String[] args = new String[]{
+                String.valueOf(latMin), String.valueOf(latMax),
+                String.valueOf(lonMin), String.valueOf(lonMax)
+        };
+        Cursor c = db.query(TABLE, null, sel, args, null, null, "id ASC");
+        this.fillListFromCursor(c, result);
+        return result;
+    }
+
+    /**
+     * 遍历 Cursor 构建工参列表（性能优化版）。
+     *
+     * 旧实现 fromCursor() 每行调用 22 次 getColumnIndexOrThrow 做字符串查找，
+     * 几万行工参全量加载时等于几百万次哈希查找，是地图页加载慢的主要来源之一。
+     * 这里在每个 Cursor 首次使用时一次性解析列名 → 索引映射，行循环内直接按下标取值。
+     */
+    private void fillListFromCursor(Cursor c, ArrayList<EngineeringParam> result) {
+        try {
+            int iId = c.getColumnIndexOrThrow(COL_ID);
+            int iCity = c.getColumnIndexOrThrow(COL_CITY);
+            int iSite = c.getColumnIndexOrThrow(COL_SITE);
+            int iCell = c.getColumnIndexOrThrow(COL_CELL);
+            int iCi = c.getColumnIndexOrThrow(COL_CI);
+            int iGnb = c.getColumnIndexOrThrow(COL_GNB_ID);
+            int iSector = c.getColumnIndexOrThrow(COL_SECTOR_ID);
+            int iLac = c.getColumnIndexOrThrow(COL_LAC);
+            int iTac = c.getColumnIndexOrThrow(COL_TAC);
+            int iMcc = c.getColumnIndexOrThrow(COL_MCC);
+            int iMnc = c.getColumnIndexOrThrow(COL_MNC);
+            int iEarfcn = c.getColumnIndexOrThrow(COL_EARFCN);
+            int iPci = c.getColumnIndexOrThrow(COL_PCI);
+            int iLon = c.getColumnIndexOrThrow(COL_LON);
+            int iLat = c.getColumnIndexOrThrow(COL_LAT);
+            int iAzimuth = c.getColumnIndexOrThrow(COL_AZIMUTH);
+            int iTilt = c.getColumnIndexOrThrow(COL_TILT);
+            int iBand = c.getColumnIndexOrThrow(COL_BAND);
+            int iNetType = c.getColumnIndexOrThrow(COL_NETTYPE);
+            int iSiteType = c.getColumnIndexOrThrow(COL_SITETYPE);
+            int iRemark = c.getColumnIndexOrThrow(COL_REMARK);
+            while (c.moveToNext()) {
+                EngineeringParam p = new EngineeringParam();
+                p.setId(c.getLong(iId));
+                p.setCity(c.getString(iCity));
+                p.setSiteName(c.getString(iSite));
+                p.setCellName(c.getString(iCell));
+                p.setCi(c.getLong(iCi));
+                p.setGnbId(c.getInt(iGnb));
+                p.setSectorId(c.getInt(iSector));
+                p.setLac(c.getInt(iLac));
+                p.setTac(c.getInt(iTac));
+                p.setMcc(c.getInt(iMcc));
+                p.setMnc(c.getInt(iMnc));
+                p.setEarfcn(c.getInt(iEarfcn));
+                p.setPci(c.getInt(iPci));
+                p.setLon(c.getDouble(iLon));
+                p.setLat(c.getDouble(iLat));
+                p.setAzimuth(c.getDouble(iAzimuth));
+                p.setTilt(c.getDouble(iTilt));
+                p.setBand(c.getString(iBand));
+                p.setNetType(c.getString(iNetType));
+                p.setSiteType(c.getString(iSiteType));
+                p.setRemark(c.getString(iRemark));
+                result.add(p);
+            }
+        } finally {
+            c.close();
+        }
     }
 
     public EngineeringParam matchByCell(int mcc, int mnc, long ci) {
@@ -232,7 +360,44 @@ extends SQLiteOpenHelper {
         return p;
     }
 
+    public EngineeringParam matchServingIdentity(StationInfo station) {
+        long ci = station.getCellId();
+        if (ci <= 0) return null;
+
+        boolean nr = "NR".equals(station.getNetworkType());
+        long alternateDivisor = nr ? 256L : 4096L;
+        String network = compatibleNetwork(nr);
+        String selection = network + " AND (" + COL_CI + "=? OR (" + COL_GNB_ID + "=? AND " +
+                COL_SECTOR_ID + "=?) OR (" + COL_GNB_ID + "=? AND " + COL_SECTOR_ID + "=?))";
+        String[] args = {String.valueOf(ci), String.valueOf(station.getGnbId()), String.valueOf(station.getSectorId()),
+                String.valueOf(ci / alternateDivisor), String.valueOf(ci % alternateDivisor)};
+        String order = "(" + COL_CI + "=" + ci + ") DESC, (" + COL_MCC + "=" + station.getMcc() +
+                " AND " + COL_MNC + "=" + station.getMnc() + ") DESC, (" + COL_EARFCN + "=" +
+                station.getEarfcn() + " AND " + COL_PCI + "=" + station.getPci() + ") DESC";
+        try (Cursor cursor = getReadableDatabase().query(TABLE, null, selection, args, null, null, order, "1")) {
+            return cursor.moveToFirst() ? fromCursor(cursor) : null;
+        }
+    }
+
+    private static String compatibleNetwork(boolean nr) {
+        String net = "UPPER(TRIM(" + COL_NETTYPE + "))";
+        return "(" + COL_NETTYPE + " IS NULL OR " + net + "='' OR " + net +
+                (nr ? " LIKE '%NR%' OR " + net + " LIKE '%5G%')" :
+                      " LIKE '%LTE%' OR " + net + " LIKE '%4G%')");
+    }
+
+    public EngineeringParam matchNearbyServing(double lat, double lon, StationInfo station) {
+        if (station.getPci() < 0 || station.getEarfcn() < 0) return null;
+        return matchNearby(lat, lon, station.getPci(), station.getEarfcn(), 2000.0,
+                compatibleNetwork("NR".equals(station.getNetworkType())));
+    }
+
     public EngineeringParam matchByLocationPciEarfcn(double lat, double lon, int pci, int earfcn, double rangeMeters) {
+        return matchNearby(lat, lon, pci == 0 ? -1 : pci, earfcn == 0 ? -1 : earfcn, rangeMeters, null);
+    }
+
+    private EngineeringParam matchNearby(double lat, double lon, int pci, int earfcn, double rangeMeters,
+                                         String network) {
         if (lat == 0.0 && lon == 0.0) {
             return null;
         }
@@ -251,11 +416,12 @@ extends SQLiteOpenHelper {
         args.add(String.valueOf(latMax));
         args.add(String.valueOf(lonMin));
         args.add(String.valueOf(lonMax));
-        if (pci != 0) {
+        if (network != null) sel.append(" AND ").append(network);
+        if (pci >= 0) {
             sel.append(" AND ").append(COL_PCI).append("=?");
             args.add(String.valueOf(pci));
         }
-        if (earfcn != 0) {
+        if (earfcn >= 0) {
             sel.append(" AND ").append(COL_EARFCN).append("=?");
             args.add(String.valueOf(earfcn));
         }
@@ -308,14 +474,13 @@ extends SQLiteOpenHelper {
         EngineeringParam p;
         if (s.isServing()) {
             EngineeringParam p2;
-            if (s.getGnbId() != 0 && s.getSectorId() != 0 && (p2 = this.matchByGnbIdSectorId(s.getGnbId(), s.getSectorId())) != null) {
+            if (s.getCellId() != 0L && (p2 = this.matchByCell(s.getMcc(), s.getMnc(), s.getCellId())) != null) {
                 return p2;
             }
             if (s.getCellId() != 0L && (p2 = this.matchByCi(s.getCellId())) != null) {
                 return p2;
             }
-            p2 = this.matchByCell(s.getMcc(), s.getMnc(), s.getCellId());
-            if (p2 != null) {
+            if (s.getGnbId() > 0 && (p2 = this.matchByGnbIdSectorId(s.getGnbId(), s.getSectorId())) != null) {
                 return p2;
             }
             return null;
@@ -347,7 +512,7 @@ extends SQLiteOpenHelper {
         cv.put(COL_CITY, p.getCity());
         cv.put(COL_SITE, p.getSiteName());
         cv.put(COL_CELL, p.getCellName());
-        cv.put(COL_CI, Integer.valueOf(p.getCi()));
+        cv.put(COL_CI, p.getCi());
         cv.put(COL_GNB_ID, Integer.valueOf(p.getGnbId()));
         cv.put(COL_SECTOR_ID, Integer.valueOf(p.getSectorId()));
         cv.put(COL_LAC, Integer.valueOf(p.getLac()));
@@ -373,7 +538,7 @@ extends SQLiteOpenHelper {
         p.setCity(c.getString(c.getColumnIndexOrThrow(COL_CITY)));
         p.setSiteName(c.getString(c.getColumnIndexOrThrow(COL_SITE)));
         p.setCellName(c.getString(c.getColumnIndexOrThrow(COL_CELL)));
-        p.setCi(c.getInt(c.getColumnIndexOrThrow(COL_CI)));
+        p.setCi(c.getLong(c.getColumnIndexOrThrow(COL_CI)));
         p.setGnbId(c.getInt(c.getColumnIndexOrThrow(COL_GNB_ID)));
         p.setSectorId(c.getInt(c.getColumnIndexOrThrow(COL_SECTOR_ID)));
         p.setLac(c.getInt(c.getColumnIndexOrThrow(COL_LAC)));

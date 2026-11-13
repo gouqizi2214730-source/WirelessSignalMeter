@@ -1,11 +1,13 @@
 package com.craxiom.networksurvey.ui.wifi
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -18,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import com.craxiom.networksurvey.R
 import com.craxiom.networksurvey.model.WifiNetwork
 import com.craxiom.networksurvey.ui.wifi.components.ScanStatusStrip
@@ -25,6 +28,7 @@ import com.craxiom.networksurvey.ui.wifi.components.WifiGroupChildRow
 import com.craxiom.networksurvey.ui.wifi.components.WifiGroupParentRow
 import com.craxiom.networksurvey.ui.wifi.components.WifiModeTabs
 import com.craxiom.networksurvey.ui.wifi.components.WifiRowA
+import com.craxiom.networksurvey.ui.wifi.components.WifiRowChrome
 import com.craxiom.networksurvey.ui.wifi.components.WifiSortSheet
 import com.craxiom.networksurvey.ui.wifi.model.WifiDisplayItem
 import com.craxiom.networksurvey.ui.wifi.model.WifiListViewModel
@@ -43,69 +47,81 @@ fun WifiListScreen(
     val state by viewModel.uiState.collectAsState()
     var sortSheetOpen by remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        ScanStatusStrip(
-            scanNumber = state.scanNumber,
-            apCount = state.apCount,
-            visibleApCount = state.visibleApCount,
-            filterActive = state.filter.isActive,
-            scanStatusId = state.scanStatusId,
-            isPaused = state.updatesPaused,
-            sortIndex = state.sortIndex,
-            onSortClick = { sortSheetOpen = true },
-            onTogglePause = onTogglePause,
-        )
-        WifiModeTabs(
-            mode = state.mode,
-            onModeChanged = { viewModel.setMode(it) },
-        )
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        // Centralised nav dispatcher. Looks up the raw wrapper on demand so the display model
-        // can stay @Immutable / Compose-stable. Empty-BSSID guard is belt-and-suspenders — the
-        // VM already drops empty-BSSID wrappers before they reach a row.
-        val openDetails = { bssid: String ->
-            if (bssid.isNotBlank()) {
-                val wrapper = viewModel.wrapperFor(bssid)
-                if (wrapper != null) {
-                    onNetworkSelected(WifiNetwork.from(wrapper))
-                }
+    val openDetails = { bssid: String ->
+        if (bssid.isNotBlank()) {
+            val wrapper = viewModel.wrapperFor(bssid)
+            if (wrapper != null) {
+                onNetworkSelected(WifiNetwork.from(wrapper))
             }
         }
+    }
 
-        // Only blame the filter when there were networks to hide; a genuinely empty scan
-        // (e.g. Wi-Fi off) falls through to the normal empty list.
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        // 顶部信息与模式 Tab 放入 LazyColumn 顶部，跟随列表整体平滑滚动
+        item(key = "status_strip") {
+            ScanStatusStrip(
+                scanNumber = state.scanNumber,
+                apCount = state.apCount,
+                visibleApCount = state.visibleApCount,
+                filterActive = state.filter.isActive,
+                scanStatusId = state.scanStatusId,
+                isPaused = state.updatesPaused,
+                sortIndex = state.sortIndex,
+                onSortClick = { sortSheetOpen = true },
+                onTogglePause = onTogglePause,
+            )
+        }
+        item(key = "mode_tabs") {
+            WifiModeTabs(
+                mode = state.mode,
+                onModeChanged = { viewModel.setMode(it) },
+            )
+        }
+
         if (state.items.isEmpty() && state.filter.isActive && state.apCount > 0) {
-            FilteredEmptyState(onClearFilter = { viewModel.clearFilter() })
+            item(key = "filtered_empty") {
+                Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    FilteredEmptyState(onClearFilter = { viewModel.clearFilter() })
+                }
+            }
         } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
                 items(items = state.items, key = { it.key }) { item ->
                     when (item) {
                         is WifiDisplayItem.Flat -> {
-                            WifiRowA(
-                                ap = item.ap,
-                                onClick = { openDetails(item.ap.bssid) },
-                            )
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            Box(modifier = Modifier.padding(horizontal = 16.dp)) { WifiRowChrome {
+                                WifiRowA(
+                                    ap = item.ap,
+                                    onClick = { openDetails(item.ap.bssid) },
+                                )
+                            }
+                            }
                         }
 
                         is WifiDisplayItem.GroupParent -> {
-                            WifiGroupParentRow(
-                                group = item,
-                                onToggle = { viewModel.toggleGroupExpanded(item.groupKey) },
-                            )
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            Box(modifier = Modifier.padding(horizontal = 16.dp)) { WifiRowChrome {
+                                WifiGroupParentRow(
+                                    group = item,
+                                    onToggle = { viewModel.toggleGroupExpanded(item.groupKey) },
+                                )
+                            }
+                            }
                         }
 
                         is WifiDisplayItem.GroupChild -> {
-                            WifiGroupChildRow(
-                                ap = item.ap,
-                                onClick = { openDetails(item.ap.bssid) },
-                            )
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            Box(modifier = Modifier.padding(horizontal = 16.dp)) { WifiRowChrome {
+                                WifiGroupChildRow(
+                                    ap = item.ap,
+                                    onClick = { openDetails(item.ap.bssid) },
+                                )
+                            }
+                            }
                         }
                     }
                 }
-            }
         }
     }
 

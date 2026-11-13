@@ -4,7 +4,7 @@
     <attr name="cardStyle" format="reference" />
 
 
-    <style name="NetworkSurveyTheme" parent="Theme.Material3.Dark.NoActionBar">
+    <style name="NetworkSurveyTheme" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/md_theme_primary</item>
         <item name="colorOnPrimary">@color/md_theme_onPrimary</item>
         <item name="colorPrimaryContainer">@color/md_theme_primaryContainer</item>
@@ -59,12 +59,13 @@
         <item name="cardStyle">@style/CardViewTheme</item>
     </style>
 
-    <style name="CardViewTheme" parent="CardView.Dark">
+    <style name="CardViewTheme" parent="CardView">
         <item name="cardBackgroundColor">@color/md_theme_cardBackground</item>
         <item name="android:layout_gravity">start</item>
-        <item name="android:layout_margin">@dimen/small_margin</item>
-        <item name="cardCornerRadius">16dp</item>
-        <item name="contentPadding">3dp</item>
+        <item name="android:layout_margin">12dp</item>
+        <item name="cardCornerRadius">22dp</item>
+        <item name="contentPadding">4dp</item>
+        <item name="cardElevation">0dp</item>
     </style>
 
     <style name="ButtonStyle" parent="Widget.Material3.Button.ElevatedButton">
@@ -72,7 +73,7 @@
         <item name="backgroundTint">@color/md_theme_primaryContainer</item>
     </style>
 
-    <style name="NetworkSurveyTheme.PopupOverlay" parent="ThemeOverlay.MaterialComponents.Dark" />
+    <style name="NetworkSurveyTheme.PopupOverlay" parent="ThemeOverlay.Material3.Dialog" />
 
     <style name="ConnectionSwitchStyle">
         <item name="materialThemeOverlay">@style/ThemeOverlay.ConnectionSwitch</item>

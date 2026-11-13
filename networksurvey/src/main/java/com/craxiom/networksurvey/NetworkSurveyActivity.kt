@@ -1,10 +1,14 @@
 package com.craxiom.networksurvey
 
 import android.Manifest
+import android.content.BroadcastReceiver
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.os.SystemClock
 import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
@@ -26,6 +30,7 @@ import com.craxiom.networksurvey.listeners.IGnssFailureListener
 import com.craxiom.networksurvey.services.GrpcConnectionService
 import com.craxiom.networksurvey.services.NetworkSurveyService
 import com.craxiom.networksurvey.services.NetworkSurveyService.SurveyServiceBinder
+import com.craxiom.networksurvey.ui.cellular.baidumap.ForegroundMapTrack
 import com.craxiom.networksurvey.ui.main.DeepLinkViewModel
 import com.craxiom.networksurvey.ui.main.MainCompose
 import com.craxiom.networksurvey.ui.main.SharedViewModel
@@ -55,6 +60,9 @@ class NetworkSurveyActivity : AppCompatActivity(), StartupDialogActions {
     private val sharedViewModel: SharedViewModel by viewModels()
     private var surveyServiceConnection: SurveyServiceConnection? = null
     private var networkSurveyService: NetworkSurveyService? = null
+    private var surveyServiceBound = false
+    private var isForeground = false
+    private val mapTrack by lazy { ForegroundMapTrack(applicationContext, lifecycleScope) }
     private var turnOnCellularLoggingOnNextServiceConnection = false
     private var turnOnWifiLoggingOnNextServiceConnection = false
     private var turnOnBluetoothLoggingOnNextServiceConnection = false
@@ -62,6 +70,21 @@ class NetworkSurveyActivity : AppCompatActivity(), StartupDialogActions {
     private var turnOnCdrLoggingOnNextServiceConnection = false
     private var gnssFailureListener: IGnssFailureListener? = null
     private var hasRequestedPermissions = false
+
+    /** 壁纸更换后重建界面的防抖时间戳 */
+    private var lastWallpaperRefresh = 0L
+
+    /**
+     * 壁纸更换广播：Android 12+ 的动态取色取自系统壁纸，更换后重建界面刷新配色（2 秒内防抖）。
+     */
+    private val wallpaperChangedReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastWallpaperRefresh < 2000L) return
+            lastWallpaperRefresh = now
+            if (!isFinishing && !isDestroyed) recreate()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,6 +103,30 @@ class NetworkSurveyActivity : AppCompatActivity(), StartupDialogActions {
 
         // 主题模式（浅色/深色/跟随系统）由设置页 ThemePref 控制；onCreate 时套用
         ThemePref.apply(this)
+        // 状态栏/导航栏图标颜色随主题适配（浅色主题用深色图标，深色主题用浅色图标）
+        runCatching {
+            val night = when (ThemePref.get(this)) {
+                ThemePref.MODE_LIGHT -> false
+                ThemePref.MODE_DARK -> true
+                else -> (resources.configuration.uiMode and
+                    android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                    android.content.res.Configuration.UI_MODE_NIGHT_YES
+            }
+            androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
+                isAppearanceLightStatusBars = !night
+                isAppearanceLightNavigationBars = !night
+            }
+        }
+        // 系统栏底色取当前主题的 colorSurface：开启 Material You 时为壁纸动态色，关闭时为静态配色
+        runCatching {
+            val surface = com.google.android.material.color.MaterialColors.getColor(
+                this,
+                com.google.android.material.R.attr.colorSurface,
+                android.graphics.Color.BLACK
+            )
+            window.statusBarColor = surface
+            window.navigationBarColor = surface
+        }
         setContent {
             MainCompose(
                 appVersion = NsUtils.getAppVersionName(this),
@@ -151,6 +198,7 @@ class NetworkSurveyActivity : AppCompatActivity(), StartupDialogActions {
 
     override fun onResume() {
         super.onResume()
+        isForeground = true
 
         if (missingAnyRegularPermissions()) showPermissionRationaleAndRequestPermissions()
 
@@ -164,9 +212,18 @@ class NetworkSurveyActivity : AppCompatActivity(), StartupDialogActions {
 
         // All we need for the cellular information is the Manifest.permission.READ_PHONE_STATE permission.  Location is optional
         if (hasCellularPermission()) startAndBindToNetworkSurveyService()
+
+        // 监听壁纸更换：Android 12+ 的动态取色来自壁纸，更换后重建界面刷新配色
+        runCatching {
+            registerReceiver(wallpaperChangedReceiver, IntentFilter(Intent.ACTION_WALLPAPER_CHANGED))
+        }
     }
 
     override fun onPause() {
+        isForeground = false
+        runCatching { unregisterReceiver(wallpaperChangedReceiver) }
+        mapTrack.detach()
+
         if (networkSurveyService != null) {
             val applicationContext = applicationContext
 
@@ -186,15 +243,20 @@ class NetworkSurveyActivity : AppCompatActivity(), StartupDialogActions {
                 stopService(connectionServiceIntent)
             }
 
+        }
+
+        if (surveyServiceBound) {
             try {
                 applicationContext.unbindService(surveyServiceConnection!!)
-                networkSurveyService = null
             } catch (e: IllegalArgumentException) {
                 Timber.e(e, "Could not unbind the service because it is not bound.")
             } catch (e: Exception) {
                 Timber.e(e, "Could not unbind the service because of an exception.")
+            } finally {
+                surveyServiceBound = false
             }
         }
+        networkSurveyService = null
 
         super.onPause()
     }
@@ -489,6 +551,10 @@ class NetworkSurveyActivity : AppCompatActivity(), StartupDialogActions {
      * The Network survey service also handles getting GNSS information so that it can be used accordingly.
      */
     private fun startAndBindToNetworkSurveyService() {
+        if (surveyServiceBound) {
+            if (isForeground) networkSurveyService?.let(mapTrack::attach)
+            return
+        }
         try {
             // Start and bind to the survey service
             val applicationContext = applicationContext
@@ -496,11 +562,11 @@ class NetworkSurveyActivity : AppCompatActivity(), StartupDialogActions {
             startService(startServiceIntent)
 
             val serviceIntent = Intent(applicationContext, NetworkSurveyService::class.java)
-            val bound = applicationContext.bindService(
+            surveyServiceBound = applicationContext.bindService(
                 serviceIntent,
                 surveyServiceConnection!!, BIND_ABOVE_CLIENT
             )
-            Timber.i("NetworkSurveyService bound in the NetworkSurveyActivity: %s", bound)
+            Timber.i("NetworkSurveyService bound in the NetworkSurveyActivity: %s", surveyServiceBound)
         } catch (e: IllegalStateException) {
             // It appears that an IllegalStateException will occur if the user opens this app but the then quickly
             // switches away from it. The IllegalStateException indicates that we can't call startService while the
@@ -727,6 +793,9 @@ class NetworkSurveyActivity : AppCompatActivity(), StartupDialogActions {
             networkSurveyService = binder.service as NetworkSurveyService
             networkSurveyService!!.onUiVisible(this@NetworkSurveyActivity)
             networkSurveyService!!.registerGnssFailureListener(gnssFailureListener)
+            if (isForeground) {
+                mapTrack.attach(networkSurveyService!!)
+            }
 
             val cellularLoggingEnabled = networkSurveyService!!.isCellularLoggingEnabled
             if (turnOnCellularLoggingOnNextServiceConnection && !cellularLoggingEnabled) {
@@ -761,6 +830,7 @@ class NetworkSurveyActivity : AppCompatActivity(), StartupDialogActions {
         }
 
         override fun onServiceDisconnected(name: ComponentName) {
+            mapTrack.detach()
             networkSurveyService = null
             Timber.i("%s service disconnected", name)
         }

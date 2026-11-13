@@ -76,6 +76,7 @@ class SignalInfoViewModel @Inject constructor(
     private var gnssFlow: Job? = null
     private var nmeaFlow: Job? = null
     private var measurementFlow: Job? = null
+    private var sensorFlow: Job? = null
 
     // AGC values from the most recent GnssMeasurementsEvent, joined onto the SatelliteStatus rows
     // in updateStatus(). Only accessed on the main thread via viewModelScope.
@@ -121,6 +122,11 @@ class SignalInfoViewModel @Inject constructor(
 
     private val _location = MutableLiveData<Location>()
     val location: LiveData<Location> = _location
+
+    // Device orientation (azimuth) from the rotation sensor, in degrees, used to rotate the sky view.
+    // Only updated while this page is active (see observeSensorFlow/setStarted).
+    private val _orientation = MutableLiveData(0.0)
+    val orientation: LiveData<Double> = _orientation
 
     private val _ttff = MutableLiveData("")
     val ttff: LiveData<String> = _ttff
@@ -195,6 +201,23 @@ class SignalInfoViewModel @Inject constructor(
         measurementFlow = repository.getMeasurements()
             .onEach {
                 updateAgc(it)
+            }
+            .launchIn(viewModelScope)
+    }
+
+    @ExperimentalCoroutinesApi
+    private fun observeSensorFlow() {
+        if (sensorFlow?.isActive == true) {
+            // If we're already observing updates, don't register again
+            return
+        }
+        // Observe rotation sensor updates so the sky view can rotate with the device
+        sensorFlow = repository.getSensorUpdates()
+            .onEach {
+                val orientation = it.values[0]
+                if (!orientation.isNaN()) {
+                    _orientation.value = orientation
+                }
             }
             .launchIn(viewModelScope)
     }
@@ -507,7 +530,7 @@ class SignalInfoViewModel @Inject constructor(
 
     @ExperimentalCoroutinesApi
     @SuppressLint("NotifyDataSetChanged")
-    fun setStarted(context: Context, started: Boolean, prefs: SharedPreferences) {
+    fun setStarted(context: Context, started: Boolean, prefs: SharedPreferences, trackOrientation: Boolean = true) {
         if (started == this.started) {
             // State hasn't changed - no op and return
             return
@@ -518,13 +541,14 @@ class SignalInfoViewModel @Inject constructor(
             observeGnssFlow(context, prefs)
             observeNmeaFlow()
             observeMeasurementFlow()
+            if (trackOrientation) observeSensorFlow()
         } else {
             // Cancel updates (Note that these are canceled via trackingListener preference listener
             // in the case where updates are stopped from the Activity UI switch)
             cancelFlows()
 
-            // Reset views
-            reset()
+            // 不再调用 reset()——保留已有位置/卫星数据，
+            // Tab 切走再切回时位置信息卡片不会空白
         }
         this.started = started
     }
@@ -534,6 +558,7 @@ class SignalInfoViewModel @Inject constructor(
         gnssFlow?.cancel()
         nmeaFlow?.cancel()
         measurementFlow?.cancel()
+        sensorFlow?.cancel()
         clearAgc()
     }
 

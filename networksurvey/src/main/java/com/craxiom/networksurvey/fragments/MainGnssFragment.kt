@@ -1,154 +1,81 @@
 package com.craxiom.networksurvey.fragments
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.os.Bundle
+import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.core.app.ActivityCompat
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
-import androidx.viewpager2.adapter.FragmentStateAdapter
-import androidx.viewpager2.widget.ViewPager2
 import com.craxiom.networksurvey.Application
-import com.craxiom.networksurvey.R
-import com.craxiom.networksurvey.gpstest.fragments.GnssDetailsFragment
-import com.craxiom.networksurvey.gpstest.fragments.SkyFragment
-import com.craxiom.networksurvey.gpstest.fragments.TITLE
 import com.craxiom.networksurvey.gpstest.ui.gnss.model.SignalInfoViewModel
-import com.google.android.material.tabs.TabLayout
-import com.google.android.material.tabs.TabLayoutMediator
+import com.craxiom.networksurvey.ui.gnss.GnssOverviewScreen
+import com.craxiom.networksurvey.ui.theme.NsTheme
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import timber.log.Timber
 
-/**
- * The primary fragment to use for the GNSS page of the bottom navigation component.  This fragment view contains tabs
- * which represent the different GNSS views (e.g. Status, Sky View, ...)
- *
- * @since 0.0.10
- */
+@OptIn(ExperimentalCoroutinesApi::class)
 class MainGnssFragment : Fragment() {
-
-    private var selectedTab: Int = 0
-    private val _tabChangeLiveData = MutableLiveData<Int>()
-    val tabChangeLiveData: LiveData<Int> get() = _tabChangeLiveData
-
-    @ExperimentalCoroutinesApi
-    val viewModel: SignalInfoViewModel by activityViewModels()
-
-    override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View? {
-        return inflater.inflate(R.layout.fragment_main_gnss_tabs, container, false)
+    private val viewModel: SignalInfoViewModel by activityViewModels()
+    private var hasPermission by mutableStateOf(false)
+    private var locationEnabled by mutableStateOf(false)
+    private var receivingUpdates = false
+    private val requestLocation = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        refreshLocationStatus()
     }
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        val gnssCollectionAdapter = GnssCollectionAdapter(this)
-        val viewPager = view.findViewById<ViewPager2>(R.id.pager)
-
-        // Prevent ViewPager2 + Compose reentrant layout crash on Android 8 (API 26-27).
-        // ViewPager2's clearFocus() during page transitions can trigger Compose's focus search
-        // during an active layout pass, causing "performMeasureAndLayout called during measure layout".
-        viewPager.isFocusable = false
-        viewPager.isFocusableInTouchMode = false
-        viewPager.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
-
-        viewPager.setAdapter(gnssCollectionAdapter)
-        val tabLayout = view.findViewById<TabLayout>(R.id.tab_layout)
-        TabLayoutMediator(tabLayout, viewPager) { tab: TabLayout.Tab, position: Int ->
-            tab.text = getTabTitle(position)
-        }.attach()
-
-        viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
-            override fun onPageSelected(position: Int) {
-                super.onPageSelected(position)
-                selectedTab = position
-                _tabChangeLiveData.value = position
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
+        ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                NsTheme {
+                    GnssOverviewScreen(viewModel, hasPermission, locationEnabled) {
+                        if (hasPermission) {
+                            startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                        } else {
+                            requestLocation.launch(arrayOf(
+                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                Manifest.permission.ACCESS_COARSE_LOCATION,
+                            ))
+                        }
+                    }
+                }
             }
-        })
-    }
+        }
 
-    @ExperimentalCoroutinesApi
     override fun onResume() {
         super.onResume()
-
-        // Reset keepScreenOn to false to ensure screen doesn't stay on
-        // This fixes the issue where navigating from Survey Monitor or Tower Map
-        // leaves the screen permanently on
-        view?.keepScreenOn = false
-
-        if (!hasLocationPermission()) return
-        viewModel.setStarted(requireContext(), true, Application.getPrefs())
+        refreshLocationStatus()
     }
 
-    @ExperimentalCoroutinesApi
     override fun onPause() {
-        viewModel.setStarted(requireContext(), false, Application.getPrefs())
+        if (receivingUpdates) {
+            viewModel.setStarted(requireContext(), false, Application.getPrefs())
+            receivingUpdates = false
+        }
         super.onPause()
     }
 
-    /**
-     * @return True if the [Manifest.permission.ACCESS_FINE_LOCATION] permission has been granted.  False otherwise.
-     */
-    private fun hasLocationPermission(): Boolean {
-        val context = context
-        if (context != null && ActivityCompat.checkSelfPermission(
-                context.applicationContext,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            Timber.w("The ACCESS_FINE_LOCATION permission has not been granted")
-            return false
-        }
-        return true
-    }
-
-    /**
-     * An adapter that handles creating a new fragment when a tab is selected for the first time.
-     */
-    class GnssCollectionAdapter internal constructor(fragment: MainGnssFragment) :
-        FragmentStateAdapter(
-            fragment
-        ) {
-        @ExperimentalCoroutinesApi
-        override fun createFragment(position: Int): Fragment {
-            return when (position) {
-                0 -> GnssDetailsFragment()
-                1 -> SkyFragment()
-
-                else -> {
-                    Timber.wtf("A fragment has not been specified for one of the tabs in the GNSS UI.")
-                    SkyFragment()
-                }
-            }
-        }
-
-        override fun getItemCount(): Int {
-            return 2
-        }
-    }
-
-    companion object {
-
-        /**
-         * Given the tab position, return the title that should be applied to the tab.
-         *
-         * @param position The tab position (starts at 0).
-         * @return The title to use for the tab.
-         */
-        private fun getTabTitle(position: Int): String {
-            return when (position) {
-                0 -> TITLE
-                1 -> "Sky View"
-                else -> {
-                    Timber.wtf("No title specified for the GNSS tab.  Using a default")
-                    ""
-                }
-            }
+    private fun refreshLocationStatus() {
+        val context = context ?: return
+        hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        val manager = context.getSystemService(LocationManager::class.java)
+        locationEnabled = manager?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true
+        if (isResumed && hasPermission && locationEnabled && !receivingUpdates) {
+            viewModel.reset()
+            viewModel.setStarted(context, true, Application.getPrefs(), trackOrientation = false)
+            receivingUpdates = true
         }
     }
 }

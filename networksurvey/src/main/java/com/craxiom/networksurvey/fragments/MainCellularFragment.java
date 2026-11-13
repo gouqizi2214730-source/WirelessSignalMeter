@@ -13,35 +13,78 @@ import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
-import androidx.fragment.app.FragmentManager;
-import androidx.fragment.app.FragmentTransaction;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
-import androidx.viewpager2.adapter.FragmentStateAdapter;
-import androidx.viewpager2.widget.ViewPager2;
 
 import com.craxiom.networksurvey.R;
 import com.craxiom.networksurvey.SimChangeReceiver;
-import com.craxiom.networksurvey.databinding.FragmentMainTabsBinding;
+import com.craxiom.networksurvey.databinding.FragmentCellularSimpleBinding;
 import com.craxiom.networksurvey.services.NetworkSurveyService;
 import com.craxiom.networksurvey.services.controller.CellularController;
-import com.google.android.material.tabs.TabLayout;
-import com.google.android.material.tabs.TabLayoutMediator;
 
 import java.util.List;
 
-import timber.log.Timber;
 
 /**
- * The primary fragment to use for the Cellular page of the bottom navigation component.
+ * 蜂窝页面容器 Fragment。
  *
- * @since 0.0.10
+ * 不再使用 TabLayout + ViewPager2 切换 SIM 卡，改为只持有一个 {@link NetworkDetailsFragment}，
+ * SIM 切换通过信号页顶部的运营商按钮完成（{@link #switchToNextSim()}），
+ * 由 Compose 层调用。
  */
 public class MainCellularFragment extends AServiceDataFragment
 {
     private List<SubscriptionInfo> activeSubscriptionInfoList;
-
     private BroadcastReceiver simBroadcastReceiver;
-    private FragmentMainTabsBinding binding;
+    private FragmentCellularSimpleBinding binding;
+
+    // 当前选中的 SIM 索引（静态，跨 Fragment 重建保持）
+    private static int currentSimIndex = 0;
+
+    /** SIM 切换回调，由 Compose 层注册 */
+    public interface OnSimSwitchCallback {
+        void onSimSwitched(int simIndex, int simCount, String label);
+    }
+
+    private OnSimSwitchCallback simSwitchCallback;
+
+    /** 暴露已绑定的 Service 引用，供子 Fragment 直接复用（跳过重复 bindService） */
+    public NetworkSurveyService getService() {
+        return service;
+    }
+
+    public void setSimSwitchCallback(OnSimSwitchCallback callback) {
+        this.simSwitchCallback = callback;
+    }
+
+    /** 获取当前 SIM 数量 */
+    public int getSimCount() {
+        return activeSubscriptionInfoList == null ? 0 : activeSubscriptionInfoList.size();
+    }
+
+    /** 获取当前 SIM 索引 */
+    public int getCurrentSimIndex() {
+        return currentSimIndex;
+    }
+
+    /** 获取当前 SIM 标签 */
+    public String getCurrentSimLabel() {
+        if (activeSubscriptionInfoList == null || activeSubscriptionInfoList.isEmpty()) return "No SIM";
+        SubscriptionInfo subscription = activeSubscriptionInfoList.get(currentSimIndex);
+        CharSequence carrier = subscription.getCarrierName();
+        String slotLabel = "SIM " + (currentSimIndex + 1);
+        if (carrier == null || carrier.length() == 0) return slotLabel;
+        return activeSubscriptionInfoList.size() > 1 ? carrier + " · " + slotLabel : carrier.toString();
+    }
+
+    /** 切换到下一个 SIM（在 SIM1 / SIM2 之间循环切换） */
+    public void switchToNextSim() {
+        if (activeSubscriptionInfoList == null || activeSubscriptionInfoList.size() <= 1) return;
+        currentSimIndex = (currentSimIndex + 1) % activeSubscriptionInfoList.size();
+        showNetworkDetailsFragment();
+        if (simSwitchCallback != null) {
+            simSwitchCallback.onSimSwitched(currentSimIndex, activeSubscriptionInfoList.size(), getCurrentSimLabel());
+        }
+    }
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState)
@@ -55,27 +98,7 @@ public class MainCellularFragment extends AServiceDataFragment
             {
                 if (intent == null) return;
 
-                Timber.i("SIM State Change Detected. Restarting the cellular fragment");
-
-                try
-                {
-                    // Restart this fragment (yes, it seems overly complicated but it works)
-                    FragmentManager fragmentManager = getParentFragmentManager();
-                    Fragment currentFragment = fragmentManager.findFragmentById(R.id.cellular_fragment_container_view);
-                    if (currentFragment != null)
-                    {
-                        FragmentTransaction detachTransaction = fragmentManager.beginTransaction();
-                        detachTransaction.detach(currentFragment);
-                        detachTransaction.commit();
-
-                        FragmentTransaction attachTransaction = fragmentManager.beginTransaction();
-                        attachTransaction.attach(currentFragment);
-                        attachTransaction.commit();
-                    }
-                } catch (Exception e)
-                {
-                    Timber.w(e, "Could not restart the cellular fragment after a SIM event.");
-                }
+                if (service != null && isAdded()) updateSubscriptions(service);
             }
         };
 
@@ -92,8 +115,15 @@ public class MainCellularFragment extends AServiceDataFragment
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState)
     {
-        binding = FragmentMainTabsBinding.inflate(inflater, container, false);
+        binding = FragmentCellularSimpleBinding.inflate(inflater, container, false);
         return binding.getRoot();
+    }
+
+    @Override
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState)
+    {
+        super.onViewCreated(view, savedInstanceState);
+        showNetworkDetailsFragment();
     }
 
     @Override
@@ -101,9 +131,6 @@ public class MainCellularFragment extends AServiceDataFragment
     {
         super.onResume();
 
-        // Reset keepScreenOn to false to ensure screen doesn't stay on
-        // This fixes the issue where navigating from Survey Monitor or Tower Map
-        // leaves the screen permanently on
         View view = getView();
         if (view != null)
         {
@@ -111,12 +138,6 @@ public class MainCellularFragment extends AServiceDataFragment
         }
 
         startAndBindToService();
-    }
-
-    @Override
-    public void onDestroyView()
-    {
-        super.onDestroyView();
     }
 
     @Override
@@ -134,37 +155,52 @@ public class MainCellularFragment extends AServiceDataFragment
     @Override
     protected void onSurveyServiceConnected(NetworkSurveyService service)
     {
-        View view = getView();
-        if (view == null)
-        {
-            Timber.e("The view is null in the onSurveyServiceConnected method");
-            return;
-        }
+        updateSubscriptions(service);
+    }
 
+    private void updateSubscriptions(NetworkSurveyService service)
+    {
         activeSubscriptionInfoList = service.getActiveSubscriptionInfoList();
 
-        final CellularCollectionAdapter cellularCollectionAdapter = new CellularCollectionAdapter(this, activeSubscriptionInfoList);
-        final ViewPager2 viewPager = view.findViewById(R.id.pager);
-
-        // Prevent ViewPager2 + Compose reentrant layout crash on Android 8 (API 26-27).
-        // ViewPager2's clearFocus() during page transitions can trigger Compose's focus search
-        // during an active layout pass, causing "performMeasureAndLayout called during measure layout".
-        viewPager.setFocusable(false);
-        viewPager.setFocusableInTouchMode(false);
-        viewPager.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
-
-        viewPager.setAdapter(cellularCollectionAdapter);
-
-        final TabLayout tabLayout = view.findViewById(R.id.tab_layout);
-        if (activeSubscriptionInfoList.size() <= 1)
-        {
-            // Only one tab, so hide the tab layout
-            tabLayout.setVisibility(View.GONE);
-        } else
-        {
-            tabLayout.setVisibility(View.VISIBLE);
+        // 确保索引不越界
+        if (currentSimIndex >= activeSubscriptionInfoList.size()) {
+            currentSimIndex = 0;
         }
-        new TabLayoutMediator(tabLayout, viewPager, (tab, position) -> tab.setText(getTabTitle(position))).attach();
+
+        showNetworkDetailsFragment();
+
+        // 通知 Compose 层当前 SIM 状态
+        if (simSwitchCallback != null) {
+            simSwitchCallback.onSimSwitched(currentSimIndex, activeSubscriptionInfoList.size(), getCurrentSimLabel());
+        }
+    }
+
+    /** 根据当前 SIM 索引创建/替换 NetworkDetailsFragment */
+    private void showNetworkDetailsFragment()
+    {
+        if (getView() == null) return;
+
+        int subscriptionId;
+        if (activeSubscriptionInfoList == null || activeSubscriptionInfoList.isEmpty()) {
+            subscriptionId = CellularController.DEFAULT_SUBSCRIPTION_ID;
+        } else if (activeSubscriptionInfoList.size() == 1) {
+            subscriptionId = CellularController.DEFAULT_SUBSCRIPTION_ID;
+        } else {
+            subscriptionId = activeSubscriptionInfoList.get(currentSimIndex).getSubscriptionId();
+        }
+
+        Fragment current = getChildFragmentManager().findFragmentById(R.id.cellular_detail_container);
+        if (current instanceof NetworkDetailsFragment && current.getArguments() != null &&
+                current.getArguments().getInt(NetworkDetailsFragment.SUBSCRIPTION_ID_KEY) == subscriptionId) return;
+
+        NetworkDetailsFragment fragment = new NetworkDetailsFragment();
+        Bundle args = new Bundle();
+        args.putInt(NetworkDetailsFragment.SUBSCRIPTION_ID_KEY, subscriptionId);
+        fragment.setArguments(args);
+
+        getChildFragmentManager().beginTransaction()
+                .replace(R.id.cellular_detail_container, fragment)
+                .commitAllowingStateLoss();
     }
 
     @Override
@@ -174,94 +210,10 @@ public class MainCellularFragment extends AServiceDataFragment
     }
 
     /**
-     * An adapter that handles creating a new fragment when a tab is selected for the first time.
-     */
-    public static class CellularCollectionAdapter extends FragmentStateAdapter
-    {
-        private final List<SubscriptionInfo> subscriptions;
-
-        CellularCollectionAdapter(Fragment fragment, List<SubscriptionInfo> subscriptions)
-        {
-            super(fragment);
-            this.subscriptions = subscriptions;
-        }
-
-        @NonNull
-        @Override
-        public Fragment createFragment(int position)
-        {
-            NetworkDetailsFragment networkDetailsFragment = new NetworkDetailsFragment();
-            Bundle args = new Bundle();
-
-            // If there are no subscriptions, we might still be able to get survey results because
-            // of emergency call support. It could also be that READ_PHONE_STATE permissions were not granted.
-            if (subscriptions.isEmpty())
-            {
-                args.putInt(NetworkDetailsFragment.SUBSCRIPTION_ID_KEY, CellularController.DEFAULT_SUBSCRIPTION_ID);
-            } else if (subscriptions.size() == 1)
-            {
-                // We only want to use the subscription info list if there are two active SIMs.  If there is only
-                // one active SIM, then we will just use the default subscription ID which gets filtered out in
-                // the SurveyRecordProcessor. This prevents the "slot" field from getting set on all the records.
-                args.putInt(NetworkDetailsFragment.SUBSCRIPTION_ID_KEY, CellularController.DEFAULT_SUBSCRIPTION_ID);
-            } else
-            {
-                int subscriptionId = subscriptions.get(position).getSubscriptionId();
-                args.putInt(NetworkDetailsFragment.SUBSCRIPTION_ID_KEY, subscriptionId);
-            }
-
-            networkDetailsFragment.setArguments(args);
-            return networkDetailsFragment;
-        }
-
-        @Override
-        public int getItemCount()
-        {
-            int size = subscriptions.size();
-            if (size == 0) return 1;
-
-            return size;
-        }
-    }
-
-    /**
-     * Given the tab position, return the title that should be applied to the tab.
-     *
-     * @param position The tab position (starts at 0).
-     * @return The title to use for the tab.
-     */
-    private String getTabTitle(int position)
-    {
-        if (activeSubscriptionInfoList.isEmpty()) return "No SIM";
-
-        int subscriptionId = activeSubscriptionInfoList.get(position).getSubscriptionId();
-
-        return "SIM " + subscriptionId;
-    }
-
-    /**
      * Called by child fragments when neighbor data is updated.
-     * Scrolls to bottom if user was already at bottom.
      */
     public void onNeighborDataUpdated()
     {
-        if (binding == null) return;
-
-        androidx.core.widget.NestedScrollView scrollView = binding.mainTabsScrollView;
-
-        // Capture "at bottom" state BEFORE the content changes/grows
-        // canScrollVertically(1) returns false when we can't scroll down anymore (i.e., we're at bottom)
-        // BUT: Also check that there's actual content, to avoid auto-scrolling on initial load
-        // when scrollY=0 and there's no content yet (which also makes canScrollVertically return false)
-        int scrollY = scrollView.getScrollY();
-        boolean hasScrollableContent = scrollY > 0 ||
-                (scrollView.getChildCount() > 0 && scrollView.getChildAt(0).getBottom() > scrollView.getHeight());
-        boolean wasAtBottom = !scrollView.canScrollVertically(1) && hasScrollableContent;
-
-        if (wasAtBottom)
-        {
-            // Post to wait for neighbor table layout to complete, then scroll to new bottom
-            scrollView.post(() -> scrollView.fullScroll(View.FOCUS_DOWN));
-        }
+        // Compose 自身接管列表滚动，此处无需原老版嵌套滚动补偿
     }
 }

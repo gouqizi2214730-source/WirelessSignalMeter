@@ -7,8 +7,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -38,10 +38,8 @@ fun NsAnalyticsCard(
             modifier = modifier
                 .fillMaxWidth()
                 .padding(horizontal = DashboardCardDefaults.margin, vertical = 4.dp),
-            shape = DashboardCardDefaults.shape,
-            elevation = DashboardCardDefaults.elevation(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            colors = CardDefaults.defaultColors(
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
             ),
         ) {
             DashboardCardHeader(

@@ -15,8 +15,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.shape.RoundedCornerShape
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -73,8 +74,7 @@ fun WifiDetailsHeroCard(
 
     Card(
         modifier = modifier,
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.elevatedCardColors(),
+        colors = CardDefaults.defaultColors(),
     ) {
         Column(
             modifier = Modifier.padding(16.dp),

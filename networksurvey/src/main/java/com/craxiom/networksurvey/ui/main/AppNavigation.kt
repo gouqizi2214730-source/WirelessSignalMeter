@@ -3,8 +3,7 @@ package com.craxiom.networksurvey.ui.main
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.DrawerState
-import androidx.compose.material3.Scaffold
+import top.yukonga.miuix.kmp.basic.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,7 +26,6 @@ import com.craxiom.networksurvey.databinding.ContainerGrpcFragmentBinding
 import com.craxiom.networksurvey.databinding.ContainerMqttFragmentBinding
 import com.craxiom.networksurvey.databinding.ContainerMqttQrCodeShareFragmentBinding
 import com.craxiom.networksurvey.databinding.ContainerSettingsFragmentBinding
-import com.craxiom.networksurvey.databinding.ContainerTowerMapFragmentBinding
 import com.craxiom.networksurvey.databinding.ContainerTowerMapSettingsFragmentBinding
 import com.craxiom.networksurvey.databinding.ContainerUploadSettingsFragmentBinding
 import com.craxiom.networksurvey.databinding.ContainerWifiDetailsFragmentBinding
@@ -35,7 +33,6 @@ import com.craxiom.networksurvey.databinding.ContainerWifiSpectrumFragmentBindin
 import com.craxiom.networksurvey.fragments.BLUETOOTH_DATA_KEY
 import com.craxiom.networksurvey.fragments.BluetoothDetailsFragment
 import com.craxiom.networksurvey.fragments.MqttFragment
-import com.craxiom.networksurvey.fragments.TowerMapFragment
 import com.craxiom.networksurvey.fragments.WifiDetailsFragment
 import com.craxiom.networksurvey.fragments.WifiSpectrumFragment
 import com.craxiom.networksurvey.fragments.model.MqttConnectionSettings
@@ -43,9 +40,10 @@ import com.craxiom.networksurvey.model.WifiNetwork
 import com.craxiom.networksurvey.ui.acknowledgments.AcknowledgmentsScreen
 import com.craxiom.networksurvey.ui.activesurvey.SurveyMonitorScreen
 import com.craxiom.networksurvey.ui.cellular.CalculatorScreen
+import com.craxiom.networksurvey.ui.cellular.baidumap.BaiduTowerMapScreen
+import com.craxiom.networksurvey.ui.cellular.model.ServingCellInfo
 import com.craxiom.networksurvey.ui.cellular.towermap.ProviderColorOverrideScreen
 import com.craxiom.networksurvey.ui.cellular.towermap.ProviderColorOverrideViewModel
-import com.craxiom.networksurvey.ui.compose.BaiduTowerMapScreen
 import com.craxiom.networksurvey.ui.engparam.EngineeringParamsScreen
 import com.craxiom.networksurvey.ui.grpc.GrpcHelpDialog
 import com.craxiom.networksurvey.ui.speedtest.SpeedTestScreen
@@ -65,11 +63,12 @@ import com.craxiom.networksurvey.ui.watchlist.WatchlistHistoryScreen
 import com.craxiom.networksurvey.ui.watchlist.WatchlistHistoryViewModel
 import com.craxiom.networksurvey.ui.watchlist.WatchlistScreen
 import com.craxiom.networksurvey.ui.watchlist.WatchlistViewModel
+import com.craxiom.networksurvey.ui.settings.ColorPaletteScreen
+import com.craxiom.networksurvey.ui.settings.SettingsScreen
 import com.craxiom.networksurvey.ui.wifi.SsidExclusionListViewModel
 import com.craxiom.networksurvey.ui.wifi.model.WifiNetworkInfoList
 
 fun NavGraphBuilder.mainGraph(
-    drawerState: DrawerState,
     paddingValues: PaddingValues,
     mainNavController: NavHostController,
     sharedViewModel: SharedViewModel
@@ -77,7 +76,6 @@ fun NavGraphBuilder.mainGraph(
     navigation(startDestination = NavDrawerOption.None.name, route = NavRoutes.MainRoute.name) {
         composable(NavDrawerOption.None.name) {
             HomeScreen(
-                drawerState,
                 mainNavController = mainNavController,
                 sharedViewModel = sharedViewModel
             )
@@ -123,6 +121,7 @@ fun NavGraphBuilder.mainGraph(
         composable(NavDrawerOption.CellularCalculators.name) {
             Scaffold(
                 topBar = { TitleBar("蜂窝计算器") { mainNavController.navigateUp() } },
+                popupHost = { },
             ) { innerPadding ->
                 Box(modifier = Modifier.padding(paddingValues = innerPadding)) {
                     CalculatorScreen(viewModel = viewModel())
@@ -146,6 +145,7 @@ fun NavGraphBuilder.mainGraph(
                         mainNavController.navigateUp()
                     }
                 },
+                popupHost = { },
             ) { innerPadding ->
                 Box(modifier = Modifier.padding(paddingValues = innerPadding)) {
                     OuiLookupScreen(
@@ -170,6 +170,11 @@ fun NavGraphBuilder.mainGraph(
 
         composable(NavDrawerOption.Settings.name) {
             SettingsFragmentInCompose(mainNavController)
+        }
+
+        // --------- 主题设置（KernelSU ColorPalette 风格独立页） --------- //
+        composable(NavOption.ColorPalette.name) {
+            ColorPaletteInCompose(mainNavController)
         }
 
         // --------- Deeper navigation (beyond the nav drawer) --------- //
@@ -254,7 +259,22 @@ fun NavGraphBuilder.mainGraph(
         }
 
         composable(NavOption.TowerMap.name) {
-            BaiduTowerMapScreen(onBackPressed = { mainNavController.navigateUp() })
+            val subscriptionId = mainNavController.previousBackStackEntry?.savedStateHandle
+                ?.get<Int>(ServingCellInfo.SUBSCRIPTION_KEY)
+            val initial = sharedViewModel.latestServingCellInfo
+            BaiduTowerMapScreen(
+                onBackButtonPressed = { mainNavController.navigateUp() },
+                servingCellInfo = initial,
+                subscriptionId = subscriptionId,
+            )
+        }
+
+        composable(NavOption.Wifi.name) {
+            WifiToolScreen(mainNavController)
+        }
+
+        composable(NavOption.Gnss.name) {
+            GnssToolScreen(onBack = { mainNavController.navigateUp() })
         }
 
         composable(NavOption.WifiSpectrum.name) {
@@ -307,6 +327,8 @@ enum class NavOption {
     TowerMapSettings,
     QrCodeShare,
     TowerMap,
+    Wifi,
+    Gnss,
     WifiSpectrum,
     WifiDetails,
     BluetoothDetails,
@@ -315,7 +337,8 @@ enum class NavOption {
     ProviderColorOverrides,
     Acknowledgments,
     WatchlistHistory,
-    WatchlistHistoryDetail
+    WatchlistHistoryDetail,
+    ColorPalette
 }
 
 @Composable
@@ -340,6 +363,7 @@ fun GrpcFragmentInCompose(mainNavController: NavHostController) {
                 )
             )
         },
+        popupHost = { },
     ) { innerPadding ->
         AndroidViewBinding(
             ContainerGrpcFragmentBinding::inflate,
@@ -375,6 +399,7 @@ fun MqttFragmentInCompose(
                 )
             )
         },
+        popupHost = { },
     ) { innerPadding ->
         AndroidViewBinding(
             ContainerMqttFragmentBinding::inflate,
@@ -388,19 +413,14 @@ fun MqttFragmentInCompose(
 
 @Composable
 fun EngineeringParamsInCompose(mainNavController: NavHostController) {
-    Scaffold(
-        topBar = { TitleBar(stringResource(R.string.eng_param_title)) { mainNavController.navigateUp() } },
-    ) { innerPadding ->
-        Box(modifier = Modifier.padding(paddingValues = innerPadding)) {
-            EngineeringParamsScreen(onNavigateUp = { mainNavController.navigateUp() })
-        }
-    }
+    EngineeringParamsScreen(onNavigateUp = { mainNavController.navigateUp() })
 }
 
 @Composable
 fun SpeedTestInCompose(mainNavController: NavHostController) {
     Scaffold(
-        topBar = { TitleBar("网络测速") { mainNavController.navigateUp() } },
+        topBar = { TitleBar(stringResource(R.string.tool_speed_test_title)) { mainNavController.navigateUp() } },
+        popupHost = { },
     ) { innerPadding ->
         Box(modifier = Modifier.padding(paddingValues = innerPadding)) {
             SpeedTestScreen()
@@ -412,11 +432,38 @@ fun SpeedTestInCompose(mainNavController: NavHostController) {
 fun SettingsFragmentInCompose(mainNavController: NavHostController) {
     Scaffold(
         topBar = { TitleBar("设置") { mainNavController.navigateUp() } },
+        popupHost = { },
     ) { innerPadding ->
-        AndroidViewBinding(
-            ContainerSettingsFragmentBinding::inflate,
-            modifier = Modifier.padding(paddingValues = innerPadding)
-        ) {
+        Box(modifier = Modifier.padding(paddingValues = innerPadding)) {
+            com.craxiom.networksurvey.ui.settings.SettingsScreen(
+                onNavigateToSsidExclusion = {
+                    mainNavController.navigate(NavOption.SsidExclusionList.name)
+                },
+                onNavigateToAcknowledgments = {
+                    mainNavController.navigate(NavOption.Acknowledgments.name)
+                },
+                onNavigateToEngParams = {
+                    mainNavController.navigate(NavDrawerOption.EngineeringParams.name)
+                },
+                onNavigateToTheme = {
+                    mainNavController.navigate(NavOption.ColorPalette.name)
+                }
+            )
+        }
+    }
+}
+
+/**
+ * 主题设置页（KernelSU ColorPalette 风格）。
+ */
+@Composable
+fun ColorPaletteInCompose(mainNavController: NavHostController) {
+    Scaffold(
+        topBar = { TitleBar("主题") { mainNavController.navigateUp() } },
+        popupHost = { },
+    ) { innerPadding ->
+        Box(modifier = Modifier.padding(paddingValues = innerPadding)) {
+            ColorPaletteScreen()
         }
     }
 }
@@ -425,6 +472,7 @@ fun SettingsFragmentInCompose(mainNavController: NavHostController) {
 fun CommunityUploadSettingsFragmentInCompose(mainNavController: NavHostController) {
     Scaffold(
         topBar = { TitleBar("社区上传设置") { mainNavController.navigateUp() } },
+        popupHost = { },
     ) { innerPadding ->
         AndroidViewBinding(
             ContainerUploadSettingsFragmentBinding::inflate,
@@ -438,6 +486,7 @@ fun CommunityUploadSettingsFragmentInCompose(mainNavController: NavHostControlle
 fun TowerMapSettingsFragmentInCompose(mainNavController: NavHostController) {
     Scaffold(
         topBar = { TitleBar("塔图设置") { mainNavController.navigateUp() } },
+        popupHost = { },
     ) { innerPadding ->
         AndroidViewBinding(
             ContainerTowerMapSettingsFragmentBinding::inflate,
@@ -452,6 +501,7 @@ fun QrCodeShareInCompose(mainNavController: NavHostController) {
     Scaffold(
         // TODO When navigating back the current settings are lost if they have not been saved, fix this
         topBar = { TitleBar("二维码分享") { mainNavController.navigateUp() } },
+        popupHost = { },
     ) { innerPadding ->
         AndroidViewBinding(
             ContainerMqttQrCodeShareFragmentBinding::inflate,
@@ -461,14 +511,15 @@ fun QrCodeShareInCompose(mainNavController: NavHostController) {
     }
 }
 
+/**
+ * 百度地图基站地图（完全重构版，纯 Compose）
+ */
 @Composable
-fun TowerMapInCompose(paddingValues: PaddingValues) {
-    AndroidViewBinding(
-        ContainerTowerMapFragmentBinding::inflate
-    ) {
-        val fragment: TowerMapFragment? = towerMapFragmentContainerView.getFragment()
-        fragment?.setPaddingInsets(paddingValues)
-    }
+fun BaiduTowerMapInCompose(onBack: () -> Unit = {}, servingCellInfo: ServingCellInfo? = null) {
+    BaiduTowerMapScreen(
+        onBackButtonPressed = onBack,
+        servingCellInfo = servingCellInfo
+    )
 }
 
 @Composable
@@ -478,6 +529,7 @@ fun WifiSpectrumInCompose(
 ) {
     Scaffold(
         topBar = { TitleBar("Wi-Fi 频谱") { mainNavController.navigateUp() } },
+        popupHost = { },
     ) { innerPadding ->
         AndroidViewBinding(
             ContainerWifiSpectrumFragmentBinding::inflate,
@@ -540,6 +592,7 @@ fun PlmnLookupInCompose(mainNavController: NavHostController) {
                 )
             )
         },
+        popupHost = { },
     ) { innerPadding ->
         Box(modifier = Modifier.padding(paddingValues = innerPadding)) {
             PlmnLookupScreen(
@@ -576,6 +629,7 @@ fun PlmnDetailsInCompose(record: PlmnRecord?, mainNavController: NavHostControll
                 )
             )
         },
+        popupHost = { },
     ) { innerPadding ->
         Box(modifier = Modifier.padding(paddingValues = innerPadding)) {
             if (record != null) {

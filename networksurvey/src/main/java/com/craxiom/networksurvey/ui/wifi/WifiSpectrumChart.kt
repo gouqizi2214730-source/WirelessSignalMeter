@@ -7,7 +7,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -130,11 +129,11 @@ private fun ComposeChart(
                     titleComponent =
                         rememberTextComponent(
                             background = rememberShapeComponent(
-                                fill = Fill(colorResource(id = R.color.colorAccent)),
+                                fill = Fill(color = MaterialTheme.colorScheme.primary),
                                 shape = CircleShape
                             ),
                             style = TextStyle(
-                                color = Color.White,
+                                color = MaterialTheme.colorScheme.onPrimary,
                                 fontFamily = FontFamily.Monospace,
                             ),
                             padding = axisTitlePadding,

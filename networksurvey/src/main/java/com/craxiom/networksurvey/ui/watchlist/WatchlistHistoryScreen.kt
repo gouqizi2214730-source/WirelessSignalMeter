@@ -173,7 +173,6 @@ private fun HistoryListContent(
             placeholder = { Text(stringResource(R.string.watchlist_history_search_hint)) },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             singleLine = true,
-            shape = RoundedCornerShape(999.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 8.dp)

@@ -19,8 +19,9 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.shape.RoundedCornerShape
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -96,8 +97,7 @@ private fun LazyListScope.chartItems(
         SelectionContainer {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.large,
-                colors = CardDefaults.elevatedCardColors()
+                colors = CardDefaults.defaultColors()
             ) {
                 Column(
                     modifier = Modifier
@@ -118,49 +118,49 @@ private fun LazyListScope.chartItems(
                                 )
                             )
                             Text(
-                                text = "Source Address",
+                                text = "源地址",
                                 style = MaterialTheme.typography.labelMedium
                             )
                         }
 
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = if (rssi == UNKNOWN_RSSI) "Unknown" else "${rssi.toInt()} dBm",
+                                text = if (rssi == UNKNOWN_RSSI) "未知" else "${rssi.toInt()} dBm",
                                 style = MaterialTheme.typography.titleMedium.copy(color = signalStrengthColor)
                             )
                             Text(
-                                text = "Signal Strength",
+                                text = "信号强度",
                                 style = MaterialTheme.typography.labelMedium
                             )
                         }
                     }
 
                     viewModel.bluetoothData.otaDeviceName.takeIf { it.isNotEmpty() }?.let {
-                        LabeledRow("Device Name:", it)
+                        LabeledRow("设备名称：", it)
                     }
 
                     LabeledRow(
-                        label = "Supported Technologies:",
+                        label = "支持技术：",
                         value = BluetoothMessageConstants.getSupportedTechString(
                             viewModel.bluetoothData.supportedTechnologies
                         )
                     )
 
                     viewModel.bluetoothData.deviceClass.takeIf { it.isNotEmpty() }?.let {
-                        LabeledRow("Device Class:", it)
+                        LabeledRow("设备类别：", it)
                     }
 
                     val formattedAddressType =
                         formatAddressType(viewModel.bluetoothData.addressType)
-                    LabeledRow("Address Type:", formattedAddressType)
+                    LabeledRow("地址类型：", formattedAddressType)
 
                     val uuids = viewModel.bluetoothData.serviceUuidsList
                     if (uuids.isNotEmpty()) {
-                        LabeledRow("Service UUIDs:", uuids.joinToString(", "))
+                        LabeledRow("服务 UUID：", uuids.joinToString(", "))
                     }
 
                     viewModel.bluetoothData.companyId.takeIf { it.isNotEmpty() }?.let {
-                        LabeledRow("Company ID:", it)
+                        LabeledRow("公司 ID：", it)
                     }
                 }
             }
@@ -178,8 +178,7 @@ private fun LazyListScope.chartItems(
     item {
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.large,
-            colors = CardDefaults.elevatedCardColors()
+            colors = CardDefaults.defaultColors()
         ) {
             Row(
                 modifier = Modifier
@@ -189,7 +188,7 @@ private fun LazyListScope.chartItems(
                 horizontalArrangement = Arrangement.Start
             ) {
                 Text(
-                    text = "Scan Rate: ",
+                    text = "扫描速率：",
                     style = MaterialTheme.typography.labelMedium
                 )
                 Text(
@@ -208,7 +207,7 @@ private fun LazyListScope.chartItems(
     cardItem {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = "Signal Strength (Last 2 Minutes)",
+                text = "信号强度（最近 2 分钟）",
                 style = MaterialTheme.typography.titleMedium
             )
             SignalChart(viewModel)
@@ -218,7 +217,7 @@ private fun LazyListScope.chartItems(
 
 private fun LazyListScope.cardItem(content: @Composable () -> Unit) {
     item {
-        Card(shape = MaterialTheme.shapes.large, colors = CardDefaults.elevatedCardColors()) {
+        Card(colors = CardDefaults.defaultColors()) {
             Box(Modifier.padding(padding)) {
                 content()
             }
@@ -233,7 +232,7 @@ fun ScanRateInfoButton() {
     IconButton(onClick = { showDialog = true }) {
         Icon(
             Icons.Default.Info,
-            contentDescription = "About Bluetooth Scan Rate",
+            contentDescription = "关于蓝牙扫描速率",
         )
     }
 
@@ -241,14 +240,11 @@ fun ScanRateInfoButton() {
     if (showDialog) {
         AlertDialog(
             onDismissRequest = { showDialog = false },
-            title = { Text("Bluetooth Scan Rate Info") },
+            title = { Text("蓝牙扫描速率说明") },
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     Text(
-                        "The rate at which Bluetooth devices will be scanned for in " +
-                                "seconds. Smaller values will decrease battery life but larger values will " +
-                                "cause the Signal Strength Graph to be out of date. 23 seconds is the smallest " +
-                                "Bluetooth scan rate supported because that is how long one full scan takes."
+                        "扫描蓝牙设备的频率（以秒计）。较小的值会降低电池续航，但较大值会使信号强度图过期。23 秒是支持的最小蓝牙扫描间隔，因为一次完整扫描需要这么长时间。"
                     )
                 }
             },
@@ -256,7 +252,7 @@ fun ScanRateInfoButton() {
                 Button(
                     onClick = { showDialog = false }
                 ) {
-                    Text("Got it")
+                    Text("知道了")
                 }
             }
         )
@@ -271,7 +267,7 @@ fun OpenSettingsButton(onNavigateToSettings: () -> Unit) {
     }) {
         Icon(
             Icons.Default.Settings,
-            contentDescription = "Settings Button",
+            contentDescription = "设置按钮",
         )
     }
 }

@@ -1,11 +1,5 @@
 package com.craxiom.networksurvey.ui.main
 
-import android.content.Intent
-import androidx.compose.material3.DrawerState
-import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -14,30 +8,31 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import com.craxiom.networksurvey.R
+import com.craxiom.networksurvey.ui.component.PagerNavigationSpringSpec
 import com.craxiom.networksurvey.fragments.BLUETOOTH_DATA_KEY
 import com.craxiom.networksurvey.fragments.model.MqttConnectionSettings
 import com.craxiom.networksurvey.model.WifiNetwork
 import com.craxiom.networksurvey.ui.cellular.model.ServingCellInfo
-import com.craxiom.networksurvey.ui.main.appdrawer.AppDrawerContent
-import com.craxiom.networksurvey.ui.main.appdrawer.AppDrawerItemInfo
-import com.craxiom.networksurvey.ui.main.appdrawer.DrawerEntry
 import com.craxiom.networksurvey.ui.theme.NsTheme
 import com.craxiom.networksurvey.util.BatteryOptimizationHelper
-import com.craxiom.networksurvey.util.MdmUtils
+import top.yukonga.miuix.kmp.basic.Scaffold
 import timber.log.Timber
 
 
 @Composable
 fun MainCompose(
     mainNavController: NavHostController = rememberNavController(),
-    drawerState: DrawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
     appVersion: String,
     deepLinkViewModel: DeepLinkViewModel = viewModel()
 ) {
@@ -50,7 +45,6 @@ fun MainCompose(
         BatteryOptimizationHelper(activity ?: context)
     }
     var showBatteryDialog by remember { mutableStateOf(false) }
-    var showUploadLogDialog by remember { mutableStateOf(false) }
 
     // Observe navigation events using modern Compose StateFlow pattern
     val navigationEvent by viewModel.navigationEvent.collectAsStateWithLifecycle()
@@ -91,8 +85,8 @@ fun MainCompose(
 
                 is NavigationEvent.TowerMap -> {
                     mainNavController.currentBackStackEntry?.savedStateHandle?.set(
-                        ServingCellInfo.KEY,
-                        event.servingCellInfo
+                        ServingCellInfo.SUBSCRIPTION_KEY,
+                        event.servingCellInfo.subscriptionId
                     )
                     mainNavController.navigate(NavOption.TowerMap.name)
                 }
@@ -156,13 +150,6 @@ fun MainCompose(
     }
 
     NsTheme {
-        // Show battery optimization dialog on first launch
-        LaunchedEffect(Unit) {
-            if (batteryOptimizationHelper.shouldShowFirstTimePrompt()) {
-                showBatteryDialog = true
-            }
-        }
-
         val deepLinkDestination by deepLinkViewModel.navigationDestination.collectAsStateWithLifecycle()
         LaunchedEffect(deepLinkDestination) {
             deepLinkDestination?.let { destination ->
@@ -196,141 +183,46 @@ fun MainCompose(
             )
         }
 
-        // 上传日志对话框（抽屉「报告问题/上传日志」入口）
-        if (showUploadLogDialog) {
-            UploadLogDialog(
-                context = context,
-                onDismiss = { showUploadLogDialog = false }
-            )
-        }
+        // 上传日志对话框已随日志功能一并移除（原抽屉「报告问题/上传日志」入口同步删除）
 
-        Scaffold { paddingValues ->
-            ModalNavigationDrawer(
-                drawerState = drawerState,
-                gesturesEnabled = drawerState.isOpen,
-                drawerContent = {
-                    AppDrawerContent(
-                        appVersion = appVersion,
-                        drawerState = drawerState,
-                        menuItems = DrawerParams.drawerButtons(context),
-                        externalLinks = DrawerParams.externalDrawerLinks,
-                        defaultPick = NavDrawerOption.None
-                    ) { onUserPickedOption ->
-                        when (onUserPickedOption) {
-                            NavDrawerOption.None -> {
-                                mainNavController.navigate(onUserPickedOption.name) {
-                                    popUpTo(NavDrawerOption.None.name)
-                                }
-                            }
-
-
-                            NavDrawerOption.NsAnalyticsConnection -> {
-                                mainNavController.navigate(onUserPickedOption.name) {
-                                    popUpTo(NavDrawerOption.None.name)
-                                }
-                            }
-
-                            NavDrawerOption.ServerConnection -> {
-                                mainNavController.navigate(onUserPickedOption.name) {
-                                    popUpTo(NavDrawerOption.None.name)
-                                }
-                            }
-
-                            NavDrawerOption.MqttBrokerConnection -> {
-                                mainNavController.navigate(onUserPickedOption.name) {
-                                    popUpTo(NavDrawerOption.None.name)
-                                }
-                            }
-
-                            NavDrawerOption.CellularCalculators -> {
-                                mainNavController.navigate(onUserPickedOption.name) {
-                                    popUpTo(NavDrawerOption.None.name)
-                                }
-                            }
-
-                            NavDrawerOption.SurveyMonitor -> {
-                                mainNavController.navigate(onUserPickedOption.name) {
-                                    popUpTo(NavDrawerOption.None.name)
-                                }
-                            }
-
-                            NavDrawerOption.OuiLookup -> {
-                                mainNavController.navigate(onUserPickedOption.name) {
-                                    popUpTo(NavDrawerOption.None.name)
-                                }
-                            }
-
-                            NavDrawerOption.PlmnLookup -> {
-                                mainNavController.navigate(onUserPickedOption.name) {
-                                    popUpTo(NavDrawerOption.None.name)
-                                }
-                            }
-
-                            NavDrawerOption.Watchlist -> {
-                                mainNavController.navigate(onUserPickedOption.name) {
-                                    popUpTo(NavDrawerOption.None.name)
-                                }
-                            }
-
-                            NavDrawerOption.EngineeringParams -> {
-                                mainNavController.navigate(onUserPickedOption.name) {
-                                    popUpTo(NavDrawerOption.None.name)
-                                }
-                            }
-
-                            NavDrawerOption.SpeedTest -> {
-                                mainNavController.navigate(onUserPickedOption.name) {
-                                    popUpTo(NavDrawerOption.None.name)
-                                }
-                            }
-
-                            NavDrawerOption.Settings -> {
-                                mainNavController.navigate(onUserPickedOption.name) {
-                                    popUpTo(NavDrawerOption.None.name)
-                                }
-                            }
-
-                            NavDrawerOption.UserManual -> {
-                                val intent = Intent(
-                                    Intent.ACTION_VIEW,
-                                    "https://rsrp.cn".toUri()
-                                )
-                                context.startActivity(intent)
-                            }
-
-                            NavDrawerOption.MessagingDocs -> {
-                                val intent = Intent(
-                                    Intent.ACTION_VIEW,
-                                    "https://rsrp.cn".toUri()
-                                )
-                                context.startActivity(intent)
-                            }
-
-                            NavDrawerOption.ReportAnIssue -> {
-                                showUploadLogDialog = true
-                            }
-
-                            NavDrawerOption.GitHub -> {
-                                val intent = Intent(
-                                    Intent.ACTION_VIEW,
-                                    "https://rsrp.cn".toUri()
-                                )
-                                context.startActivity(intent)
-                            }
-                        }
-                    }
-                }
+        Scaffold(
+            popupHost = { }
+        ) { paddingValues ->
+            NavHost(
+                mainNavController,
+                startDestination = NavRoutes.MainRoute.name,
+                // 页面切换动画：KernelSU PagerNavigationSpring 同款 spring 参数，
+                // 全宽滑动（it -> it）配合淡入淡出，进入地图等子页面也有平滑过渡
+                enterTransition = {
+                    slideInHorizontally(
+                        animationSpec = PagerNavigationSpringSpec,
+                        initialOffsetX = { it }
+                    ) + fadeIn(animationSpec = tween(300))
+                },
+                exitTransition = {
+                    slideOutHorizontally(
+                        animationSpec = PagerNavigationSpringSpec,
+                        targetOffsetX = { -it }
+                    ) + fadeOut(animationSpec = tween(200))
+                },
+                popEnterTransition = {
+                    slideInHorizontally(
+                        animationSpec = PagerNavigationSpringSpec,
+                        initialOffsetX = { -it }
+                    ) + fadeIn(animationSpec = tween(300))
+                },
+                popExitTransition = {
+                    slideOutHorizontally(
+                        animationSpec = PagerNavigationSpringSpec,
+                        targetOffsetX = { it }
+                    ) + fadeOut(animationSpec = tween(200))
+                },
             ) {
-                NavHost(
-                    mainNavController,
-                    startDestination = NavRoutes.MainRoute.name
-                ) {
-                    mainGraph(
-                        drawerState, paddingValues = paddingValues,
-                        mainNavController = mainNavController,
-                        sharedViewModel = viewModel
-                    )
-                }
+                mainGraph(
+                    paddingValues = paddingValues,
+                    mainNavController = mainNavController,
+                    sharedViewModel = viewModel
+                )
             }
         }
     }
@@ -338,120 +230,6 @@ fun MainCompose(
 
 enum class NavRoutes {
     MainRoute,
-}
-
-object DrawerParams {
-    private val nsAnalyticsItem = AppDrawerItemInfo(
-        NavDrawerOption.NsAnalyticsConnection,
-        R.string.ns_analytics,
-        R.drawable.ic_ns_analytics,
-        R.string.ns_analytics_description
-    )
-
-    private val mqttItem = AppDrawerItemInfo(
-        NavDrawerOption.MqttBrokerConnection,
-        R.string.mqtt_connection_title_full,
-        R.drawable.ic_cloud_connection,
-        R.string.device_status_stream_description
-    )
-
-    private val grpcItem = AppDrawerItemInfo(
-        NavDrawerOption.ServerConnection,
-        R.string.grpc_connection_title,
-        R.drawable.connection_icon,
-        R.string.grpc_connection_description
-    )
-
-    private val cellularCalculatorsItem = AppDrawerItemInfo(
-        NavDrawerOption.CellularCalculators,
-        R.string.cellular_calculators,
-        R.drawable.ic_calculator,
-        R.string.device_status_stream_description
-    )
-
-    private val plmnLookupItem = AppDrawerItemInfo(
-        NavDrawerOption.PlmnLookup,
-        R.string.plmn_lookup_drawer_title,
-        R.drawable.ic_plmn_lookup,
-        R.string.plmn_lookup_drawer_description
-    )
-
-    private val ouiLookupItem = AppDrawerItemInfo(
-        NavDrawerOption.OuiLookup,
-        R.string.oui_lookup_drawer_title,
-        R.drawable.ic_oui_lookup,
-        R.string.oui_lookup_drawer_description
-    )
-
-    private val watchlistItem = AppDrawerItemInfo(
-        NavDrawerOption.Watchlist,
-        R.string.watchlist_title,
-        R.drawable.ic_watchlist,
-        R.string.watchlist_info
-    )
-
-    private val engineeringParamsItem = AppDrawerItemInfo(
-        NavDrawerOption.EngineeringParams,
-        R.string.eng_param_title,
-        R.drawable.ic_calculator,
-        R.string.eng_param_description
-    )
-
-    private val speedTestItem = AppDrawerItemInfo(
-        NavDrawerOption.SpeedTest,
-        R.string.speed_test_title,
-        R.drawable.ic_speed_test,
-        R.string.speed_test_description
-    )
-
-    private val settingsItem = AppDrawerItemInfo(
-        NavDrawerOption.Settings,
-        R.string.settings,
-        R.drawable.ic_settings,
-        R.string.device_status_stream_description
-    )
-
-    fun drawerButtons(context: android.content.Context): List<DrawerEntry<NavDrawerOption>> {
-        val entries = mutableListOf<DrawerEntry<NavDrawerOption>>()
-
-        // Reference Tools section
-        entries += DrawerEntry.Header(R.string.nav_section_tools)
-        entries += DrawerEntry.Item(cellularCalculatorsItem)
-        entries += DrawerEntry.Item(engineeringParamsItem)
-        entries += DrawerEntry.Item(speedTestItem)
-
-        // Bottom: Settings (unheadered, before external links divider)
-        entries += DrawerEntry.Item(settingsItem)
-
-        return entries
-    }
-
-    val externalDrawerLinks = arrayListOf(
-        AppDrawerItemInfo(
-            NavDrawerOption.UserManual,
-            R.string.manual,
-            R.drawable.ic_user_manual,
-            R.string.manual
-        ),
-        AppDrawerItemInfo(
-            NavDrawerOption.MessagingDocs,
-            R.string.messaging_docs,
-            R.drawable.ic_schema,
-            R.string.messaging_docs
-        ),
-        AppDrawerItemInfo(
-            NavDrawerOption.ReportAnIssue,
-            R.string.upload_log,
-            R.drawable.ic_bug,
-            R.string.upload_log
-        ),
-        AppDrawerItemInfo(
-            NavDrawerOption.GitHub,
-            R.string.github,
-            R.drawable.ic_github,
-            R.string.github
-        )
-    )
 }
 
 @Preview

@@ -36,7 +36,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.maplibre.android.geometry.LatLng
+import com.baidu.mapapi.model.LatLng
 import timber.log.Timber
 
 /**

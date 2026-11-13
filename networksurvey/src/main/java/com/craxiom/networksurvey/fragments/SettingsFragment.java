@@ -191,10 +191,42 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
 
         switch (key)
         {
+            case "monet_enabled":
+                // Material You 动态取色开关：重建界面以重新应用/取消动态配色
+                if (getActivity() != null)
+                {
+                    final android.app.Activity a = getActivity();
+                    a.runOnUiThread(() ->
+                    {
+                        if (!a.isFinishing() && !a.isDestroyed()) a.recreate();
+                    });
+                }
+                break;
+
             case "theme_mode":
                 // 主题切换（浅色/深色/跟随系统）：套用夜间模式并重建界面
+                // 延迟到消息队列执行，避免在 Preference 回调栈内 recreate 导致状态冲突
                 ThemePref.apply(requireContext());
-                if (getActivity() != null) getActivity().recreate();
+                if (getActivity() != null)
+                {
+                    final android.app.Activity a = getActivity();
+                    a.runOnUiThread(() ->
+                    {
+                        if (!a.isFinishing() && !a.isDestroyed()) a.recreate();
+                    });
+                }
+                break;
+
+            case "theme_seed":
+                // 自定义主题主色（关闭 Monet 后生效）：重建界面以应用新色板
+                if (getActivity() != null)
+                {
+                    final android.app.Activity a = getActivity();
+                    a.runOnUiThread(() ->
+                    {
+                        if (!a.isFinishing() && !a.isDestroyed()) a.recreate();
+                    });
+                }
                 break;
 
             case NetworkSurveyConstants.PROPERTY_MDM_OVERRIDE_KEY:

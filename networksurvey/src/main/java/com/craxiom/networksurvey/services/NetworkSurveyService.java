@@ -267,10 +267,16 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
         initializeMqttConnection();
         registerManagedConfigurationListener();
 
+        // 蜂窝控制器立即初始化（首屏信号页需要，最高优先级）
         cellularController.initialize();
-        wifiController.initializeWifiScanningResources();
-        bluetoothController.initializeBtScanningResources();
-        gnssController.initializeGnssScanningResources();
+
+        // WiFi/蓝牙/GNSS 控制器延迟初始化：放到后台线程，避免阻塞 Service onCreate
+        // 这些控制器只在对应 Tab 页首次打开时才需要
+        executorService.execute(() -> {
+            try { wifiController.initializeWifiScanningResources(); } catch (Throwable t) { Timber.e(t, "WiFi init failed"); }
+            try { bluetoothController.initializeBtScanningResources(); } catch (Throwable t) { Timber.e(t, "BT init failed"); }
+            try { gnssController.initializeGnssScanningResources(); } catch (Throwable t) { Timber.e(t, "GNSS init failed"); }
+        });
 
         // Register the Watchlist detector if the feature is enabled (created lazily).
         updateWatchlistRegistration();

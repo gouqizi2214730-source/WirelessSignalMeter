@@ -16,9 +16,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import top.yukonga.miuix.kmp.basic.Card
 import androidx.compose.material3.Button
+import top.yukonga.miuix.kmp.basic.Card
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -58,9 +59,8 @@ private const val MAC_PLACEHOLDER = "··"
  */
 @Composable
 internal fun SurfaceCard(content: @Composable () -> Unit) {
-    ElevatedCard(
+    Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -188,7 +188,6 @@ internal fun ResultCard(vendor: String, query: String) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(44.dp),
-            shape = RoundedCornerShape(22.dp),
             colors = ButtonDefaults.buttonColors(),
             contentPadding = PaddingValues(horizontal = 16.dp),
         ) {

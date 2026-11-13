@@ -33,6 +33,12 @@ public class BluetoothViewModel extends ViewModel
     private final MutableLiveData<Boolean> updatesPaused = new MutableLiveData<>(false);
     private final Map<String, SparseArray<byte[]>> manufacturerDataMap = new HashMap<>();
 
+    /**
+     * Bumped every time [bluetoothSortedList] changes. The Compose list cannot observe the
+     * SortedSet directly, so it observes this counter and re-reads the set when it ticks.
+     */
+    private final MutableLiveData<Long> listVersion = new MutableLiveData<>(0L);
+
     private int sortByIndex = 0;
 
     public BluetoothViewModel()
@@ -78,6 +84,20 @@ public class BluetoothViewModel extends ViewModel
     public LiveData<Boolean> areUpdatesPaused()
     {
         return updatesPaused;
+    }
+
+    /**
+     * Signals that [getBluetoothList] content changed so Compose observers refresh.
+     */
+    public void bumpListVersion()
+    {
+        final Long current = listVersion.getValue();
+        listVersion.postValue((current == null ? 0L : current) + 1L);
+    }
+
+    public LiveData<Long> getListVersion()
+    {
+        return listVersion;
     }
 
     public void toggleUpdatesPaused()

@@ -26,6 +26,22 @@
             app:summary="浅色 / 深色 / 跟随系统"
             app:useSimpleSummaryProvider="true" />
 
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:key="monet_enabled"
+            app:summaryOff="关闭后使用应用自带主题色（可自定义配色）"
+            app:summaryOn="开启后主题色跟随系统壁纸（Android 12 及以上）"
+            app:title="Material You 动态取色" />
+
+        <ListPreference
+            app:defaultValue="0"
+            app:entries="@array/theme_seed_entries"
+            app:entryValues="@array/theme_seed_values"
+            app:icon="@drawable/ic_display_settings"
+            app:key="theme_seed"
+            app:summary="选择自定义主题色（需关闭上方动态取色后生效）"
+            app:title="自定义主题色" />
+
     </PreferenceCategory>
 
     <PreferenceCategory
@@ -109,46 +125,6 @@
             app:useSimpleSummaryProvider="true"
             app:title="@string/log_file_title" />
 
-        <Preference
-            app:key="upload_preferences_group"
-            app:title="OpenCelliD &amp; BeaconDB Upload Settings"
-            app:summary="Configure data upload options including OpenCelliD API key"
-            app:fragment="com.craxiom.networksurvey.fragments.UploadSettingsFragment" />
-
-    </PreferenceCategory>
-
-    <PreferenceCategory
-        app:icon="@drawable/ic_watchlist"
-        app:key="watchlist_config"
-        app:title="@string/watchlist_settings_title">
-
-        <SwitchPreferenceCompat
-            app:defaultValue="false"
-            app:icon="@drawable/ic_watchlist"
-            app:key="watchlist_enabled"
-            app:summaryOff="@string/watchlist_settings_enable_summary_off"
-            app:summaryOn="@string/watchlist_settings_enable_summary_on"
-            app:title="@string/watchlist_settings_enable_title" />
-
-        <SwitchPreferenceCompat
-            app:defaultValue="true"
-            app:icon="@drawable/ic_cloud_connection"
-            app:key="watchlist_stream_enabled"
-            app:summary="@string/watchlist_stream_setting_summary"
-            app:title="@string/watchlist_stream_setting_title" />
-
-    </PreferenceCategory>
-
-    <PreferenceCategory
-        app:icon="@drawable/ic_cloud_connection"
-        app:key="ns_analytics_config"
-        app:title="NS Analytics">
-
-        <Preference
-            app:key="ns_analytics_connection_pref"
-            app:title="Connection Settings"
-            app:summary="Manage NS Analytics connection and device registration" />
-
     </PreferenceCategory>
 
     <PreferenceCategory
@@ -198,20 +174,6 @@
             app:summaryOff="@string/include_neighbor_cells_summary_off"
             app:summaryOn="@string/include_neighbor_cells_summary_on"
             app:title="@string/include_neighbor_cells_title" />
-
-    </PreferenceCategory>
-
-    <PreferenceCategory
-        app:icon="@drawable/ic_cloud_connection"
-        app:key="mqtt_connection_config"
-        app:title="@string/mqtt_connection_config_title">
-
-        <SwitchPreferenceCompat
-            app:defaultValue="false"
-            app:key="mqtt_start_on_boot"
-            app:summaryOff="@string/auto_start_mqtt_summary_off"
-            app:summaryOn="@string/auto_start_mqtt_summary_on"
-            app:title="@string/mqtt_start_on_boot_title" />
 
     </PreferenceCategory>
 
@@ -321,20 +283,6 @@
     </PreferenceCategory>
 
     <PreferenceCategory
-        app:icon="@drawable/ic_cloud_connection"
-        app:key="streaming_settings"
-        app:title="Streaming Settings">
-
-        <EditTextPreference
-            app:defaultValue="20000"
-            app:dialogMessage="@string/streaming_queue_limit_description"
-            app:key="streaming_queue_limit"
-            app:title="@string/streaming_queue_limit_title"
-            app:useSimpleSummaryProvider="true" />
-
-    </PreferenceCategory>
-
-    <PreferenceCategory
         app:icon="@drawable/ic_info"
         app:key="about"
         app:title="About">
@@ -343,21 +291,6 @@
             app:key="app_version"
             app:title="Version"
             app:defaultValue="None" />
-
-        <Preference
-            app:key="preference_device_serial_number"
-            app:title="Device Serial Number"
-            app:defaultValue="None" />
-
-        <Preference
-            app:key="app_instance_id"
-            app:title="App Instance ID"
-            app:defaultValue="None" />
-
-        <Preference
-            app:key="privacy_policy"
-            app:title="@string/privacy_policy"
-            app:summary="@string/privacy_policy_preference_summary" />
 
         <Preference
             app:key="acknowledgments"

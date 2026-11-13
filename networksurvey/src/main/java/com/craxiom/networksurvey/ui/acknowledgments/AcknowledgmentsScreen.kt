@@ -15,8 +15,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -139,24 +139,22 @@ private fun HeaderCard() {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
+        colors = CardDefaults.defaultColors(
+            color = MaterialTheme.colorScheme.primaryContainer
         )
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
             Text(
-                text = "Open Source Acknowledgments",
+                text = "开源许可声明",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Network Survey is built with the help of many excellent open source libraries. " +
-                        "We gratefully acknowledge the contributions of the developers and communities " +
-                        "who create and maintain these projects.",
+                text = "Network Survey 的构建离不开众多优秀开源库的支持。我们衷心感谢创建和维护这些项目的开发者与社区。",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
@@ -192,11 +190,11 @@ private fun LibraryCard(
                 context.startActivity(intent)
             },
         colors = if (isSpecial) {
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.secondaryContainer
+            CardDefaults.defaultColors(
+                color = MaterialTheme.colorScheme.secondaryContainer
             )
         } else {
-            CardDefaults.cardColors()
+            CardDefaults.defaultColors()
         }
     ) {
         Column(

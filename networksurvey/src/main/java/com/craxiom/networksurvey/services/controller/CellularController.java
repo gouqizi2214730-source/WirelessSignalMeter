@@ -1021,7 +1021,7 @@ public class CellularController extends AController
             {
                 Timber.e(e, "An exception occurred trying to get the latest cellular information for a single scan");
             }
-        }, 1_000);
+        }, 0);
     }
 
     /**
@@ -1146,7 +1146,7 @@ public class CellularController extends AController
                         Timber.e(e, "An exception occurred trying to get the latest cellular information");
                     }
                 }
-            }, 1_000);
+        }, 0);
 
             surveyService.updateLocationListener();
         }

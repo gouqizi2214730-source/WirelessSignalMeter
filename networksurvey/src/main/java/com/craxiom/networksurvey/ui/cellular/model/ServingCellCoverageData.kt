@@ -1,6 +1,6 @@
 package com.craxiom.networksurvey.ui.cellular.model
 
-import org.maplibre.android.geometry.LatLng
+import com.baidu.mapapi.model.LatLng
 
 /**
  * Data class representing coverage circle for a serving cell tower.

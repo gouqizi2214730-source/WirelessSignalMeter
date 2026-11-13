@@ -13,8 +13,9 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.shape.RoundedCornerShape
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -88,8 +89,7 @@ private fun LazyListScope.chartItems(
         Card(
             modifier = Modifier
                 .fillMaxWidth(),
-            shape = MaterialTheme.shapes.large,
-            colors = CardDefaults.elevatedCardColors()
+            colors = CardDefaults.defaultColors()
         ) {
             Row(
                 modifier = Modifier
@@ -99,7 +99,7 @@ private fun LazyListScope.chartItems(
                 horizontalArrangement = Arrangement.Start
             ) {
                 Text(
-                    text = "Scan Rate: ",
+                    text = "扫描速率：",
                     style = MaterialTheme.typography.labelMedium
                 )
                 Text(
@@ -215,7 +215,7 @@ private fun LazyListScope.chartItems(
 
 private fun LazyListScope.cardItem(content: @Composable () -> Unit) {
     item {
-        Card(shape = MaterialTheme.shapes.large, colors = CardDefaults.elevatedCardColors()) {
+        Card(colors = CardDefaults.defaultColors()) {
             Box(Modifier.padding(padding)) {
                 content()
             }

@@ -7,7 +7,7 @@ import android.util.LruCache
 import androidx.preference.PreferenceManager
 import com.craxiom.networksurvey.constants.NetworkSurveyConstants
 import com.craxiom.networksurvey.data.api.Api
-import com.craxiom.networksurvey.data.api.retrofit
+import com.craxiom.networksurvey.data.api.ouiRetrofit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -198,7 +198,7 @@ class OuiRepository(
 
         private fun build(app: Context): OuiRepository {
             val prefs = PreferenceManager.getDefaultSharedPreferences(app)
-            val api = retrofit.create(Api::class.java)
+            val api = ouiRetrofit.create(Api::class.java)
             val cache: OuiCache = OuiCacheRoomImpl(OuiCacheDatabase.getInstance(app).ouiCacheDao())
             val datasetManager = OuiDatasetManager(api, cache, prefs)
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

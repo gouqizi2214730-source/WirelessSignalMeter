@@ -12,8 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.shape.RoundedCornerShape
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -366,7 +367,7 @@ fun UmtsCalculators(viewModel: CalculatorViewModel) {
 
 @Composable
 private fun CardItem(content: @Composable () -> Unit) {
-    Card(shape = MaterialTheme.shapes.large, colors = CardDefaults.elevatedCardColors()) {
+    Card(colors = CardDefaults.defaultColors()) {
         Box(Modifier.padding(16.dp)) {
             content()
         }

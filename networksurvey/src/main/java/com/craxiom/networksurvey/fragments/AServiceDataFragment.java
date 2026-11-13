@@ -29,18 +29,17 @@ public abstract class AServiceDataFragment extends Fragment
      * The reference to the bound service. Will be null before and after the service is bound.
      */
     protected NetworkSurveyService service;
+    private Context boundContext;
 
     @Override
     public void onPause()
     {
         if (service != null) onSurveyServiceDisconnecting(service);
 
-        try
+        if (boundContext != null)
         {
-            requireContext().getApplicationContext().unbindService(surveyServiceConnection);
-        } catch (Throwable t)
-        {
-            Timber.e(t, "Could not unbind the service because it is not bound.");
+            boundContext.unbindService(surveyServiceConnection);
+            boundContext = null;
         }
 
         super.onPause();
@@ -83,6 +82,7 @@ public abstract class AServiceDataFragment extends Fragment
      */
     protected void startAndBindToService()
     {
+        if (boundContext != null) return;
         try
         {
             // Start the survey service
@@ -93,6 +93,7 @@ public abstract class AServiceDataFragment extends Fragment
             // Bind to the service
             final Intent serviceIntent = new Intent(applicationContext, NetworkSurveyService.class);
             final boolean bound = applicationContext.bindService(serviceIntent, surveyServiceConnection, Context.BIND_ABOVE_CLIENT);
+            if (bound) boundContext = applicationContext;
             Timber.i("NetworkSurveyService bound in a Fragment: %s", bound);
         } catch (IllegalStateException e)
         {
@@ -124,7 +125,7 @@ public abstract class AServiceDataFragment extends Fragment
         public void onServiceDisconnected(final ComponentName name)
         {
             Timber.e("%s service disconnected", name);
-            service = null;
+            if (service != null) onSurveyServiceDisconnecting(service);
         }
     }
 }

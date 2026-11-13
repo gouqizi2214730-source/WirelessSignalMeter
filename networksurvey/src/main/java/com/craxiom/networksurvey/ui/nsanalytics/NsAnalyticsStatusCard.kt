@@ -18,8 +18,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -73,8 +73,8 @@ fun NsAnalyticsStatusCard(
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        colors = CardDefaults.defaultColors(
+            color = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Column(
@@ -103,7 +103,7 @@ fun NsAnalyticsStatusCard(
                     Text(
                         text = if (isSurveyActive) "Survey in Progress" else "Survey Inactive",
                         style = MaterialTheme.typography.titleMedium,
-                        color = DashboardCardDefaults.TextPrimary,
+                        color = DashboardCardDefaults.textPrimary(),
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -127,13 +127,13 @@ fun NsAnalyticsStatusCard(
             ) {
                 Column {
                     Text(
-                        text = if (isSurveyActive) "Records Collected" else "Pending Records",
+                        text = if (isSurveyActive) "已采集记录" else "待上传记录",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.outline
                     )
                     if (!isSurveyActive && totalCount > 0) {
                         Text(
-                            text = "Ready to upload",
+                            text = "可上传",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.tertiary
                         )
@@ -142,7 +142,7 @@ fun NsAnalyticsStatusCard(
                 Text(
                     text = "$totalCount total",
                     style = MaterialTheme.typography.titleMedium,
-                    color = DashboardCardDefaults.TextPrimary,
+                    color = DashboardCardDefaults.textPrimary(),
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -165,17 +165,17 @@ fun NsAnalyticsStatusCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    NsAnalyticsProtocolCountLabel("Cell", cellularCount, Color(0xFFA855F7))
+                    NsAnalyticsProtocolCountLabel("蜂窝", cellularCount, Color(0xFFA855F7))
                     NsAnalyticsProtocolCountLabel("Wi-Fi", wifiCount, Color(0xFF06B6D4))
-                    NsAnalyticsProtocolCountLabel("BT", bluetoothCount, Color(0xFF3B82F6))
+                    NsAnalyticsProtocolCountLabel("蓝牙", bluetoothCount, Color(0xFF3B82F6))
                     NsAnalyticsProtocolCountLabel("GPS", gnssCount, Color(0xFF22C55E))
-                    NsAnalyticsProtocolCountLabel("Phone", phoneStateCount, Color(0xFFEAB308))
+                    NsAnalyticsProtocolCountLabel("电话", phoneStateCount, Color(0xFFEAB308))
                 }
             } else if (!isSurveyActive) {
                 // No records and survey inactive
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Start a survey to begin collecting data",
+                    text = "启动测量即可开始采集数据",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline,
                     textAlign = TextAlign.Center,
@@ -221,7 +221,7 @@ fun NsAnalyticsStatusCard(
                                 .size(18.dp)
                                 .padding(end = 4.dp)
                         )
-                        Text("Details")
+                        Text("详情")
                     }
                 }
             } else {

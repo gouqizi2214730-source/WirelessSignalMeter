@@ -3,19 +3,23 @@ package com.craxiom.networksurvey.ui.main.appdrawer
 import android.graphics.Canvas
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DrawerState
-import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -25,23 +29,26 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.createBitmap
 import com.craxiom.networksurvey.R
-import com.craxiom.networksurvey.ui.main.DrawerParams
-import com.craxiom.networksurvey.ui.main.NavDrawerOption
-import com.craxiom.networksurvey.ui.theme.NsTheme
 import kotlinx.coroutines.launch
 import timber.log.Timber
 
+/**
+ * KernelSU 风格现代侧边栏：
+ * 具有品牌头部、卡片化分组、圆角条目和清晰的排版
+ */
 @Composable
 fun <T : Enum<T>> AppDrawerContent(
     appVersion: String,
@@ -54,45 +61,54 @@ fun <T : Enum<T>> AppDrawerContent(
     var currentPick by remember { mutableStateOf(defaultPick) }
     val coroutineScope = rememberCoroutineScope()
 
-    ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.background) {
-        Surface(color = MaterialTheme.colorScheme.background) {
-            Column(
-                horizontalAlignment = Alignment.Start,
-                modifier = Modifier.padding(8.dp)
+    ModalDrawerSheet(
+        drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        drawerShape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp)
+    ) {
+        Column(
+            horizontalAlignment = Alignment.Start,
+            modifier = Modifier
+                .padding(horizontal = 12.dp, vertical = 16.dp)
+        ) {
+            // Header: App Icon & Name
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 10.dp)
             ) {
                 AppIcon()
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = stringResource(id = R.string.app_name),
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 19.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Wireless Signal Meter",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
 
-                // App Title
-                Text(
-                    text = stringResource(id = R.string.app_name),
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 16.dp)
-                )
+            Spacer(modifier = Modifier.height(10.dp))
 
-                // Menu Items
-                LazyColumn(
-                    modifier = Modifier.padding(horizontal = 0.dp),
-                    horizontalAlignment = Alignment.Start
-                ) {
-                    items(menuItems) { entry ->
-                        when (entry) {
-                            is DrawerEntry.Header -> SectionHeader(titleResId = entry.titleResId)
-                            is DrawerEntry.Item -> AppDrawerItem(item = entry.info) { navOption ->
-                                currentPick = navOption
-                                coroutineScope.launch {
-                                    drawerState.close()
-                                }
-                                onClick(navOption)
-                            }
-                        }
-                    }
-
-                    item {
-                        SectionHeader(titleResId = R.string.nav_section_help_resources)
-                    }
-
-                    items(externalLinks) { item ->
-                        AppDrawerItem(item = item) { navOption ->
+            // Menu Items List
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(vertical = 4.dp),
+                horizontalAlignment = Alignment.Start
+            ) {
+                items(menuItems) { entry ->
+                    when (entry) {
+                        is DrawerEntry.Header -> SectionHeader(titleResId = entry.titleResId)
+                        is DrawerEntry.Item -> AppDrawerItem(item = entry.info) { navOption ->
                             currentPick = navOption
                             coroutineScope.launch {
                                 drawerState.close()
@@ -102,13 +118,33 @@ fun <T : Enum<T>> AppDrawerContent(
                     }
                 }
 
-                Spacer(modifier = Modifier.weight(1f))
+                item {
+                    SectionHeader(titleResId = R.string.nav_section_help_resources)
+                }
 
-                // App Version at Bottom
+                items(externalLinks) { item ->
+                    AppDrawerItem(item = item) { navOption ->
+                        currentPick = navOption
+                        coroutineScope.launch {
+                            drawerState.close()
+                        }
+                        onClick(navOption)
+                    }
+                }
+            }
+
+            // App Version
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, bottom = 4.dp),
+                contentAlignment = Alignment.Center
+            ) {
                 Text(
-                    text = appVersion,
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                    style = MaterialTheme.typography.bodySmall
+                    text = "v$appVersion",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        color = MaterialTheme.colorScheme.outline
+                    )
                 )
             }
         }
@@ -117,21 +153,16 @@ fun <T : Enum<T>> AppDrawerContent(
 
 @Composable
 private fun SectionHeader(@StringRes titleResId: Int) {
-    Column(modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)) {
+    Column(modifier = Modifier.padding(top = 18.dp, bottom = 6.dp, start = 12.dp)) {
         Text(
             text = stringResource(id = titleResId),
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.5.sp
+            ),
             color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier
-                .padding(start = 16.dp)
-                .semantics { heading() }
-        )
-        HorizontalDivider(
-            thickness = 1.dp,
-            color = MaterialTheme.colorScheme.outlineVariant,
-            modifier = Modifier
-                .padding(top = 4.dp)
-                .width(200.dp)
+            modifier = Modifier.semantics { heading() }
         )
     }
 }
@@ -161,31 +192,18 @@ fun AppIcon() {
     }
 
     iconBitmap?.let { bitmap ->
-        Column(
-            modifier = Modifier.padding(8.dp),
-            horizontalAlignment = Alignment.Start
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+            contentAlignment = Alignment.Center
         ) {
             Image(
                 bitmap = bitmap,
-                contentDescription = "Network Survey App Icon",
-                modifier = Modifier.requiredSize(54.dp)
+                contentDescription = "App Icon",
+                modifier = Modifier.requiredSize(36.dp)
             )
         }
-    }
-}
-
-@Preview
-@Composable
-fun AppDrawerContentPreview() {
-    val context = LocalContext.current
-    NsTheme {
-        AppDrawerContent(
-            appVersion = "1.0",
-            drawerState = DrawerState(DrawerValue.Closed),
-            menuItems = DrawerParams.drawerButtons(context),
-            externalLinks = DrawerParams.externalDrawerLinks,
-            defaultPick = NavDrawerOption.CellularCalculators,
-            onClick = {}
-        )
     }
 }

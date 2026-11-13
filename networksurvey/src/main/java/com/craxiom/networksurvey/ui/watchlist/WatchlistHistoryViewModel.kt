@@ -170,14 +170,6 @@ data class WatchlistHistoryGroup(
     }
 }
 
-/** A network row on the history map sheet: the watched entry's id, name, located-sighting count, and color. */
-data class WatchlistMapLegendEntry(
-    val entryId: Long,
-    val name: String,
-    val count: Int,
-    val colorHex: String,
-)
-
 /**
  * UI state for the Watchlist history screen.
  */

@@ -8,6 +8,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
@@ -15,6 +16,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +36,8 @@ import com.craxiom.networksurvey.db.SpeedTestDbHelper
 import com.craxiom.networksurvey.model.SpeedTestRecord
 import com.craxiom.networksurvey.update.SpeedNode
 import com.craxiom.networksurvey.update.SpeedNodeRepository
+import com.craxiom.networksurvey.ui.dashboard.DashboardCardDefaults
+import com.craxiom.networksurvey.ui.dashboard.DashboardCardHeader
 import com.craxiom.networksurvey.util.AppLogger
 
 import java.io.BufferedReader
@@ -1761,40 +1766,77 @@ fun SpeedTestScreen(modifier: Modifier = Modifier) {
         contentPadding = PaddingValues(16.dp, 12.dp, 16.dp, 96.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // ================= 速度仪表主卡（v4.11 参照 LibreSpeed/Ookla：大数字 + 环形仪表 + 统计三列）=================
+        // ================= 速度仪表主卡（KernelSU StatusCard 风格：大色块 + 仪表盘）=================
         item {
+            val heroContainer = if (isRunning) MaterialTheme.colorScheme.secondaryContainer
+                else MaterialTheme.colorScheme.surfaceContainerLow
+            val heroOnContainer = if (isRunning) MaterialTheme.colorScheme.onSecondaryContainer
+                else MaterialTheme.colorScheme.onSurface
             Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(2.dp),
+                colors = CardDefaults.defaultColors(color = heroContainer),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    // 标题行（KernelSU 风格圆形图标徽章 + 标题）
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_speed_test),
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = if (isRunning) "测速进行中" else "网络测速",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 0.2.sp
+                            ),
+                            color = heroOnContainer,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (loopInfo.isNotEmpty()) {
+                            Text(loopInfo, style = MaterialTheme.typography.labelSmall, color = heroOnContainer.copy(alpha = 0.6f))
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
                     // 环形仪表 + 中央大数字速度（Ookla 风格表盘）
                     val curSpeed = speedSamples.lastOrNull()?.second ?: 0.0
                     val maxSpeed = speedSamples.maxOfOrNull { it.second } ?: 0.0
                     val ringProgress = if (maxSpeed > 0) (curSpeed / (maxSpeed * 1.15)).toFloat().coerceIn(0.02f, 1f) else 0f
-                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(196.dp)) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(180.dp)) {
                         CircularProgressIndicator(
                             progress = { if (isRunning || resultVisible) ringProgress else 0f },
                             modifier = Modifier.fillMaxSize(),
-                            strokeWidth = 12.dp,
+                            strokeWidth = 10.dp,
                             color = MaterialTheme.colorScheme.primary,
-                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                            trackColor = heroOnContainer.copy(alpha = 0.1f)
                         )
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(if (resultVisible) speedLabel else "测速", style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(if (resultVisible) speedLabel else "就绪", style = MaterialTheme.typography.labelMedium,
+                                color = heroOnContainer.copy(alpha = 0.6f))
                             val sparts = if (resultVisible) speedValText.split(" ") else listOf("--")
                             val sNum = sparts.getOrElse(0) { "" }
                             Text(if (sNum.isEmpty()) "--" else sNum,
                                 style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.ExtraBold),
-                                color = if (isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                                color = if (isRunning) MaterialTheme.colorScheme.primary else heroOnContainer)
                             Text(sparts.getOrElse(1) { "" }, style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                color = heroOnContainer.copy(alpha = 0.6f))
                         }
                     }
-                    // 统计三列：平均 / 峰值 / 流量（Ookla 风格）
+                    // 统计三列：平均 / 峰值 / 流量
                     Spacer(Modifier.height(10.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                         val avg = if (speedSamples.size >= 2) speedSamples.map { it.second }.average().toLong() else 0L
@@ -1802,24 +1844,20 @@ fun SpeedTestScreen(modifier: Modifier = Modifier) {
                         StatCell("峰值", if (maxSpeed > 0) formatSpeed(maxSpeed.toLong()) else "--")
                         StatCell("流量", if (resultVisible) trafficText else "--")
                     }
-                    // 实时速率折线图（LibreSpeed 风格：当前速率可视化）
+                    // 实时速率折线图
                     if (speedSamples.size >= 2) {
                         Spacer(Modifier.height(10.dp))
                         SpeedChart(speedSamples)
                     }
-                    // 状态 + 循环进度
+                    // 状态行
                     Spacer(Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(status, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f), maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                        if (loopInfo.isNotEmpty()) Text(loopInfo, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    // 大号开始/停止按钮（运行时变红）
+                    Text(status, style = MaterialTheme.typography.labelSmall, color = heroOnContainer.copy(alpha = 0.6f),
+                        modifier = Modifier.fillMaxWidth(), maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    // 大号开始/停止按钮
                     Spacer(Modifier.height(12.dp))
                     Button(
                         onClick = { if (isRunning) stopTest() else startTest() },
-                        shape = RoundedCornerShape(14.dp),
                         colors = if (isRunning) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                             else ButtonDefaults.buttonColors(),
                         modifier = Modifier.fillMaxWidth().height(52.dp)
@@ -1827,7 +1865,6 @@ fun SpeedTestScreen(modifier: Modifier = Modifier) {
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(
                         onClick = { testServerConnection() },
-                        shape = RoundedCornerShape(14.dp),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary),
                         modifier = Modifier.fillMaxWidth().height(44.dp)
@@ -1839,21 +1876,20 @@ fun SpeedTestScreen(modifier: Modifier = Modifier) {
         // ================= 服务器配置卡 =================
         item {
             Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(1.dp),
+                colors = CardDefaults.defaultColors(color = DashboardCardDefaults.cardContainerColor()),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(Modifier.fillMaxWidth().padding(14.dp)) {
-                    // 标题 + 保存/加载/预设（v4.08：预设节点移到顶部）
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("服务器", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                            modifier = Modifier.weight(1f))
-                        SmallChip("保存") { saveServer() }
-                        SmallChip("加载") { loadServer() }
-                        SmallChip("预设节点") { showPresetDialogState = true; refreshNodesFromServer() }
-                    }
-                    Spacer(Modifier.height(8.dp))
+                Column(Modifier.fillMaxWidth()) {
+                    DashboardCardHeader(
+                        icon = R.drawable.ic_cloud_connection,
+                        title = "服务器配置",
+                        action = {
+                            SmallChip("保存") { saveServer() }
+                            SmallChip("加载") { loadServer() }
+                            SmallChip("预设节点") { showPresetDialogState = true; refreshNodesFromServer() }
+                        }
+                    )
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp).padding(bottom = 14.dp)) {
 
                     // 协议 SegmentedButton（v4.11：RadioButton → 分段选择器，参照 Material3 规范）
                     Text("协议", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1893,7 +1929,7 @@ fun SpeedTestScreen(modifier: Modifier = Modifier) {
                                 value = host, onValueChange = { host = it },
                                 placeholder = { Text("https://example.com/path/file.bin", fontSize = 12.sp) },
                                 singleLine = true, modifier = Modifier.weight(1f).height(50.dp),
-                                shape = RoundedCornerShape(10.dp), textStyle = MaterialTheme.typography.bodySmall
+                                shape = RoundedCornerShape(12.dp), textStyle = MaterialTheme.typography.bodySmall
                             )
                         }
                     }
@@ -1922,7 +1958,7 @@ fun SpeedTestScreen(modifier: Modifier = Modifier) {
                                 },
                                 placeholder = { Text(if (protocol == "FTP") "ftp://192.168.1.1:21" else "https://example.com:443", fontSize = 12.sp) },
                                 singleLine = true, modifier = Modifier.weight(1f).height(50.dp),
-                                shape = RoundedCornerShape(10.dp), textStyle = MaterialTheme.typography.bodySmall
+                                shape = RoundedCornerShape(12.dp), textStyle = MaterialTheme.typography.bodySmall
                             )
                         }
                         // v3.99：下载目录（下载测速的文件路径/目录，浏览选择回填；与 URL 分离）
@@ -1933,7 +1969,7 @@ fun SpeedTestScreen(modifier: Modifier = Modifier) {
                                 value = path, onValueChange = { path = it; pickedFile = false },
                                 placeholder = { Text("如 /dav/音乐/01.flac 或 /dav/", fontSize = 12.sp) },
                                 singleLine = true, modifier = Modifier.weight(1f).height(50.dp),
-                                shape = RoundedCornerShape(10.dp), textStyle = MaterialTheme.typography.bodySmall
+                                shape = RoundedCornerShape(12.dp), textStyle = MaterialTheme.typography.bodySmall
                             )
                             Spacer(Modifier.width(6.dp))
                             FilledTonalButton(onClick = { browseFiles() }, contentPadding = PaddingValues(horizontal = 12.dp)) {
@@ -1949,7 +1985,7 @@ fun SpeedTestScreen(modifier: Modifier = Modifier) {
                                     value = port, onValueChange = { port = it; syncFullUrl(false) },
                                     placeholder = { Text("21", fontSize = 12.sp) },
                                     singleLine = true, modifier = Modifier.weight(1f).height(50.dp),
-                                    shape = RoundedCornerShape(10.dp), textStyle = MaterialTheme.typography.bodySmall,
+                                    shape = RoundedCornerShape(12.dp), textStyle = MaterialTheme.typography.bodySmall,
                                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
                                 )
                                 Spacer(Modifier.width(6.dp))
@@ -1964,7 +2000,7 @@ fun SpeedTestScreen(modifier: Modifier = Modifier) {
                                 value = upDir, onValueChange = { upDir = it },
                                 placeholder = { Text("留空=与下载同目录，如 /dav/upload/", fontSize = 12.sp) },
                                 singleLine = true, modifier = Modifier.weight(1f).height(50.dp),
-                                shape = RoundedCornerShape(10.dp), textStyle = MaterialTheme.typography.bodySmall
+                                shape = RoundedCornerShape(12.dp), textStyle = MaterialTheme.typography.bodySmall
                             )
                             Spacer(Modifier.width(6.dp))
                             FilledTonalButton(onClick = { browseFiles(true) }, contentPadding = PaddingValues(horizontal = 12.dp)) {
@@ -1980,7 +2016,7 @@ fun SpeedTestScreen(modifier: Modifier = Modifier) {
                             FieldLabel("用户")
                             OutlinedTextField(value = username, onValueChange = { username = it },
                                 placeholder = { Text("（选填）", fontSize = 12.sp) }, singleLine = true,
-                                modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(10.dp), textStyle = MaterialTheme.typography.bodySmall)
+                                modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(12.dp), textStyle = MaterialTheme.typography.bodySmall)
                         }
                         Spacer(Modifier.height(6.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1988,8 +2024,9 @@ fun SpeedTestScreen(modifier: Modifier = Modifier) {
                             OutlinedTextField(value = password, onValueChange = { password = it },
                                 placeholder = { Text("（选填）", fontSize = 12.sp) }, singleLine = true,
                                 visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                                shape = RoundedCornerShape(10.dp), modifier = Modifier.weight(1f).height(50.dp), textStyle = MaterialTheme.typography.bodySmall)
+                                shape = RoundedCornerShape(12.dp), modifier = Modifier.weight(1f).height(50.dp), textStyle = MaterialTheme.typography.bodySmall)
                         }
+                    }
                     }
                 }
             }
@@ -1998,14 +2035,17 @@ fun SpeedTestScreen(modifier: Modifier = Modifier) {
         // ================= 测速参数卡 =================
         item {
             Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(1.dp),
+                colors = CardDefaults.defaultColors(color = DashboardCardDefaults.cardContainerColor()),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                Column(Modifier.fillMaxWidth()) {
+                    DashboardCardHeader(
+                        icon = R.drawable.ic_settings,
+                        title = "测速参数"
+                    )
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp).padding(bottom = 14.dp)) {
                     // 测速模式（v4.11：RadioButton → SegmentedButton 下载/上传）
-                    Text("测速模式", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold))
+                    Text("测速模式", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(4.dp))
                     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                         SegmentedButton(
@@ -2029,7 +2069,7 @@ fun SpeedTestScreen(modifier: Modifier = Modifier) {
                                 value = uploadSizeMb, onValueChange = { uploadSizeMb = it },
                                 placeholder = { Text("10", fontSize = 12.sp) },
                                 singleLine = true, modifier = Modifier.width(80.dp).height(48.dp),
-                                shape = RoundedCornerShape(10.dp), textStyle = MaterialTheme.typography.bodyMedium,
+                                shape = RoundedCornerShape(12.dp), textStyle = MaterialTheme.typography.bodyMedium,
                                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
                             )
                             Spacer(Modifier.width(4.dp))
@@ -2046,7 +2086,7 @@ fun SpeedTestScreen(modifier: Modifier = Modifier) {
                     // 持续测试（非 HTTP 显示 次数/间隔；线程常驻）
                     if (!isHttp) {
                         Spacer(Modifier.height(4.dp))
-                        Text("持续测试", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold))
+                        Text("持续测试", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Spacer(Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.Top) {
@@ -2056,7 +2096,7 @@ fun SpeedTestScreen(modifier: Modifier = Modifier) {
                             Spacer(Modifier.height(4.dp))
                             OutlinedTextField(value = threadCount, onValueChange = { threadCount = it },
                                 singleLine = true, modifier = Modifier.width(70.dp).height(48.dp),
-                                shape = RoundedCornerShape(10.dp), textStyle = MaterialTheme.typography.bodyMedium)
+                                shape = RoundedCornerShape(12.dp), textStyle = MaterialTheme.typography.bodyMedium)
                             Spacer(Modifier.height(2.dp))
                             Text("(1-64)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                         }
@@ -2067,7 +2107,7 @@ fun SpeedTestScreen(modifier: Modifier = Modifier) {
                                 Spacer(Modifier.height(4.dp))
                                 OutlinedTextField(value = loopCount, onValueChange = { loopCount = it },
                                     singleLine = true, modifier = Modifier.width(60.dp).height(48.dp),
-                                    shape = RoundedCornerShape(10.dp), textStyle = MaterialTheme.typography.bodyMedium)
+                                    shape = RoundedCornerShape(12.dp), textStyle = MaterialTheme.typography.bodyMedium)
                             }
                             Spacer(Modifier.width(14.dp))
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -2075,7 +2115,7 @@ fun SpeedTestScreen(modifier: Modifier = Modifier) {
                                 Spacer(Modifier.height(4.dp))
                                 OutlinedTextField(value = loopInterval, onValueChange = { loopInterval = it },
                                     singleLine = true, modifier = Modifier.width(60.dp).height(48.dp),
-                                    shape = RoundedCornerShape(10.dp), textStyle = MaterialTheme.typography.bodyMedium)
+                                    shape = RoundedCornerShape(12.dp), textStyle = MaterialTheme.typography.bodyMedium)
                                 Spacer(Modifier.height(2.dp))
                                 Text("秒", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                             }
@@ -2089,13 +2129,20 @@ fun SpeedTestScreen(modifier: Modifier = Modifier) {
                             color = MaterialTheme.colorScheme.outline,
                             maxLines = 2)
                     }
+                    }
                 }
             }
         }
 
         // ---- 最近测速记录 ----
         item {
-            Text("最近测速记录", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold))
+            Text(
+                text = "最近测速记录",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp)
+            )
         }
         item {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
@@ -2106,9 +2153,7 @@ fun SpeedTestScreen(modifier: Modifier = Modifier) {
         if (records.isEmpty()) {
             item {
                 Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(1.dp), modifier = Modifier.fillMaxWidth()
+                    colors = CardDefaults.defaultColors(color = DashboardCardDefaults.cardContainerColor()),
                 ) {
                     Text("暂无测速记录", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(20.dp))
                 }
@@ -2327,7 +2372,7 @@ private fun SpeedChart(samples: List<Triple<Long, Double, Boolean>>) {
         Modifier
             .fillMaxWidth()
             .height(160.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
     ) {
         if (samples.size < 2) return@Canvas
@@ -2403,9 +2448,7 @@ private fun portHint(protocol: String): String = when (protocol) { "FTP" -> "21"
 @Composable
 private fun SpeedRecordRow(r: SpeedTestRecord) {
     Card(
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(1.dp),
+        colors = CardDefaults.defaultColors(color = DashboardCardDefaults.cardContainerColor()),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {

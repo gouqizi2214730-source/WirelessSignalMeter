@@ -44,8 +44,8 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -92,8 +92,9 @@ import com.craxiom.networksurvey.util.NsUtils
 import com.craxiom.networksurvey.util.PreferenceUtils.gnssFilter
 import com.craxiom.networksurvey.gpstest.util.SatelliteUtil.isVerticalAccuracySupported
 import com.craxiom.networksurvey.gpstest.util.UIUtils
+import com.craxiom.networksurvey.ui.dashboard.DashboardCardDefaults
+import com.craxiom.networksurvey.ui.dashboard.DashboardCardHeader
 import java.text.SimpleDateFormat
-
 @Preview
 @Composable
 fun LocationCardPreview(
@@ -144,24 +145,31 @@ fun LocationCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(5.dp)
+            .padding(horizontal = DashboardCardDefaults.margin, vertical = 8.dp)
             .clickable {
                 copyToClipboard(context, location)
             },
-        elevation = CardDefaults.cardElevation(),
-        colors = CardDefaults.elevatedCardColors()
+        colors = CardDefaults.defaultColors(
+            color = DashboardCardDefaults.cardContainerColor(),
+        )
     ) {
-        Box {
-            Row(
-                modifier = Modifier
-                    .horizontalScroll(rememberScrollState())
-            ) {
-                LabelColumn1()
-                ValueColumn1(context, location, altitudeMsl, dop)
-                LabelColumn2(location)
-                ValueColumn2(location, ttff, dop, satelliteMetadata)
+        Column {
+            DashboardCardHeader(
+                icon = R.drawable.ic_my_location,
+                title = "位置信息"
+            )
+            Box {
+                Row(
+                    modifier = Modifier
+                        .horizontalScroll(rememberScrollState())
+                ) {
+                    LabelColumn1()
+                    ValueColumn1(context, location, altitudeMsl, dop)
+                    LabelColumn2(location)
+                    ValueColumn2(location, ttff, dop, satelliteMetadata)
+                }
+                LockIcon(fixState)
             }
-            LockIcon(fixState)
         }
     }
 }
@@ -394,6 +402,7 @@ fun LocationLabel(@StringRes id: Int) {
             fontWeight = FontWeight.Bold,
             fontSize = 13.sp,
             letterSpacing = letterSpacing(),
+            color = DashboardCardDefaults.textSecondary()
         )
     } else {
         Text(
@@ -401,6 +410,7 @@ fun LocationLabel(@StringRes id: Int) {
             modifier = Modifier.padding(start = 4.dp, end = 4.dp),
             fontWeight = FontWeight.Bold,
             fontSize = 13.sp,
+            color = DashboardCardDefaults.textSecondary()
         )
     }
 }
@@ -413,14 +423,16 @@ fun LocationValue(text: String, fontStyle: FontStyle = FontStyle.Normal) {
             modifier = Modifier.padding(end = 2.dp),
             fontSize = 13.sp,
             letterSpacing = letterSpacing(),
-            fontStyle = fontStyle
+            fontStyle = fontStyle,
+            color = DashboardCardDefaults.textPrimary()
         )
     } else {
         Text(
             text = text,
             modifier = Modifier.padding(end = 4.dp),
             fontSize = 13.sp,
-            fontStyle = fontStyle
+            fontStyle = fontStyle,
+            color = DashboardCardDefaults.textPrimary()
         )
     }
 }
@@ -511,7 +523,7 @@ fun LockIcon(fixState: FixState) {
         Icon(
             painter = painterResource(id = R.drawable.ic_baseline_lock_24),
             contentDescription = stringResource(id = R.string.lock),
-            tint = MaterialTheme.colorScheme.onBackground,
+            tint = DashboardCardDefaults.textPrimary(),
             modifier = Modifier.padding(6.dp)
         )
     }

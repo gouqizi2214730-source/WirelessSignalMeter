@@ -7,8 +7,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.shape.RoundedCornerShape
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,8 +31,7 @@ internal fun DetailsCardFrame(
 ) {
     Card(
         modifier = modifier,
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.elevatedCardColors(),
+        colors = CardDefaults.defaultColors(),
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -66,6 +66,28 @@ internal fun CardHeader(
             modifier = Modifier.weight(1f),
         )
         trailingContent()
+    }
+}
+
+/**
+ * KernelSU 3.2.5 风格卡片外框，供 Wi-Fi 列表行使用。
+ * 24dp 大圆角，与蓝牙设备卡片和设置卡片统一。
+ */
+@Composable
+fun WifiRowChrome(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.defaultColors(
+            color = MaterialTheme.colorScheme.surfaceContainer,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            content = content,
+        )
     }
 }
 

@@ -2,275 +2,255 @@ package com.craxiom.networksurvey.ui.engparam
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.Clear
+import androidx.compose.material.icons.rounded.FileUpload
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.craxiom.networksurvey.R
-import com.craxiom.networksurvey.db.EngineeringParamDbHelper
+import com.craxiom.networksurvey.domain.CsvParsingEngine
+import com.craxiom.networksurvey.domain.ImportFieldSpec
 import com.craxiom.networksurvey.model.EngineeringParam
-import com.craxiom.networksurvey.util.CsvParamParser
+import com.craxiom.networksurvey.ui.cellular.baidumap.BaiduMapArea
+import com.craxiom.networksurvey.ui.dashboard.DashboardCardDefaults
+import com.craxiom.networksurvey.ui.main.appbar.TitleBar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import androidx.compose.runtime.LaunchedEffect
-import java.io.InputStream
 
-/**
- * 工参管理页：导入 CSV 工参、查看列表、清空。
- * 数据层来自恢复工程移植（EngineeringParamDbHelper + CsvParamParser，本地 SQLite）。
- */
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun EngineeringParamsScreen(onNavigateUp: () -> Unit) {
     val context = LocalContext.current
-    val db = remember { EngineeringParamDbHelper.getInstance(context) }
+    val vm: EngineeringParamViewModel = viewModel(factory = EngineeringParamViewModelFactory(context))
+    val state by vm.uiState.collectAsStateWithLifecycle()
+    LaunchedEffect(vm) { vm.load() }
 
-    var params by remember { mutableStateOf(db.getAll()) }
-    var toastMsg by remember { mutableStateOf<String?>(null) }
-    var showClearConfirm by remember { mutableStateOf(false) }
-    var importing by remember { mutableStateOf(false) }
-    var reloadTick by remember { mutableIntStateOf(0) }
-
-    // 导入协程：OpenDocument 返回 uri 后触发
-    var pendingImportUri by remember { mutableStateOf<android.net.Uri?>(null) }
-
-    val importLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        pendingImportUri = uri
-    }
-
-    LaunchedEffect(pendingImportUri) {
-        val uri = pendingImportUri ?: return@LaunchedEffect
-        pendingImportUri = null
-        importing = true
-        try {
-            val result = withContext(Dispatchers.IO) {
-                context.contentResolver.openInputStream(uri)?.use { stream ->
-                    val r = CsvParamParser.parse(stream)
-                    if (r.params.isNotEmpty()) db.insertAll(r.params)
-                    r
-                }
+    var query by rememberSaveable { mutableStateOf("") }
+    var selected by remember { mutableStateOf<EngineeringParam?>(null) }
+    val search = query.trim()
+    val params = state.params
+    val filtered by produceState(emptyList<EngineeringParam>(), params, search) {
+        value = if (search.isEmpty()) params else withContext(Dispatchers.Default) {
+            params.filter {
+                it.cellName.orEmpty().contains(search, ignoreCase = true) ||
+                    it.siteName.orEmpty().contains(search, ignoreCase = true) ||
+                    search == it.ci.toString() || search == it.gnbId.toString() ||
+                    search == it.pci.toString() || search == it.earfcn.toString()
             }
-            if (result != null) {
-                val successMsg = context.getString(R.string.eng_param_import_success, result.params.size)
-                val msg = if (result.skippedLines > 0) {
-                    "$successMsg；" + context.getString(R.string.eng_param_import_skipped, result.skippedLines)
-                } else {
-                    successMsg
-                }
-                toastMsg = msg
-            } else {
-                toastMsg = context.getString(R.string.eng_param_import_failed, "无法读取文件")
-            }
-        } catch (e: Exception) {
-            toastMsg = context.getString(R.string.eng_param_import_failed, e.message ?: "解析错误")
-        } finally {
-            importing = false
-            reloadTick++
         }
     }
-
-    LaunchedEffect(reloadTick) {
-        params = db.getAll()
+    val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {
+        if (it != null) vm.onFileSelected(it)
     }
-
-    // Toast 简单展示
-    toastMsg?.let { msg ->
-        LaunchedEffect(msg) {
-            kotlinx.coroutines.delay(3000)
-            toastMsg = null
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(state.message) {
+        state.message?.let {
+            snackbar.showSnackbar(it, withDismissAction = true)
+            vm.clearMessage()
         }
     }
-
+    val colors = MaterialTheme.colorScheme
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.eng_param_title)) },
-                navigationIcon = {
-                    TextButton(onClick = onNavigateUp) { Text("←") }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
-            )
-        }
+        topBar = { TitleBar(stringResource(R.string.eng_param_title), onBackClick = onNavigateUp) },
+        snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // 操作栏
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Button(
-                    onClick = { importLauncher.launch(arrayOf("text/*", "text/comma-separated-values", "application/octet-stream")) },
-                    modifier = Modifier.weight(1f),
-                    enabled = !importing
+            item("summary") {
+                Surface(
+                    shape = DashboardCardDefaults.shape,
+                    color = colors.primaryContainer,
+                    contentColor = colors.onPrimaryContainer,
                 ) {
-                    Text(if (importing) "导入中…" else stringResource(R.string.eng_param_import))
-                }
-                OutlinedButton(
-                    onClick = { showClearConfirm = true },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(stringResource(R.string.eng_param_clear))
+                    Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("本地工参", style = MaterialTheme.typography.titleMedium)
+                        Text("${params.size} 个小区", style = MaterialTheme.typography.headlineMedium)
+                        Text("导入含 11 个必填字段的 4G / 5G CSV", style = MaterialTheme.typography.bodySmall)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Button(
+                                onClick = { importer.launch(arrayOf("text/*", "application/csv", "application/octet-stream")) },
+                                enabled = !state.importing,
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                            ) {
+                                Icon(Icons.Rounded.FileUpload, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(if (state.importing) "正在处理" else "导入 CSV")
+                            }
+                            TextButton(
+                                onClick = vm::onRequestClear,
+                                enabled = params.isNotEmpty() && !state.importing,
+                            ) { Text("清空工参", color = if (params.isNotEmpty() && !state.importing) colors.error else Color.Unspecified) }
+                        }
+                        if (state.importing) LinearProgressIndicator(Modifier.fillMaxWidth())
+                    }
                 }
             }
-
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = stringResource(R.string.eng_param_count, params.size),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            toastMsg?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(vertical = 4.dp)
-                )
-            }
-
-            Spacer(Modifier.height(4.dp))
-
-            if (params.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = stringResource(R.string.eng_param_empty),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 14.sp
+            if (params.isNotEmpty() || query.isNotEmpty()) {
+                item("search") {
+                    OutlinedTextField(
+                        query, { query = it }, Modifier.fillMaxWidth(),
+                        label = { Text("搜索小区、站名、ID、PCI 或频点") },
+                        singleLine = true, shape = RoundedCornerShape(18.dp),
+                        leadingIcon = { Icon(Icons.Rounded.Search, null) },
+                        trailingIcon = if (query.isEmpty()) null else {
+                            { IconButton(onClick = { query = "" }) { Icon(Icons.Rounded.Clear, "清空搜索") } }
+                        },
                     )
                 }
-            } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                item("results") {
+                    Text(
+                        if (search.isEmpty()) "小区列表" else "匹配 ${filtered.size} 个小区",
+                        Modifier.padding(start = 4.dp, top = 6.dp, bottom = 2.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = colors.onSurfaceVariant,
+                    )
+                }
+            }
+            if (filtered.isEmpty()) {
+                item("empty") {
+                    Box(Modifier.fillMaxWidth().padding(vertical = 32.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            if (search.isEmpty()) "导入 CSV 后可在这里查看小区" else "没有匹配的小区",
+                            color = colors.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            items(filtered, key = { it.id }) { param ->
+                Surface(
+                    onClick = { selected = param },
+                    shape = RoundedCornerShape(18.dp),
+                    color = DashboardCardDefaults.cardContainerColor(),
                 ) {
-                    items(params, key = { it.id }) { p ->
-                        EngineeringParamRow(p)
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Surface(shape = RoundedCornerShape(11.dp), color = colors.secondaryContainer) {
+                            Text(BaiduMapArea.netTypeLabel(param.netType), Modifier.padding(9.dp), style = MaterialTheme.typography.labelLarge)
+                        }
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(param.cellName.orEmpty().ifBlank { param.siteName.orEmpty().ifBlank { "小区 ${param.sectorId}" } },
+                                style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text("基站 ${param.gnbId}  ·  PCI ${param.pci}  ·  频点 ${param.earfcn}",
+                                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                        }
+                        Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = colors.onSurfaceVariant)
                     }
                 }
             }
         }
     }
 
-    if (showClearConfirm) {
-        AlertDialog(
-            onDismissRequest = { showClearConfirm = false },
-            title = { Text(stringResource(R.string.eng_param_clear)) },
-            text = { Text(stringResource(R.string.eng_param_clear_confirm)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    db.clearAll()
-                    showClearConfirm = false
-                    reloadTick++
-                    toastMsg = context.getString(R.string.eng_param_import_success, 0)
-                }) {
-                    Text("确定")
-                }
+    selected?.let { param ->
+        EngineeringSectorSheet(
+            param,
+            onDismiss = { selected = null },
+            onDelete = {
+                selected = null
+                vm.onRequestDelete(param.id)
             },
-            dismissButton = {
-                TextButton(onClick = { showClearConfirm = false }) { Text("取消") }
-            }
+        )
+    }
+    if (state.showMappingDialog) {
+        ColumnMappingDialog(state.headers, state.samples, vm::onConfirmMapping, vm::onDismissMapping)
+    }
+    if (state.showClearConfirm) {
+        AlertDialog(
+            onDismissRequest = vm::onDismissClear,
+            title = { Text("清空全部工参？") },
+            text = { Text("将删除已导入的 ${params.size} 个小区。") },
+            dismissButton = { TextButton(onClick = vm::onDismissClear) { Text("取消") } },
+            confirmButton = { TextButton(onClick = vm::onConfirmClear) { Text("清空", color = colors.error) } },
+        )
+    }
+    if (state.pendingDeleteId >= 0) {
+        val name = params.firstOrNull { it.id == state.pendingDeleteId }?.cellName.orEmpty()
+        AlertDialog(
+            onDismissRequest = vm::onDismissDelete,
+            title = { Text("删除这条工参？") },
+            text = { Text(name.ifBlank { "将从本地工参中删除该小区。" }) },
+            dismissButton = { TextButton(onClick = vm::onDismissDelete) { Text("取消") } },
+            confirmButton = { TextButton(onClick = vm::onConfirmDelete) { Text("删除", color = colors.error) } },
         )
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EngineeringParamRow(p: EngineeringParam) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
-        )
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = p.cellName.ifBlank { p.siteName.ifBlank { "-" } },
-                    style = MaterialTheme.typography.titleSmall
-                )
-                Text(
-                    text = p.netType.ifBlank { p.band.ifBlank { "" } },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-            Spacer(Modifier.height(4.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                ParamField(stringResource(R.string.eng_param_ci), p.ci.toString())
-                ParamField(stringResource(R.string.eng_param_earfcn), p.earfcn.toString())
-                ParamField(stringResource(R.string.eng_param_pci), p.pci.toString())
-                if (p.lat != 0.0 || p.lon != 0.0) {
-                    ParamField(
-                        "位置",
-                        "%.5f,%.5f".format(p.lat, p.lon)
-                    )
+private fun ColumnMappingDialog(
+    headers: List<String>,
+    samples: List<String>,
+    onConfirm: (Map<Int, Int>) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val fields = ImportFieldSpec.FIELDS
+    var selection by remember(headers) { mutableStateOf(CsvParsingEngine.autoMap(headers).filterKeys { col -> fields.any { it.col == col } }) }
+    val missing = ImportFieldSpec.missingRequired(selection)
+    val colors = MaterialTheme.colorScheme
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("核对 CSV 列", style = MaterialTheme.typography.headlineSmall)
+            Text("${fields.size - missing.size} / ${fields.size} 项已匹配 · 点字段可更换对应列",
+                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+            LazyColumn(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(fields, key = { it.col }) { field ->
+                    var open by remember { mutableStateOf(false) }
+                    val selected = selection[field.col]
+                    Box {
+                        Surface(onClick = { open = true }, shape = RoundedCornerShape(14.dp), color = colors.surfaceContainerHigh) {
+                            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp)) {
+                                Text(field.label, style = MaterialTheme.typography.labelMedium)
+                                val header = selected?.let(headers::get)
+                                val sample = selected?.let(samples::getOrNull).orEmpty()
+                                Text(if (header == null) "选择列" else if (sample.isBlank()) header else "$header · $sample",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                    color = if (selected == null) colors.primary else colors.onSurfaceVariant)
+                            }
+                        }
+                        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                            headers.forEachIndexed { index, header ->
+                                val owner = fields.firstOrNull { selection[it.col] == index && it.col != field.col }
+                                DropdownMenuItem(
+                                    text = { Text("${index + 1}. ${header.ifBlank { "未命名列" }}" + (owner?.let { " · ${it.label}" } ?: "")) },
+                                    onClick = {
+                                        selection = selection.filterValues { it != index } + (field.col to index)
+                                        open = false
+                                    },
+                                )
+                            }
+                        }
+                    }
                 }
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = onDismiss) { Text("取消") }
+                Button(onClick = { onConfirm(selection) }, enabled = missing.isEmpty()) { Text("导入工参") }
             }
         }
-    }
-}
-
-@Composable
-private fun ParamField(label: String, value: String) {
-    Column {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodySmall
-        )
     }
 }
