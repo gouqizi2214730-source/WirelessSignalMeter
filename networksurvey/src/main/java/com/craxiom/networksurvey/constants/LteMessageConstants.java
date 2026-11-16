@@ -40,28 +40,22 @@ public class LteMessageConstants extends CellularMessageConstants
      */
     public static String getLteBandwidth(LteBandwidth lteBandwidth)
     {
-        switch (lteBandwidth)
+        final int khz = getLteBandwidthKhz(lteBandwidth);
+        if (khz == 0) return "";
+        return khz == 1_400 ? "1.4" : String.valueOf(khz / 1_000);
+    }
+
+    public static int getLteBandwidthKhz(LteBandwidth lteBandwidth)
+    {
+        return switch (lteBandwidth)
         {
-            case MHZ_1_4:
-                return "1.4";
-
-            case MHZ_3:
-                return "3";
-
-            case MHZ_5:
-                return "5";
-
-            case MHZ_10:
-                return "10";
-
-            case MHZ_15:
-                return "15";
-
-            case MHZ_20:
-                return "20";
-
-            default:
-                return "";
-        }
+            case MHZ_1_4 -> 1_400;
+            case MHZ_3 -> 3_000;
+            case MHZ_5 -> 5_000;
+            case MHZ_10 -> 10_000;
+            case MHZ_15 -> 15_000;
+            case MHZ_20 -> 20_000;
+            default -> 0;
+        };
     }
 }

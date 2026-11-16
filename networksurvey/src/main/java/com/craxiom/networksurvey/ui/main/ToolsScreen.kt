@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.GpsFixed
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.Sensors
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +48,7 @@ internal fun ToolsScreen(
     onOpenGnss: () -> Unit,
     onOpenSpeedTest: () -> Unit,
     onOpenWifi: () -> Unit,
+    onOpenSignaling: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
     val light = colors.surface.luminance() > 0.5f
@@ -79,6 +81,12 @@ internal fun ToolsScreen(
                 ToolCard(
                     R.string.tool_wifi_title, R.string.tool_wifi_description,
                     Icons.Rounded.Wifi, if (light) Color(0xFF007775) else Color(0xFF80D7D1), onOpenWifi,
+                )
+            }
+            item {
+                ToolCard(
+                    R.string.tool_signaling_title, R.string.tool_signaling_description,
+                    Icons.Rounded.Sensors, colors.tertiary, onOpenSignaling,
                 )
             }
         }

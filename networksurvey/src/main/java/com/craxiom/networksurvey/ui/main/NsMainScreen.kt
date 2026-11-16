@@ -8,6 +8,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -24,6 +26,7 @@ import com.craxiom.networksurvey.fragments.BLUETOOTH_DATA_KEY
 import com.craxiom.networksurvey.fragments.model.MqttConnectionSettings
 import com.craxiom.networksurvey.model.WifiNetwork
 import com.craxiom.networksurvey.ui.cellular.model.ServingCellInfo
+import com.craxiom.networksurvey.ui.rootdiag.RootDiagViewModel
 import com.craxiom.networksurvey.ui.theme.NsTheme
 import com.craxiom.networksurvey.util.BatteryOptimizationHelper
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -39,6 +42,13 @@ fun MainCompose(
     val context = LocalContext.current
 
     val viewModel = viewModel<SharedViewModel>()
+    val rootDiag = viewModel<RootDiagViewModel>()
+    if (!LocalInspectionMode.current) {
+        LifecycleStartEffect(rootDiag) {
+            rootDiag.enterForeground()
+            onStopOrDispose { rootDiag.leaveForeground() }
+        }
+    }
     // Ensure we use activity context for proper intent launching
     val activity = context as? android.app.Activity
     val batteryOptimizationHelper = remember {
@@ -221,7 +231,8 @@ fun MainCompose(
                 mainGraph(
                     paddingValues = paddingValues,
                     mainNavController = mainNavController,
-                    sharedViewModel = viewModel
+                    sharedViewModel = viewModel,
+                    rootDiag = rootDiag,
                 )
             }
         }

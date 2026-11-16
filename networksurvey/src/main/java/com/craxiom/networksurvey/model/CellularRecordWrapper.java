@@ -13,6 +13,8 @@ import com.craxiom.messaging.UmtsRecordData;
 import com.craxiom.networksurvey.util.NsUtils;
 import com.google.protobuf.GeneratedMessage;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -24,13 +26,21 @@ public class CellularRecordWrapper
 {
     public final CellularProtocol cellularProtocol;
     public final GeneratedMessage cellularRecord;
+    public final List<String> additionalPlmns;
     private final int hash;
     private final String comparableString;
 
     public CellularRecordWrapper(CellularProtocol cellularProtocol, GeneratedMessage cellularRecord)
     {
+        this(cellularProtocol, cellularRecord, List.of());
+    }
+
+    public CellularRecordWrapper(CellularProtocol cellularProtocol, GeneratedMessage cellularRecord,
+                                 Collection<String> additionalPlmns)
+    {
         this.cellularProtocol = cellularProtocol;
         this.cellularRecord = cellularRecord;
+        this.additionalPlmns = List.copyOf(additionalPlmns);
 
         comparableString = getComparableString(this);
         hash = Objects.hash(cellularProtocol, comparableString);

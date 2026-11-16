@@ -14,6 +14,7 @@ public class LteNeighbor implements Comparable<LteNeighbor>
     public final int rsrp;
     public final int rsrq;
     public final int ta;
+    public final int sinr;
 
     public static class Builder {
         private int earfcn = UNSET_VALUE;
@@ -21,6 +22,7 @@ public class LteNeighbor implements Comparable<LteNeighbor>
         private int rsrp = UNSET_VALUE;
         private int rsrq = UNSET_VALUE;
         private int ta = UNSET_VALUE;
+        private int sinr = UNSET_VALUE;
 
         public Builder earfcn(int earfcn) {
             this.earfcn = earfcn;
@@ -50,6 +52,11 @@ public class LteNeighbor implements Comparable<LteNeighbor>
         public LteNeighbor build() {
             return new LteNeighbor(this);
         }
+
+        public Builder sinr(int sinr) {
+            this.sinr = sinr;
+            return this;
+        }
     }
 
     private LteNeighbor(Builder builder) {
@@ -58,6 +65,7 @@ public class LteNeighbor implements Comparable<LteNeighbor>
         this.rsrp = builder.rsrp;
         this.rsrq = builder.rsrq;
         this.ta = builder.ta;
+        this.sinr = builder.sinr;
     }
 
     @Override
@@ -68,7 +76,10 @@ public class LteNeighbor implements Comparable<LteNeighbor>
         int otherComparisonRsrp = neighbor.rsrp == UNSET_VALUE ? Integer.MIN_VALUE : neighbor.rsrp;
 
         // Invert the sorting so the strongest show up at the top
-        return -1 * Integer.compare(thisComparisonRsrp, otherComparisonRsrp);
+        int strength = Integer.compare(otherComparisonRsrp, thisComparisonRsrp);
+        if (strength != 0) return strength;
+        int channel = Integer.compare(earfcn, neighbor.earfcn);
+        return channel != 0 ? channel : Integer.compare(pci, neighbor.pci);
     }
 
     @Override
@@ -83,7 +94,7 @@ public class LteNeighbor implements Comparable<LteNeighbor>
         if (pci != neighbor.pci) return false;
         if (rsrp != neighbor.rsrp) return false;
         if (rsrq != neighbor.rsrq) return false;
-        return ta == neighbor.ta;
+        return ta == neighbor.ta && sinr == neighbor.sinr;
     }
 
     @Override
@@ -94,6 +105,7 @@ public class LteNeighbor implements Comparable<LteNeighbor>
         result = 31 * result + rsrp;
         result = 31 * result + rsrq;
         result = 31 * result + ta;
+        result = 31 * result + sinr;
         return result;
     }
 }

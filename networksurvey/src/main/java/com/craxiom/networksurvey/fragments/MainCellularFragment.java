@@ -13,11 +13,14 @@ import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.LiveData;
+import androidx.lifecycle.MutableLiveData;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.craxiom.networksurvey.R;
 import com.craxiom.networksurvey.SimChangeReceiver;
 import com.craxiom.networksurvey.databinding.FragmentCellularSimpleBinding;
+import com.craxiom.networksurvey.fragments.model.CellularViewModel;
 import com.craxiom.networksurvey.services.NetworkSurveyService;
 import com.craxiom.networksurvey.services.controller.CellularController;
 import com.craxiom.networksurvey.ui.main.appbar.FragmentTopBarScroll;
@@ -38,6 +41,18 @@ public class MainCellularFragment extends AServiceDataFragment
     private BroadcastReceiver simBroadcastReceiver;
     private FragmentCellularSimpleBinding binding;
     private final FragmentTopBarScroll topBarScroll = new FragmentTopBarScroll();
+
+    private final MutableLiveData<CellularViewModel> cellularModel = new MutableLiveData<>();
+
+    public LiveData<CellularViewModel> getCellularModel()
+    {
+        return cellularModel;
+    }
+
+    void setCellularModel(CellularViewModel model)
+    {
+        cellularModel.setValue(model);
+    }
 
     // 当前选中的 SIM 索引（静态，跨 Fragment 重建保持）
     private static int currentSimIndex = 0;

@@ -65,19 +65,23 @@ import com.craxiom.networksurvey.ui.watchlist.WatchlistScreen
 import com.craxiom.networksurvey.ui.watchlist.WatchlistViewModel
 import com.craxiom.networksurvey.ui.settings.ColorPaletteScreen
 import com.craxiom.networksurvey.ui.settings.SettingsScreen
+import com.craxiom.networksurvey.ui.rootdiag.RootDiagViewModel
+import com.craxiom.networksurvey.ui.rootdiag.SignalingScreen
 import com.craxiom.networksurvey.ui.wifi.SsidExclusionListViewModel
 import com.craxiom.networksurvey.ui.wifi.model.WifiNetworkInfoList
 
 fun NavGraphBuilder.mainGraph(
     paddingValues: PaddingValues,
     mainNavController: NavHostController,
-    sharedViewModel: SharedViewModel
+    sharedViewModel: SharedViewModel,
+    rootDiag: RootDiagViewModel,
 ) {
     navigation(startDestination = NavDrawerOption.None.name, route = NavRoutes.MainRoute.name) {
         composable(NavDrawerOption.None.name) {
             HomeScreen(
                 mainNavController = mainNavController,
-                sharedViewModel = sharedViewModel
+                sharedViewModel = sharedViewModel,
+                rootDiag = rootDiag,
             )
         }
 
@@ -169,7 +173,7 @@ fun NavGraphBuilder.mainGraph(
         }
 
         composable(NavDrawerOption.Settings.name) {
-            SettingsFragmentInCompose(mainNavController)
+            SettingsFragmentInCompose(mainNavController, rootDiag)
         }
 
         // --------- 主题设置（KernelSU ColorPalette 风格独立页） --------- //
@@ -266,6 +270,7 @@ fun NavGraphBuilder.mainGraph(
                 onBackButtonPressed = { mainNavController.navigateUp() },
                 servingCellInfo = initial,
                 subscriptionId = subscriptionId,
+                rootDiag = rootDiag,
             )
         }
 
@@ -275,6 +280,10 @@ fun NavGraphBuilder.mainGraph(
 
         composable(NavOption.Gnss.name) {
             GnssToolScreen(onBack = { mainNavController.navigateUp() })
+        }
+
+        composable(NavOption.Signaling.name) {
+            SignalingScreen(rootDiag, onBack = { mainNavController.navigateUp() })
         }
 
         composable(NavOption.WifiSpectrum.name) {
@@ -329,6 +338,7 @@ enum class NavOption {
     TowerMap,
     Wifi,
     Gnss,
+    Signaling,
     WifiSpectrum,
     WifiDetails,
     BluetoothDetails,
@@ -422,16 +432,14 @@ fun SpeedTestInCompose(mainNavController: NavHostController) {
 }
 
 @Composable
-fun SettingsFragmentInCompose(mainNavController: NavHostController) {
+fun SettingsFragmentInCompose(mainNavController: NavHostController, rootDiag: RootDiagViewModel) {
     Scaffold(
         topBar = { TitleBar("设置") { mainNavController.navigateUp() } },
         popupHost = { },
     ) { innerPadding ->
         Box(modifier = Modifier.padding(paddingValues = innerPadding)) {
             com.craxiom.networksurvey.ui.settings.SettingsScreen(
-                onNavigateToSsidExclusion = {
-                    mainNavController.navigate(NavOption.SsidExclusionList.name)
-                },
+                rootDiag = rootDiag,
                 onNavigateToAcknowledgments = {
                     mainNavController.navigate(NavOption.Acknowledgments.name)
                 },

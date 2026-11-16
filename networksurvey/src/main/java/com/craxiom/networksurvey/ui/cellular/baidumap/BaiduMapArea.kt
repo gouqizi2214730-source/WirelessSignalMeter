@@ -84,11 +84,14 @@ class BaiduMapArea(val mapView: TextureMapView) {
     private var linkMarker: Marker? = null
     private var locMarker: Marker? = null
     private var lastLinkPoints: List<LatLng>? = null
+    private val neighborLinks = HashMap<LatLng, Polyline>()
 
     private val pointMarkers = HashMap<Long, Marker>()
     private var pointMetric: String? = null
 
     companion object {
+        val SERVING_LINK_COLOR = Color.rgb(0, 91, 211)
+        val NEIGHBOR_LINK_COLOR = Color.rgb(232, 112, 22)
         const val SECTOR_ZOOM = 11f
         const val CLOSE_ZOOM = 17f
         private const val LABEL_ZOOM = 17f
@@ -423,7 +426,7 @@ class BaiduMapArea(val mapView: TextureMapView) {
             val pts = listOf(LatLng(curLat, curLon), target)
             if (pts == lastLinkPoints) return
             if (linkPolyline == null || linkPolyline!!.isRemoved) {
-                val color = Color.rgb(0, 91, 211)
+                val color = SERVING_LINK_COLOR
                 linkOutline = bmap.addOverlay(
                     PolylineOptions().points(pts).color(Color.WHITE).width((2.7f * density).toInt().coerceAtLeast(2)).zIndex(5)
                 ) as Polyline
@@ -445,6 +448,38 @@ class BaiduMapArea(val mapView: TextureMapView) {
             }
             lastLinkPoints = pts
         } catch (e: Throwable) {
+        }
+    }
+
+    fun updateNeighborLinks(origin: LatLng?, serving: EngineeringParam?, neighbors: Collection<EngineeringParam>) {
+        val servingTarget = serving?.takeIf { isValid(it.lat, it.lon) }?.let { toBd09LatLng(it.lat, it.lon) }
+        val targets = if (origin == null) emptySet() else neighbors.asSequence()
+            .filter { it.id != serving?.id && isValid(it.lat, it.lon) }
+            .map { toBd09LatLng(it.lat, it.lon) }
+            .filterNot { it == origin || it == servingTarget }
+            .toSet()
+
+        val iterator = neighborLinks.iterator()
+        while (iterator.hasNext()) {
+            val (target, line) = iterator.next()
+            if (target !in targets || line.isRemoved) {
+                if (!line.isRemoved) line.remove()
+                iterator.remove()
+            }
+        }
+        if (origin == null) return
+
+        for (target in targets) {
+            val points = listOf(origin, target)
+            val line = neighborLinks[target]
+            if (line == null) {
+                neighborLinks[target] = baiduMap.addOverlay(
+                    PolylineOptions().points(points).color(NEIGHBOR_LINK_COLOR)
+                        .width((1.5f * density).toInt().coerceAtLeast(1)).zIndex(4)
+                ) as Polyline
+            } else if (line.points != points) {
+                line.setPoints(points)
+            }
         }
     }
 

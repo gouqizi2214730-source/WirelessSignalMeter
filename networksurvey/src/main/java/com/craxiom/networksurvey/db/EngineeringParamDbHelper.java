@@ -392,6 +392,14 @@ extends SQLiteOpenHelper {
                 compatibleNetwork("NR".equals(station.getNetworkType())));
     }
 
+    /** Resolves a measured neighbor by its full radio identity and distance from the handset. */
+    public EngineeringParam matchMeasuredNeighbor(double lat, double lon, boolean nr, int pci, int channel) {
+        if (!Double.isFinite(lat) || !Double.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180
+                || pci < 0 || pci > (nr ? 1007 : 503) || channel < 0 || channel > (nr ? 3279165 : 262143)) return null;
+        return matchNearby(lat, lon, pci, channel, 500.0,
+                compatibleNetwork(nr) + " AND TRIM(" + COL_NETTYPE + ") <> ''");
+    }
+
     public EngineeringParam matchByLocationPciEarfcn(double lat, double lon, int pci, int earfcn, double rangeMeters) {
         return matchNearby(lat, lon, pci == 0 ? -1 : pci, earfcn == 0 ? -1 : earfcn, rangeMeters, null);
     }

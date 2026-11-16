@@ -7,36 +7,29 @@ public final class OperatorUtil {
     private OperatorUtil() {
     }
 
+    public static boolean isValidPlmn(String plmn) {
+        return plmn != null && plmn.matches("[0-9]{5,6}");
+    }
+
+    public static String knownName(String plmn) {
+        if (!isValidPlmn(plmn) || plmn.length() != 5 || !plmn.startsWith("460")) return "";
+        return mainlandName(Integer.parseInt(plmn.substring(3)));
+    }
+
+    private static String mainlandName(int mnc) {
+        return switch (mnc) {
+            case 0, 2, 4, 7, 8, 13, 14 -> "中国移动";
+            case 1, 6, 9, 10 -> "中国联通";
+            case 3, 5, 11, 12, 17 -> "中国电信";
+            case 15 -> "中国广电";
+            default -> "";
+        };
+    }
+
     public static String name(int mcc, int mnc) {
         if (mcc == 460) {
-            switch (mnc) {
-                case 0: 
-                case 2: 
-                case 4: 
-                case 7: 
-                case 8: 
-                case 13: 
-                case 14: {
-                    return "\u4e2d\u56fd\u79fb\u52a8";
-                }
-                case 1: 
-                case 6: 
-                case 9: 
-                case 10: {
-                    return "\u4e2d\u56fd\u8054\u901a";
-                }
-                case 3: 
-                case 5: 
-                case 11: 
-                case 12: 
-                case 17: {
-                    return "\u4e2d\u56fd\u7535\u4fe1";
-                }
-                case 15: {
-                    return "\u4e2d\u56fd\u5e7f\u7535";
-                }
-            }
-            return "\u4e2d\u56fd\u79fb\u52a8";
+            String name = mainlandName(mnc);
+            return name.isEmpty() ? "中国移动" : name;
         }
         switch (mcc) {
             case 310: 

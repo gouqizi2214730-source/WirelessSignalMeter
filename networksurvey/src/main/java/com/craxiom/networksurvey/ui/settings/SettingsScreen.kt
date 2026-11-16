@@ -1,6 +1,9 @@
 package com.craxiom.networksurvey.ui.settings
 
 import android.content.SharedPreferences
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,11 +24,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.FileUpload
+import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SignalCellularAlt
 import androidx.compose.material.icons.rounded.Wifi
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -36,11 +43,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -50,22 +60,31 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.preference.PreferenceManager
 import com.craxiom.networksurvey.BuildConfig
+import com.craxiom.networksurvey.R
+import com.craxiom.networksurvey.ui.rootdiag.RootDiagViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import com.craxiom.networksurvey.constants.NetworkSurveyConstants
 import com.craxiom.networksurvey.ui.common.dialogs.NsSingleChoiceDialog
 import com.craxiom.networksurvey.ui.dashboard.DashboardCardDefaults
 
 @Composable
 fun SettingsScreen(
-    onNavigateToSsidExclusion: () -> Unit = {},
     onNavigateToAcknowledgments: () -> Unit = {},
     onNavigateToEngParams: () -> Unit = {},
     onNavigateToTheme: () -> Unit = {},
     bottomContentPadding: Dp = 24.dp,
+    rootDiag: RootDiagViewModel? = null,
 ) {
     val context = LocalContext.current
     val preferences = remember(context) { PreferenceManager.getDefaultSharedPreferences(context) }
     val ouiKey = NetworkSurveyConstants.PROPERTY_OUI_LOOKUP_ENABLED
     var ouiEnabled by remember(preferences) { mutableStateOf(preferences.getBoolean(ouiKey, true)) }
+    var showBarColors by remember { mutableStateOf(false) }
+    if (showBarColors) SignalBarColorSettings { showBarColors = false }
 
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
@@ -76,6 +95,9 @@ fun SettingsScreen(
             item {
                 SettingsGroup("常用") {
                     SettingsLink(Icons.Rounded.Palette, "外观", "深色模式、动态取色与主题色", onNavigateToTheme)
+                    SettingsDivider()
+                    SettingsLink(Icons.Rounded.SignalCellularAlt, stringResource(R.string.signal_bar_colors),
+                        stringResource(R.string.signal_bar_colors_subtitle)) { showBarColors = true }
                     SettingsDivider()
                     SettingsLink(Icons.Rounded.FileUpload, "基站工参", "导入和管理 CSV 工参", onNavigateToEngParams)
                 }
@@ -101,8 +123,6 @@ fun SettingsScreen(
             }
             item {
                 SettingsGroup("Wi-Fi") {
-                    SettingsLink(Icons.Rounded.Wifi, "SSID 排除列表", null, onNavigateToSsidExclusion)
-                    SettingsDivider()
                     SettingsRow(
                         icon = Icons.Rounded.Search,
                         title = "在线查询设备厂商",
@@ -119,6 +139,9 @@ fun SettingsScreen(
                     )
                 }
             }
+            if (rootDiag != null) item {
+                SettingsGroup(stringResource(R.string.diag_settings_group)) { DiagnosticLogExport(rootDiag) }
+            }
             item {
                 SettingsGroup("关于") {
                     SettingsLink(
@@ -127,6 +150,62 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DiagnosticLogExport(rootDiag: RootDiagViewModel) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var showDialog by rememberSaveable { mutableStateOf(false) }
+    var includeSamples by rememberSaveable { mutableStateOf(false) }
+    val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/x-ndjson")) { uri ->
+        if (uri != null) scope.launch {
+            val message = try {
+                rootDiag.exportDiagnosticLog(uri, includeSamples)
+                R.string.diag_export_saved
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                R.string.diag_export_failed
+            }
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
+    SettingsLink(Icons.Rounded.FileDownload, stringResource(R.string.diag_export_title),
+        stringResource(R.string.diag_export_subtitle)) {
+        includeSamples = false
+        showDialog = true
+    }
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text(stringResource(R.string.diag_export_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.diag_export_explanation))
+                    Row(
+                        Modifier.fillMaxWidth().toggleable(
+                            value = includeSamples, role = Role.Checkbox, onValueChange = { includeSamples = it },
+                        ),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = includeSamples, onCheckedChange = null)
+                        Text(stringResource(R.string.diag_export_include_mr), Modifier.padding(start = 10.dp))
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDialog = false
+                    val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(Date())
+                    exporter.launch("wireless-diag-$stamp.jsonl")
+                }) { Text(stringResource(R.string.diag_export_save)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDialog = false }) { Text(stringResource(android.R.string.cancel)) }
+            },
+        )
     }
 }
 

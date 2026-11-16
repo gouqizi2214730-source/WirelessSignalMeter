@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -35,15 +36,20 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidViewBinding
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.craxiom.networksurvey.R
 import com.craxiom.networksurvey.databinding.ContainerCellularFragmentBinding
@@ -55,6 +61,10 @@ import com.craxiom.networksurvey.ui.kernelsu.FloatingBottomBarItem
 import com.craxiom.networksurvey.ui.main.appbar.AppBarAction
 import com.craxiom.networksurvey.ui.main.appbar.TitleBar
 import com.craxiom.networksurvey.ui.settings.SettingsScreen
+import com.craxiom.networksurvey.ui.rootdiag.RootDiagStatus
+import com.craxiom.networksurvey.ui.rootdiag.RootDiagViewModel
+import com.craxiom.networksurvey.ui.rootdiag.RootSignalScreen
+import com.craxiom.networksurvey.model.CellularProtocol
 import com.craxiom.networksurvey.update.UpdateChecker
 import com.craxiom.networksurvey.update.UpdateDialog
 import com.craxiom.networksurvey.update.UpdateDownloader
@@ -79,6 +89,7 @@ internal val FloatingNavigationClearance = 80.dp
 fun HomeScreen(
     mainNavController: NavHostController,
     sharedViewModel: SharedViewModel,
+    rootDiag: RootDiagViewModel,
 ) {
     val pagerState = rememberPagerState { HomeTab.entries.size }
     val pagerScope = rememberCoroutineScope()
@@ -136,7 +147,7 @@ fun HomeScreen(
                 overscrollEffect = null,
             ) { page ->
                 when (HomeTab.entries[page]) {
-                    HomeTab.Signal -> SignalTab()
+                    HomeTab.Signal -> SignalTab(rootDiag, bottomPadding, pagerState.settledPage == HomeTab.Signal.ordinal)
                     HomeTab.Tools -> HomeTabPage(R.string.professional_tools_title) {
                         ToolsScreen(
                             bottomPadding = bottomPadding,
@@ -150,15 +161,18 @@ fun HomeScreen(
                             onOpenWifi = {
                                 mainNavController.navigate(NavOption.Wifi.name) { launchSingleTop = true }
                             },
+                            onOpenSignaling = {
+                                mainNavController.navigate(NavOption.Signaling.name) { launchSingleTop = true }
+                            },
                         )
                     }
                     HomeTab.Settings -> HomeTabPage(R.string.settings) {
                         SettingsScreen(
-                            onNavigateToSsidExclusion = { mainNavController.navigate(NavOption.SsidExclusionList.name) },
                             onNavigateToAcknowledgments = { mainNavController.navigate(NavOption.Acknowledgments.name) },
                             onNavigateToEngParams = { mainNavController.navigate(NavDrawerOption.EngineeringParams.name) },
                             onNavigateToTheme = { mainNavController.navigate(NavOption.ColorPalette.name) },
                             bottomContentPadding = bottomPadding,
+                            rootDiag = rootDiag,
                         )
                     }
                 }
@@ -225,9 +239,25 @@ private fun HomeTabPage(
 }
 
 @Composable
-private fun SignalTab() {
+private fun SignalTab(rootDiag: RootDiagViewModel, bottomPadding: Dp, active: Boolean) {
+    val signal by rootDiag.signal.collectAsStateWithLifecycle()
     var fragment by remember { mutableStateOf<MainCellularFragment?>(null) }
     var simCount by remember { mutableIntStateOf(0) }
+    val androidCells = fragment?.cellularModel?.observeAsState()?.value
+    val protocol = androidCells?.servingCellProtocol?.observeAsState()?.value
+    val nrBandwidthDiagnostic = androidCells?.nrBandwidthDiagnostic?.observeAsState()?.value
+    // The DIAG stream has no reliable subscription identifier across modem generations.
+    val useRoot = simCount <= 1 && when (protocol) {
+        CellularProtocol.GSM, CellularProtocol.UMTS, CellularProtocol.CDMA -> false
+        CellularProtocol.LTE, CellularProtocol.NR -> signal.status == RootDiagStatus.Running || signal.useRootSignal
+        else -> signal.useRootSignal
+    }
+    LaunchedEffect(active, useRoot, protocol, simCount) {
+        if (active) rootDiag.recordSignalMode(useRoot, protocol?.name, simCount)
+    }
+    LaunchedEffect(active, useRoot, nrBandwidthDiagnostic) {
+        if (active) rootDiag.recordAndroidNrBandwidth(nrBandwidthDiagnostic.takeUnless { useRoot })
+    }
 
     DisposableEffect(fragment) {
         val cellular = fragment
@@ -236,14 +266,24 @@ private fun SignalTab() {
         onDispose { cellular?.setSimSwitchCallback(null) }
     }
 
-    val actions = if (simCount > 1) {
+    val actions = if (!useRoot && simCount > 1) {
         listOf(AppBarAction(R.drawable.ic_sim_switch, R.string.sim_switch, onClick = { fragment?.switchToNextSim() }))
     } else emptyList()
     HomeTabPage(R.string.home_signal, actions) { scrollBehavior ->
-        AndroidViewBinding(ContainerCellularFragmentBinding::inflate, Modifier.fillMaxSize()) {
-            val cellular = cellularFragmentContainerView.getFragment<MainCellularFragment>()
-            cellular.topBarScroll.connection = scrollBehavior.nestedScrollConnection
-            fragment = cellular
+        Box(Modifier.fillMaxSize()) {
+            // Keep the Android cellular fragment alive to serve the map and instant fallback.
+            Box(Modifier.matchParentSize().alpha(if (useRoot) 0f else 1f).then(
+                if (useRoot) Modifier.semantics { hideFromAccessibility() } else Modifier
+            )) {
+                AndroidViewBinding(ContainerCellularFragmentBinding::inflate, Modifier.fillMaxSize()) {
+                    val cellular = cellularFragmentContainerView.getFragment<MainCellularFragment>()
+                    cellular.topBarScroll.connection = scrollBehavior.nestedScrollConnection
+                    fragment = cellular
+                }
+            }
+            if (useRoot) {
+                RootSignalScreen(signal, rootDiag::chartFor, bottomPadding, androidCells, active)
+            }
         }
     }
 }

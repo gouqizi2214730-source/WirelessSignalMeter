@@ -6,9 +6,14 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 
+import com.craxiom.messaging.LteRecordData;
+import com.craxiom.messaging.NrRecordData;
 import com.craxiom.networksurvey.model.CellularProtocol;
+import com.craxiom.networksurvey.util.CellularUtils.UplinkReference;
+import com.craxiom.networksurvey.util.TelephonyStateUtils.NrMode;
 
 import java.util.Objects;
+import java.util.List;
 import java.util.SortedSet;
 
 /**
@@ -80,17 +85,60 @@ public class CellularViewModel extends ViewModel
 
     // Common Cellular fields
     private final DistinctLiveData<CellularProtocol> servingCellProtocol = new DistinctLiveData<>(CellularProtocol.NONE);
+    private final DistinctLiveData<NrMode> nrMode = new DistinctLiveData<>(NrMode.NONE);
     private final DistinctLiveData<String> mcc = new DistinctLiveData<>();
     private final DistinctLiveData<String> mnc = new DistinctLiveData<>();
+    private final DistinctLiveData<String> registeredPlmn = new DistinctLiveData<>("");
+    private final DistinctLiveData<String> cellPlmns = new DistinctLiveData<>("");
     private final DistinctLiveData<String> areaCode = new DistinctLiveData<>();
     private final DistinctLiveData<Long> cellId = new DistinctLiveData<>(); // NR requires a long
 
     private final DistinctLiveData<String> channelNumber = new DistinctLiveData<>(); // AKA ARFCN, EARFCN, etc
-    private final DistinctLiveData<String> frequency = new DistinctLiveData<>(); // For NR frequency in MHz
+    private final DistinctLiveData<String> frequency = new DistinctLiveData<>(); // Serving frequency in MHz
+    private final DistinctLiveData<UplinkReference> uplinkReference = new DistinctLiveData<>();
     private final DistinctLiveData<String> band = new DistinctLiveData<>(); // For NR band with name
     private final DistinctLiveData<String> lteBand = new DistinctLiveData<>(); // For LTE band with name
 
+    public record NrBandwidthDiagnostic(List<Integer> reportedKhz, int registeredRat, int displayRat,
+                                        boolean singleCarrier, boolean cellMatches, int displayedKhz) {}
+
+    private final DistinctLiveData<NrBandwidthDiagnostic> nrBandwidthDiagnostic = new DistinctLiveData<>();
+
     // LTE specific fields
+    private final DistinctLiveData<LteRecordData> lteServingCell = new DistinctLiveData<>();
+
+    public LiveData<LteRecordData> getLteServingCell()
+    {
+        return lteServingCell;
+    }
+
+    public void setLteServingCell(LteRecordData data)
+    {
+        lteServingCell.postIfChanged(data);
+    }
+
+    private final DistinctLiveData<NrRecordData> nrServingCell = new DistinctLiveData<>();
+
+    public LiveData<NrRecordData> getNrServingCell()
+    {
+        return nrServingCell;
+    }
+
+    public void setNrServingCell(NrRecordData data)
+    {
+        nrServingCell.postIfChanged(data);
+    }
+
+    public LiveData<NrMode> getNrMode()
+    {
+        return nrMode;
+    }
+
+    public void setNrMode(NrMode mode)
+    {
+        nrMode.postIfChanged(mode);
+    }
+
     private final DistinctLiveData<String> pci = new DistinctLiveData<>();
     private final DistinctLiveData<String> bandwidth = new DistinctLiveData<>();
     private final DistinctLiveData<String> ta = new DistinctLiveData<>();
@@ -98,8 +146,8 @@ public class CellularViewModel extends ViewModel
     private final DistinctLiveData<Integer> signalOne = new DistinctLiveData<>(); // Also used for RSSI and SS_RSRP
     private final DistinctLiveData<Integer> signalTwo = new DistinctLiveData<>(); // Also used for RSCP and SS_RSRQ
     private final DistinctLiveData<Integer> signalThree = new DistinctLiveData<>(); // Used for LTE SNR
-    private final MutableLiveData<SortedSet<NrNeighbor>> nrNeighbors = new MutableLiveData<>();
-    private final MutableLiveData<SortedSet<LteNeighbor>> lteNeighbors = new MutableLiveData<>();
+    private final MutableLiveData<List<NrNeighbor>> nrNeighbors = new MutableLiveData<>();
+    private final MutableLiveData<List<LteNeighbor>> lteNeighbors = new MutableLiveData<>();
     private final MutableLiveData<SortedSet<UmtsNeighbor>> umtsNeighbors = new MutableLiveData<>();
     private final MutableLiveData<SortedSet<GsmNeighbor>> gsmNeighbors = new MutableLiveData<>();
 
@@ -281,6 +329,26 @@ public class CellularViewModel extends ViewModel
         mnc.postIfChanged(newMnc);
     }
 
+    public LiveData<String> getRegisteredPlmn()
+    {
+        return registeredPlmn;
+    }
+
+    public void setRegisteredPlmn(String value)
+    {
+        registeredPlmn.postIfChanged(value);
+    }
+
+    public LiveData<String> getCellPlmns()
+    {
+        return cellPlmns;
+    }
+
+    public void setCellPlmns(String value)
+    {
+        cellPlmns.postIfChanged(value);
+    }
+
     public LiveData<String> getAreaCode()
     {
         return areaCode;
@@ -356,9 +424,29 @@ public class CellularViewModel extends ViewModel
         return bandwidth;
     }
 
+    public LiveData<UplinkReference> getUplinkReference()
+    {
+        return uplinkReference;
+    }
+
+    public void setUplinkReference(UplinkReference value)
+    {
+        uplinkReference.postIfChanged(value);
+    }
+
     public void setBandwidth(String newBandwidth)
     {
         bandwidth.postIfChanged(newBandwidth);
+    }
+
+    public LiveData<NrBandwidthDiagnostic> getNrBandwidthDiagnostic()
+    {
+        return nrBandwidthDiagnostic;
+    }
+
+    public void setNrBandwidthDiagnostic(NrBandwidthDiagnostic value)
+    {
+        nrBandwidthDiagnostic.postIfChanged(value);
     }
 
     public LiveData<String> getTa()
@@ -411,22 +499,22 @@ public class CellularViewModel extends ViewModel
         signalThree.postIfChanged(newSignal);
     }
 
-    public LiveData<SortedSet<NrNeighbor>> getNrNeighbors()
+    public LiveData<List<NrNeighbor>> getNrNeighbors()
     {
         return nrNeighbors;
     }
 
-    public void setNrNeighbors(SortedSet<NrNeighbor> newNrNeighbors)
+    public void setNrNeighbors(List<NrNeighbor> newNrNeighbors)
     {
         nrNeighbors.postValue(newNrNeighbors);
     }
 
-    public LiveData<SortedSet<LteNeighbor>> getLteNeighbors()
+    public LiveData<List<LteNeighbor>> getLteNeighbors()
     {
         return lteNeighbors;
     }
 
-    public void setLteNeighbors(SortedSet<LteNeighbor> newLteNeighbors)
+    public void setLteNeighbors(List<LteNeighbor> newLteNeighbors)
     {
         lteNeighbors.postValue(newLteNeighbors);
     }

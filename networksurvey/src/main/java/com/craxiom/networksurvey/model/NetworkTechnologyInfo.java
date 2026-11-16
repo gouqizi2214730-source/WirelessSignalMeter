@@ -25,6 +25,11 @@ import java.util.List;
  * @param nrMode              NR Standalone / Non-Standalone / none.
  * @param cellBandwidthsKhz   Per-carrier bandwidths in kHz for carrier aggregation; may be null.
  * @param registrationRows    Parsed registration table for the info dialog; may be null (pre-API-31).
+ * @param primaryChannel      Primary serving channel from ServiceState, or -1 if unavailable.
+ * @param registeredDataRat   Registered packet-switched WWAN RAT from ServiceState.
+ * @param registeredNci       NR cell identity from the same ServiceState, or -1 if unavailable.
+ * @param registeredPlmn      The registered mobile network's PLMN as 5 or 6 digits.
+ * @param subscriptionCarrier The SIM's provider name, with registered-operator fallback.
  */
 public record NetworkTechnologyInfo(
         int subscriptionId,
@@ -35,6 +40,11 @@ public record NetworkTechnologyInfo(
         int baseDataRat,
         TelephonyStateUtils.NrMode nrMode,
         int[] cellBandwidthsKhz,
-        List<TelephonyStateUtils.RegistrationRow> registrationRows)
+        List<TelephonyStateUtils.RegistrationRow> registrationRows,
+        int primaryChannel,
+        int registeredDataRat,
+        long registeredNci,
+        String registeredPlmn,
+        String subscriptionCarrier)
 {
 }

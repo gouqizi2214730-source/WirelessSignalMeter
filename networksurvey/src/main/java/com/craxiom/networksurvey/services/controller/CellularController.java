@@ -13,6 +13,7 @@ import android.database.ContentObserver;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.telephony.CellIdentityNr;
 import android.telephony.CellInfo;
 import android.telephony.PhoneStateListener;
 import android.telephony.ServiceState;
@@ -47,6 +48,7 @@ import com.craxiom.networksurvey.services.NetworkSurveyService;
 import com.craxiom.networksurvey.services.SurveyRecordProcessor;
 import com.craxiom.networksurvey.util.CalculationUtils;
 import com.craxiom.networksurvey.util.NsUtils;
+import com.craxiom.networksurvey.util.OperatorUtil;
 import com.craxiom.networksurvey.util.PreferenceUtils;
 import com.craxiom.networksurvey.util.TelephonyDiagnostics;
 import com.craxiom.networksurvey.util.TelephonyStateUtils;
@@ -802,6 +804,9 @@ public class CellularController extends AController
         String overrideDisplay = fallbackOverride;
         TelephonyStateUtils.NrMode nrMode = TelephonyStateUtils.NrMode.NONE;
         int[] cellBandwidthsKhz = null;
+        int primaryChannel = -1;
+        int registeredDataRat = TelephonyManager.NETWORK_TYPE_UNKNOWN;
+        long registeredNci = -1;
         List<TelephonyStateUtils.RegistrationRow> registrationRows = null;
 
         int dataNetworkTypeInt = TelephonyManager.NETWORK_TYPE_UNKNOWN;
@@ -865,6 +870,22 @@ public class CellularController extends AController
                 if (freshServiceState != null)
                 {
                     cellBandwidthsKhz = freshServiceState.getCellBandwidths();
+                    primaryChannel = freshServiceState.getChannelNumber();
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+                    {
+                        final var freshRows = TelephonyStateUtils.extractRows(freshServiceState);
+                        if (!freshRows.isEmpty()) registrationRows = freshRows;
+                        final var registration = TelephonyStateUtils.registeredWwanData(freshServiceState);
+                        if (registration != null)
+                        {
+                            registeredDataRat = registration.getAccessNetworkTechnology();
+                            if (registration.getCellIdentity() instanceof CellIdentityNr cell)
+                            {
+                                final long nci = cell.getNci();
+                                if (nci >= 0 && nci < (1L << 36)) registeredNci = nci;
+                            }
+                        }
+                    }
                 }
             } catch (Exception e)
             {
@@ -875,8 +896,26 @@ public class CellularController extends AController
         // Debug-only diagnostic snapshot, correlated with the values above.
         TelephonyDiagnostics.logNetworkTypeSnapshot(surveyService, telephonyManager, subscriptionId, rawOverride, rawDisplay);
 
+        String registeredPlmn = TelephonyStateUtils.registeredWwanPlmn(registrationRows);
+        String subscriptionCarrier = "";
+        try
+        {
+            if (registeredPlmn.isEmpty())
+            {
+                final String networkPlmn = telephonyManager.getNetworkOperator();
+                if (OperatorUtil.isValidPlmn(networkPlmn)) registeredPlmn = networkPlmn;
+            }
+            subscriptionCarrier = OperatorUtil.knownName(telephonyManager.getSimOperator());
+            if (subscriptionCarrier.isEmpty()) subscriptionCarrier = telephonyManager.getSimOperatorName().trim();
+            if (subscriptionCarrier.isEmpty()) subscriptionCarrier = OperatorUtil.knownName(registeredPlmn);
+            if (subscriptionCarrier.isEmpty()) subscriptionCarrier = telephonyManager.getNetworkOperatorName().trim();
+        } catch (RuntimeException e)
+        {
+            Timber.w(e, "Could not read the subscription operator");
+        }
         return new NetworkTechnologyInfo(subscriptionId, voiceDisplay, dataDisplay, overrideDisplay,
-                rawOverride, baseRat, nrMode, cellBandwidthsKhz, registrationRows);
+                rawOverride, baseRat, nrMode, cellBandwidthsKhz, registrationRows,
+                primaryChannel, registeredDataRat, registeredNci, registeredPlmn, subscriptionCarrier);
     }
 
     /**

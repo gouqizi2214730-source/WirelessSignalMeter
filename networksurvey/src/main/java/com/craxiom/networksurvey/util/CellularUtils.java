@@ -32,77 +32,77 @@ public class CellularUtils
      * From 3GPP TS 36.101, Table E-UTRA Operating Bands
      */
     private static final int[][] DOWNLINK_LTE_BANDS = {
-            // Band, Lower bound of EARFCN, Upper bound of EARFCN
-            {1, 0, 599},
-            {2, 600, 1199},
-            {3, 1200, 1949},
-            {4, 1950, 2399},
-            {5, 2400, 2649},
-            {6, 2650, 2749},
-            {7, 2750, 3449},
-            {8, 3450, 3799},
-            {9, 3800, 4149},
-            {10, 4150, 4749},
-            {11, 4750, 4949},
-            {12, 5010, 5179},
-            {13, 5180, 5279},
-            {14, 5280, 5379},
-            {17, 5730, 5849},
-            {18, 5850, 5999},
-            {19, 6000, 6149},
-            {20, 6150, 6449},
-            {21, 6450, 6599},
-            {22, 6600, 7399},
-            {23, 7500, 7699},
-            {24, 7700, 8039},
-            {25, 8040, 8689},
-            {26, 8690, 9039},
-            {27, 9040, 9209},
-            {28, 9210, 9659},
-            {29, 9660, 9769},
-            {30, 9770, 9869},
-            {31, 9870, 9919},
-            {32, 9920, 10359},
-            {33, 36000, 36199},
-            {34, 36200, 36349},
-            {35, 36350, 36949},
-            {36, 36950, 37549},
-            {37, 37550, 37749},
-            {38, 37750, 38249},
-            {39, 38250, 38649},
-            {40, 38650, 39649},
-            {41, 39650, 41589},
-            {42, 41590, 43589},
-            {43, 43590, 45589},
-            {44, 45590, 46589},
-            {45, 46590, 46789},
-            {46, 46790, 54539},
-            {47, 54540, 55239},
-            {48, 55240, 56739},
-            {49, 56740, 58239},
-            {50, 58240, 59089},
-            {51, 59090, 59139},
-            {52, 59140, 60139},
-            {53, 60140, 60254},
-            {54, 60255, 60304},
-            {65, 65536, 66435},
-            {66, 66436, 67335},
-            {67, 67336, 67535},
-            {68, 67536, 67835},
-            {69, 67836, 68335},
-            {70, 68336, 68585},
-            {71, 68586, 68935},
-            {72, 68936, 68985},
-            {73, 68986, 69035},
-            {74, 69036, 69465},
-            {75, 69466, 70315},
-            {76, 70316, 70365},
-            {85, 70366, 70545},
-            {87, 70546, 70595},
-            {88, 70596, 70645},
-            {103, 70646, 70655},
-            {106, 70656, 70705},
-            {108, 70706, 70755},
+            // Band, first DL EARFCN, last DL EARFCN, F_DL_low in 0.1 MHz (-1 where unavailable)
+            {1, 0, 599, 21100},
+            {2, 600, 1199, 19300},
+            {3, 1200, 1949, 18050},
+            {4, 1950, 2399, 21100},
+            {5, 2400, 2649, 8690},
+            {6, 2650, 2749, 8750},
+            {7, 2750, 3449, 26200},
+            {8, 3450, 3799, 9250},
+            {9, 3800, 4149, 18449},
+            {10, 4150, 4749, 21100},
+            {11, 4750, 4949, 14759},
+            {12, 5010, 5179, 7290},
+            {13, 5180, 5279, 7460},
+            {14, 5280, 5379, 7580},
+            {17, 5730, 5849, 7340},
+            {18, 5850, 5999, 8600},
+            {19, 6000, 6149, 8750},
+            {20, 6150, 6449, 7910},
+            {21, 6450, 6599, 14959},
+            {22, 6600, 7399, 35100},
+            {23, 7500, 7699, 21800},
+            {24, 7700, 8039, 15250},
+            {25, 8040, 8689, 19300},
+            {26, 8690, 9039, 8590},
+            {27, 9040, 9209, 8520},
+            {28, 9210, 9659, 7580},
+            {29, 9660, 9769, 7170},
+            {30, 9770, 9869, 23500},
+            {31, 9870, 9919, 4625},
+            {32, 9920, 10359, 14520},
+            {33, 36000, 36199, 19000},
+            {34, 36200, 36349, 20100},
+            {35, 36350, 36949, 18500},
+            {36, 36950, 37549, 19300},
+            {37, 37550, 37749, 19100},
+            {38, 37750, 38249, 25700},
+            {39, 38250, 38649, 18800},
+            {40, 38650, 39649, 23000},
+            {41, 39650, 41589, 24960},
+            {42, 41590, 43589, 34000},
+            {43, 43590, 45589, 36000},
+            {44, 45590, 46589, 7030},
+            {45, 46590, 46789, 14470},
+            {46, 46790, 54539, 51500},
+            {47, 54540, 55239, 58550},
+            {48, 55240, 56739, 35500},
+            {49, 56740, 58239, 35500},
+            {50, 58240, 59089, 14320},
+            {51, 59090, 59139, 14270},
+            {52, 59140, 60139, 33000},
+            {53, 60140, 60254, 24835},
+            {54, 60255, 60304, 16700},
+            {65, 65536, 66435, 21100},
+            {66, 66436, 67335, 21100},
+            {67, 67336, 67535, 7380},
+            {68, 67536, 67835, 7530},
+            {69, 67836, 68335, 25700},
+            {70, 68336, 68585, 19950},
+            {71, 68586, 68935, 6170},
+            {72, 68936, 68985, 4610},
+            {73, 68986, 69035, 4600},
+            {74, 69036, 69465, 14750},
+            {75, 69466, 70315, 14320},
+            {76, 70316, 70365, 14270},
+            {85, 70366, 70545, 7280},
+            {87, 70546, 70595, 4200},
+            {88, 70596, 70645, 4220},
+            {103, 70646, 70655, 7570},
+            {106, 70656, 70705, 9350},
+            {108, 70706, 70755, -1},
     };
 
     /**
@@ -185,6 +185,43 @@ public class CellularUtils
             {262, 2399166, 2415832},
             {263, 2564083, 2794249},
     };
+
+    // FDD bands from TS 36.101 table 5.7.3-1. Band, first UL EARFCN, F_UL_low in 0.1 MHz.
+    // A fourth value gives the UL raster size when it is shorter than the DL raster.
+    private static final int[][] LTE_PAIRED_UPLINK = {
+            {1, 18000, 19200}, {2, 18600, 18500}, {3, 19200, 17100}, {4, 19950, 17100},
+            {5, 20400, 8240}, {6, 20650, 8300}, {7, 20750, 25000}, {8, 21450, 8800},
+            {9, 21800, 17499}, {10, 22150, 17100}, {11, 22750, 14279}, {12, 23010, 6990},
+            {13, 23180, 7770}, {14, 23280, 7880}, {17, 23730, 7040}, {18, 23850, 8150},
+            {19, 24000, 8300}, {20, 24150, 8320}, {21, 24450, 14479}, {22, 24600, 34100},
+            {23, 25500, 20000}, {24, 25700, 16265}, {25, 26040, 18500}, {26, 26690, 8140},
+            {27, 27040, 8070}, {28, 27210, 7030}, {30, 27660, 23050}, {31, 27760, 4525},
+            {65, 131072, 19200}, {66, 131972, 17100, 700}, {68, 132672, 6980},
+            {70, 132972, 16950, 150}, {71, 133122, 6630}, {72, 133472, 4510},
+            {73, 133522, 4500}, {74, 133572, 14270}, {85, 134002, 6980},
+            {87, 134182, 4100}, {88, 134232, 4120}, {103, 134282, 7870},
+    };
+
+    // TS 38.104 table 5.4.2.3-1. Band, first/last DL N_REF, first/last UL N_REF.
+    private static final int[][] NR_PAIRED_UPLINK = {
+            {1, 422000, 434000, 384000, 396000}, {2, 386000, 398000, 370000, 382000},
+            {3, 361000, 376000, 342000, 357000}, {5, 173800, 178800, 164800, 169800},
+            {7, 524000, 538000, 500000, 514000}, {8, 185000, 192000, 176000, 183000},
+            {12, 145800, 149200, 139800, 143200}, {13, 149200, 151200, 155400, 157400},
+            {14, 151600, 153600, 157600, 159600}, {18, 172000, 175000, 163000, 166000},
+            {20, 158200, 164200, 166400, 172400}, {24, 305000, 311800, 325300, 332100},
+            {25, 386000, 399000, 370000, 383000}, {26, 171800, 178800, 162800, 169800},
+            {28, 151600, 160600, 140600, 149600}, {30, 470000, 472000, 461000, 463000},
+            {31, 92500, 93500, 90500, 91500}, {65, 422000, 440000, 384000, 402000},
+            {66, 422000, 440000, 342000, 356000}, {70, 399000, 404000, 339000, 342000},
+            {71, 123400, 130400, 132600, 139600}, {72, 92200, 93200, 90200, 91200},
+            {74, 295000, 303600, 285400, 294000}, {85, 145600, 149200, 139600, 143200},
+            {91, 285400, 286400, 166400, 172400}, {92, 286400, 303400, 166400, 172400},
+            {93, 285400, 286400, 176000, 183000}, {94, 286400, 303400, 176000, 183000},
+            {100, 183880, 185000, 174880, 176000}, {105, 122400, 130400, 132600, 140600},
+    };
+
+    public record UplinkReference(String duplex, int arfcn, double mhz) {}
 
     /**
      * Gets the band name for a given LTE band number.
@@ -413,6 +450,99 @@ public class CellularUtils
         }
 
         return -1;
+    }
+
+    /**
+     * Returns the LTE downlink frequency in MHz, or -1 outside the E-UTRA raster.
+     * The lower frequency and EARFCN offset come from TS 36.101 table 5.7.3-1.
+     */
+    public static double downlinkEarfcnToFrequencyMhz(int earfcn)
+    {
+        for (int[] band : DOWNLINK_LTE_BANDS)
+        {
+            if (earfcn >= band[1] && earfcn <= band[2] && band[3] >= 0)
+            {
+                return (band[3] + earfcn - band[1]) / 10.0;
+            }
+        }
+
+        return -1;
+    }
+
+    public static UplinkReference lteUplinkReference(int earfcn)
+    {
+        final int band = downlinkEarfcnToBand(earfcn);
+        if (band >= 33 && band <= 54)
+            return new UplinkReference("TDD", earfcn, downlinkEarfcnToFrequencyMhz(earfcn));
+        if (band == 29 || band == 32 || band == 67 || band == 69 || band == 75 || band == 76)
+            return new UplinkReference("SDL", -1, -1);
+
+        for (int[] uplink : LTE_PAIRED_UPLINK)
+        {
+            if (band != uplink[0]) continue;
+            for (int[] downlink : DOWNLINK_LTE_BANDS)
+            {
+                if (band != downlink[0]) continue;
+                final int offset = earfcn - downlink[1];
+                if (uplink.length == 4 && offset >= uplink[3]) return new UplinkReference("FDD", -1, -1);
+                return new UplinkReference("FDD", uplink[1] + offset, (uplink[2] + offset) / 10.0);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Maps a downlink reference frequency to its paired uplink reference. Android's NR channel
+     * may be an SSB frequency, so this must not be presented as the configured uplink carrier.
+     */
+    public static UplinkReference nrUplinkReference(int[] reportedBands, int narfcn)
+    {
+        if (reportedBands == null || reportedBands.length == 0)
+            return nrBandUplinkReference(downlinkNarfcnToBand(narfcn), narfcn);
+        UplinkReference result = null;
+        boolean ambiguousUplink = false;
+        for (int band : reportedBands)
+        {
+            final UplinkReference candidate = nrBandUplinkReference(band, narfcn);
+            if (candidate == null) continue;
+            if (result != null)
+            {
+                if (!result.duplex().equals(candidate.duplex())) return null;
+                ambiguousUplink |= result.arfcn() != candidate.arfcn();
+            }
+            result = candidate;
+        }
+        return ambiguousUplink && result != null ? new UplinkReference(result.duplex(), -1, -1) : result;
+    }
+
+    private static UplinkReference nrBandUplinkReference(int band, int narfcn)
+    {
+        for (int[] paired : NR_PAIRED_UPLINK)
+        {
+            if (band == paired[0] && narfcn >= paired[1] && narfcn <= paired[2])
+            {
+                final int uplink = paired[3] + narfcn - paired[1];
+                return uplink <= paired[4] ? new UplinkReference("FDD", uplink, narfcnToFrequencyMhz(uplink))
+                        : new UplinkReference("FDD", -1, -1);
+            }
+        }
+        if (band == 29 && narfcn >= 143400 && narfcn <= 145600 ||
+                band == 67 && narfcn >= 147600 && narfcn <= 151600 ||
+                band == 75 && narfcn >= 286400 && narfcn <= 303400 ||
+                band == 76 && narfcn >= 285400 && narfcn <= 286400)
+            return new UplinkReference("SDL", -1, -1);
+        final int tddBand = band == 90 ? 41 : band;
+        if (tddBand == 54 && narfcn >= 334000 && narfcn <= 335000)
+            return new UplinkReference("TDD", narfcn, narfcnToFrequencyMhz(narfcn));
+        for (int[] downlink : DOWNLINK_NR_BANDS)
+        {
+            if (downlink[0] == tddBand && narfcn >= downlink[1] && narfcn <= downlink[2] &&
+                    (tddBand == 34 || tddBand >= 38 && tddBand <= 53 ||
+                     tddBand >= 77 && tddBand <= 79 || tddBand == 96 ||
+                     tddBand == 101 || tddBand == 102 || tddBand == 104 || tddBand >= 257 && tddBand <= 263))
+                return new UplinkReference("TDD", narfcn, narfcnToFrequencyMhz(narfcn));
+        }
+        return null;
     }
 
     /**

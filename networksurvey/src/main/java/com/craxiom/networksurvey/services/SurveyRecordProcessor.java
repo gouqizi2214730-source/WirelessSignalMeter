@@ -35,7 +35,6 @@ import android.telephony.CellInfoGsm;
 import android.telephony.CellInfoLte;
 import android.telephony.CellInfoNr;
 import android.telephony.CellInfoWcdma;
-import android.telephony.CellSignalStrength;
 import android.telephony.CellSignalStrengthCdma;
 import android.telephony.CellSignalStrengthGsm;
 import android.telephony.CellSignalStrengthLte;
@@ -1028,7 +1027,9 @@ public class SurveyRecordProcessor
                 if (lteSurveyRecord != null)
                 {
                     notifyLteRecordListeners(lteSurveyRecord);
-                    return new CellularRecordWrapper(CellularProtocol.LTE, lteSurveyRecord);
+                    final var additionalPlmns = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                            ? ((CellInfoLte) cellInfo).getCellIdentity().getAdditionalPlmns() : Set.<String>of();
+                    return new CellularRecordWrapper(CellularProtocol.LTE, lteSurveyRecord, additionalPlmns);
                 }
             } else if (cellInfo instanceof CellInfoGsm)
             {
@@ -1760,25 +1761,21 @@ public class SurveyRecordProcessor
             dataBuilder.setSlot(Int32Value.newBuilder().setValue(subscriptionId).build());
         }
 
-        // The signalStrength object is only for the serving cell
-        if (cellInfoLte.isRegistered())
+        int rssnr = cellSignalStrengthLte.getRssnr();
+        if (cellInfoLte.isRegistered() && signalStrength != null)
         {
-            int signalStrengthSnr = getLteRssnr(signalStrength);
-            if (signalStrengthSnr != Integer.MIN_VALUE && signalStrengthSnr != CellInfo.UNAVAILABLE)
+            // A SignalStrength sample carries no PCI. Use it only when it agrees with this serving cell.
+            final List<CellSignalStrengthLte> strengths = signalStrength.getCellSignalStrengths(CellSignalStrengthLte.class);
+            if (strengths.size() == 1)
             {
-                dataBuilder.setSnr(FloatValue.newBuilder().setValue(signalStrengthSnr).build());
+                final CellSignalStrengthLte serving = strengths.get(0);
+                if (serving.getRsrp() == rsrp && validLteRssnr(serving.getRssnr())) rssnr = serving.getRssnr();
             }
         }
-
-        // I can't trust the rssnr value from the cellSignalStrengthLte object because it has always been 0 or 1.
-        // Looking at the NetMonster Core source code, they indicate on certain devices the SNR value coming from
-        // cellSignalStrengthLte is divided by 10, but the SignalStrength object has the correct value, so we will
-        // use that value instead.
-        /*int rssnr = cellSignalStrengthLte.getRssnr();
-        if (rssnr != CellInfo.UNAVAILABLE)
+        if (validLteRssnr(rssnr))
         {
             dataBuilder.setSnr(FloatValue.newBuilder().setValue(rssnr).build());
-        }*/
+        }
 
         setBandwidth(dataBuilder, cellIdentity);
 
@@ -1790,30 +1787,9 @@ public class SurveyRecordProcessor
         return recordBuilder.build();
     }
 
-    private int getLteRssnr(SignalStrength signalStrengths)
+    private static boolean validLteRssnr(int value)
     {
-        if (signalStrengths != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q)
-        {
-            List<CellSignalStrength> cellSignalStrengths = signalStrengths.getCellSignalStrengths();
-
-            int rssnrValue = Integer.MIN_VALUE; // Initialize with a default invalid value
-
-            for (CellSignalStrength signalStrength : cellSignalStrengths)
-            {
-                // Check if the CellSignalStrength instance is LTE
-                if (signalStrength instanceof CellSignalStrengthLte lteStrength)
-                {
-                    rssnrValue = lteStrength.getRssnr();
-
-                    break;
-                }
-            }
-
-            return rssnrValue;
-        } else
-        {
-            return Integer.MIN_VALUE;
-        }
+        return value >= -20 && value <= 30;
     }
 
     /**
@@ -1870,8 +1846,7 @@ public class SurveyRecordProcessor
         // all-or-nothing: it engages only when the CellInfoNr contributed no SS values at all, and
         // then all three come from the one fallback measurement. Patching individual gaps would
         // blend two measurement objects taken at different instants into a single record, and a
-        // downstream consumer could never detect the mix. Note this differs from the LTE SNR
-        // handling above, which wholesale-replaces a value the code explicitly distrusts.
+        // downstream consumer could never detect the mix.
         // The fallback also requires this scan to contain exactly one connected NR cell:
         // CellSignalStrengthNr carries no PCI to match on, so with two or more connected NR cells
         // (e.g. NR CA under SA) the borrowed measurement cannot be attributed to a specific cell,
@@ -2003,7 +1978,9 @@ public class SurveyRecordProcessor
         recordBuilder.setVersion(BuildConfig.MESSAGING_API_VERSION);
         recordBuilder.setData(dataBuilder);
 
-        return new NrRecordWrapper(recordBuilder.build(), bands);
+        final var additionalPlmns = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                ? cellIdentity.getAdditionalPlmns() : Set.<String>of();
+        return new NrRecordWrapper(recordBuilder.build(), bands, additionalPlmns);
     }
 
     /**

@@ -11,6 +11,7 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.IBinder
 import android.os.SystemClock
+import android.telephony.SubscriptionManager
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -109,6 +110,8 @@ import com.craxiom.networksurvey.ui.main.appbar.AppBarAction
 import com.craxiom.networksurvey.ui.main.appbar.TitleBar
 import com.craxiom.networksurvey.services.NetworkSurveyService
 import com.craxiom.networksurvey.ui.cellular.model.ServingCellInfo
+import com.craxiom.networksurvey.ui.rootdiag.RootDiagViewModel
+import com.craxiom.networksurvey.ui.rootdiag.mapDiagNeighbors
 import com.craxiom.networksurvey.util.CoordConverter
 import com.craxiom.networksurvey.util.SignalGrade
 import kotlinx.coroutines.Dispatchers
@@ -128,13 +131,25 @@ fun BaiduTowerMapScreen(
     onBackButtonPressed: (() -> Unit)?,
     servingCellInfo: ServingCellInfo? = null,
     subscriptionId: Int? = null,
+    rootDiag: RootDiagViewModel? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val db = remember(context) { EngineeringParamDbHelper.getInstance(context.applicationContext) }
     val pointsDb = remember(context) { MapPointDbHelper.getInstance(context.applicationContext) }
-    val updates = rememberMapServingCell(servingCellInfo, subscriptionId)
-    val servingStation = remember(updates) { updates?.servingCell?.toStationInfo() }
+    val updates = rememberMapMeasurements(servingCellInfo, subscriptionId)
+    val servingStation = remember(updates?.serving) { updates?.serving?.servingCell?.toStationInfo() }
+    val rootSignal = rootDiag?.signal?.collectAsStateWithLifecycle()?.value
+    val singleSim = remember(context, rootSignal?.status, updates?.serving?.subscriptionId) {
+        rootSignal != null && runCatching {
+            context.getSystemService(SubscriptionManager::class.java)?.activeSubscriptionInfoCount == 1
+        }.getOrDefault(false)
+    }
+    val neighborCells = remember(rootSignal, singleSim, servingStation, updates?.neighbors) {
+        if (singleSim && servingStation != null) {
+            rootSignal?.mapDiagNeighbors(servingStation) ?: updates?.neighbors.orEmpty()
+        } else updates?.neighbors.orEmpty()
+    }
 
     var area by remember { mutableStateOf<BaiduMapArea?>(null) }
     var ready by remember { mutableStateOf(false) }
@@ -288,6 +303,22 @@ fun BaiduTowerMapScreen(
             val bd = CoordConverter.wgs84ToBd09(it.latitude, it.longitude)
             LatLng(bd[0], bd[1])
         }
+    }
+    val neighborMatches by produceState(
+        emptyMap<MapNeighborCell, EngineeringParam>(), neighborCells, location, paramsCount, showLink,
+    ) {
+        val fix = location
+        value = if (fix == null || !showLink || (paramsCount ?: 0) == 0) emptyMap() else withContext(Dispatchers.IO) {
+            neighborCells.mapNotNull { cell ->
+                runCatching { db.matchMeasuredNeighbor(fix.latitude, fix.longitude, cell.isNr, cell.pci, cell.channel) }
+                    .getOrNull()?.let { cell to it }
+            }.toMap()
+        }
+    }
+    LaunchedEffect(map, ready, showLink, coordinate, servingParam, neighborCells, neighborMatches) {
+        if (map == null || !ready) return@LaunchedEffect
+        map.updateNeighborLinks(coordinate.takeIf { showLink }, servingParam,
+            neighborMatches.filterKeys { it in neighborCells }.values)
     }
     LaunchedEffect(map, ready, coordinate, servingParam, follow, showLink) {
         if (map == null || !ready) return@LaunchedEffect
@@ -799,19 +830,32 @@ internal fun Location.isRecent(): Boolean =
     SystemClock.elapsedRealtimeNanos() - elapsedRealtimeNanos in 0..30_000_000_000L
 
 @Composable
-private fun rememberMapServingCell(initial: ServingCellInfo?, subscription: Int?): ServingCellInfo? {
+private fun rememberMapMeasurements(initial: ServingCellInfo?, subscription: Int?): MapMeasurements? {
     val context = LocalContext.current.applicationContext
-    val updates = remember(initial, subscription) { MutableStateFlow(initial?.takeIf { subscription == null || it.subscriptionId == subscription }) }
+    val updates = remember(initial, subscription) {
+        MutableStateFlow(initial?.takeIf { subscription == null || it.subscriptionId == subscription }
+            ?.let { MapMeasurements(it, emptySet()) })
+    }
     LifecycleResumeEffect(context, updates) {
         var service: NetworkSurveyService? = null
         val listener = object : ICellularSurveyRecordListener {
             override fun onCellularBatch(cellularGroup: List<CellularRecordWrapper>, subscriptionId: Int) {
-                val serving = cellularGroup.mapServingCell()
-                if (subscription != null && subscriptionId != subscription &&
+                val preferred = subscription ?: SubscriptionManager.getDefaultDataSubscriptionId()
+                    .takeIf { SubscriptionManager.isValidSubscriptionId(it) }
+                if (preferred != null && subscriptionId != preferred &&
                     subscriptionId != com.craxiom.networksurvey.services.controller.CellularController.DEFAULT_SUBSCRIPTION_ID
                 ) return
-                if (serving != null) updates.value = ServingCellInfo(serving, subscriptionId)
-                else if (updates.value?.subscriptionId == subscriptionId) updates.value = null
+                val serving = cellularGroup.mapServingCell()
+                if (serving != null) {
+                    val primary = serving.toStationInfo()
+                    val neighbors = cellularGroup.asSequence().mapNotNull { it.mapNeighborCell() }
+                        .filterNot { primary != null && it.pci == primary.pci && it.channel == primary.earfcn &&
+                            it.isNr == (primary.networkType == "NR") }
+                        .toSet()
+                    updates.value = MapMeasurements(ServingCellInfo(serving, subscriptionId), neighbors)
+                } else if (preferred != null || updates.value?.serving?.subscriptionId == subscriptionId) {
+                    updates.value = null
+                }
             }
         }
         val connection = object : ServiceConnection {
@@ -833,6 +877,8 @@ private fun rememberMapServingCell(initial: ServingCellInfo?, subscription: Int?
     }
     return updates.collectAsStateWithLifecycle().value
 }
+
+private data class MapMeasurements(val serving: ServingCellInfo, val neighbors: Set<MapNeighborCell>)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -860,7 +906,13 @@ private fun MapLayerSheet(
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = labels, onClick = onToggleLabels, label = { Text("扇区名称") })
                 FilterChip(selected = points, onClick = onTogglePoints, label = { Text("打点") })
-                FilterChip(selected = link, onClick = onToggleLink, label = { Text("服务小区连线") })
+                FilterChip(selected = link, onClick = onToggleLink, label = { Text("小区连线") })
+            }
+            if (link) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    MapLegendEntry("服务小区", BaiduMapArea.SERVING_LINK_COLOR)
+                    MapLegendEntry("邻区", BaiduMapArea.NEIGHBOR_LINK_COLOR)
+                }
             }
             Text("扇区颜色", style = MaterialTheme.typography.titleSmall)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {

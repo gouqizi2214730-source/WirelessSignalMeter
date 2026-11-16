@@ -21,11 +21,18 @@ package com.craxiom.networksurvey.fragments.model;
  * @param ssSinr    The SS-SINR value in dB, or null when not reported.
  * @param idle      True when the values are the last-seen cell rather than a live report; the card
  *                  dims and shows the Idle badge so stale data never renders as live.
+ * @param bandwidth The assigned bandwidth in MHz without a unit, or an empty string.
  */
 public record NrSecondaryCellViewState(String band, String frequency, String pci, String narfcn,
                                        Integer ssRsrp, Integer ssRsrq, Integer ssSinr,
-                                       boolean idle)
+                                       boolean idle, String bandwidth)
 {
+    public NrSecondaryCellViewState(String band, String frequency, String pci, String narfcn,
+                                    Integer ssRsrp, Integer ssRsrq, Integer ssSinr, boolean idle)
+    {
+        this(band, frequency, pci, narfcn, ssRsrp, ssRsrq, ssSinr, idle, "");
+    }
+
     /**
      * @return A copy of this view state marked idle, for rendering the most recent live cell after
      * the NR leg has detached.
@@ -33,6 +40,6 @@ public record NrSecondaryCellViewState(String band, String frequency, String pci
     public NrSecondaryCellViewState asIdle()
     {
         return new NrSecondaryCellViewState(band, frequency, pci, narfcn, ssRsrp, ssRsrq, ssSinr,
-                true);
+                true, bandwidth);
     }
 }

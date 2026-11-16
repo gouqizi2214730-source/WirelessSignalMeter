@@ -124,6 +124,18 @@ public final class TelephonyStateUtils
         return rows;
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.R)
+    public static NetworkRegistrationInfo registeredWwanData(ServiceState serviceState)
+    {
+        for (NetworkRegistrationInfo info : serviceState.getNetworkRegistrationInfoList())
+        {
+            if ((info.getDomain() & NetworkRegistrationInfo.DOMAIN_PS) != 0
+                    && info.getTransportType() == AccessNetworkConstants.TRANSPORT_TYPE_WWAN
+                    && isRegistered(info)) return info;
+        }
+        return null;
+    }
+
     /**
      * The {@code isNetworkRegistered()} getter reports the true modem state but was only added in
      * API 34; the deprecated {@code isRegistered()} goes back to API 30 and reports the same thing
@@ -443,6 +455,16 @@ public final class TelephonyStateUtils
     private static boolean hasDomain(RegistrationRow row, int domainBit)
     {
         return (row.domain() & domainBit) != 0;
+    }
+
+    public static String registeredWwanPlmn(List<RegistrationRow> rows)
+    {
+        final RegistrationRow data = findRegistered(rows, NetworkRegistrationInfo.DOMAIN_PS,
+                AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
+        if (data != null && OperatorUtil.isValidPlmn(data.registeredPlmn())) return data.registeredPlmn();
+        final RegistrationRow voice = findRegistered(rows, NetworkRegistrationInfo.DOMAIN_CS,
+                AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
+        return voice != null && OperatorUtil.isValidPlmn(voice.registeredPlmn()) ? voice.registeredPlmn() : "";
     }
 
 }

@@ -20,8 +20,6 @@ object CellularDetailsCompose {
         composeView: ComposeView,
         viewModel: CellularViewModel,
         chartViewModel: CellularChartViewModel,
-        onCellularInfoClick: Runnable,
-        onTechnologyInfoClick: Runnable,
         onNrInfoClick: Runnable,
         topBarScroll: FragmentTopBarScroll?,
     ) {
@@ -33,8 +31,6 @@ object CellularDetailsCompose {
                 CellularDetailsScreen(
                     viewModel = viewModel,
                     chartViewModel = chartViewModel,
-                    onCellularInfoClick = { onCellularInfoClick.run() },
-                    onTechnologyInfoClick = { onTechnologyInfoClick.run() },
                     onNrInfoClick = { onNrInfoClick.run() },
                     modifier = Modifier.fragmentTopBarScroll(topBarScroll),
                 )

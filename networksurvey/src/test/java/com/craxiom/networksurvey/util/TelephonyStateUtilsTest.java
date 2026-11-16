@@ -364,6 +364,15 @@ public class TelephonyStateUtilsTest
     }
 
     @Test
+    public void primaryNrBandwidth_matchesNciAcrossChannelReferences()
+    {
+        assertTrue(CellularBandwidthUtils.matchesPrimaryNrCell(53564494849L, 53564494849L, 426000, 428910));
+        assertFalse(CellularBandwidthUtils.matchesPrimaryNrCell(53564494849L, 53564494850L, 428910, 428910));
+        assertTrue(CellularBandwidthUtils.matchesPrimaryNrCell(-1, 53564494849L, 428910, 428910));
+        assertFalse(CellularBandwidthUtils.matchesPrimaryNrCell(-1, 53564494849L, 426000, 428910));
+    }
+
+    @Test
     public void validBandwidths_filtersImplausibleEntries()
     {
         assertArrayEquals(new int[]{20000}, CellularBandwidthUtils.validBandwidthsKhz(

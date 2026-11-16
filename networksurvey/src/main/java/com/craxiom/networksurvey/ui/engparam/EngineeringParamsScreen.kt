@@ -43,16 +43,24 @@ fun EngineeringParamsScreen(onNavigateUp: () -> Unit) {
     LaunchedEffect(vm) { vm.load() }
 
     var query by rememberSaveable { mutableStateOf("") }
+    val stationIdSearch = remember {
+        Regex("""(?:基站(?:\s*id)?|(?:gnb|enb|enodeb)\s*id)\s*[:：]?\s*([0-9]+)""", RegexOption.IGNORE_CASE)
+    }
     var selected by remember { mutableStateOf<EngineeringParam?>(null) }
     val search = query.trim()
     val params = state.params
     val filtered by produceState(emptyList<EngineeringParam>(), params, search) {
         value = if (search.isEmpty()) params else withContext(Dispatchers.Default) {
+            val stationIdQuery = stationIdSearch.matchEntire(search)
+            val stationId = (stationIdQuery?.groupValues?.get(1) ?: search).toIntOrNull()
             params.filter {
-                it.cellName.orEmpty().contains(search, ignoreCase = true) ||
-                    it.siteName.orEmpty().contains(search, ignoreCase = true) ||
-                    search == it.ci.toString() || search == it.gnbId.toString() ||
-                    search == it.pci.toString() || search == it.earfcn.toString()
+                val matchesStation = stationId != null && stationId > 0 && stationId == it.gnbId
+                matchesStation || (stationIdQuery == null && (
+                    it.cellName.orEmpty().contains(search, ignoreCase = true) ||
+                        it.siteName.orEmpty().contains(search, ignoreCase = true) ||
+                        search == it.ci.toString() || search == it.pci.toString() ||
+                        search == it.earfcn.toString()
+                ))
             }
         }
     }
@@ -132,7 +140,7 @@ fun EngineeringParamsScreen(onNavigateUp: () -> Unit) {
                 item("search") {
                     OutlinedTextField(
                         query, { query = it }, Modifier.fillMaxWidth(),
-                        label = { Text("搜索小区、站名、ID、PCI 或频点") },
+                        label = { Text("搜索站名、小区、基站 ID、PCI 或频点") },
                         singleLine = true, shape = RoundedCornerShape(18.dp),
                         leadingIcon = { Icon(Icons.Rounded.Search, null) },
                         trailingIcon = if (query.isEmpty()) null else {

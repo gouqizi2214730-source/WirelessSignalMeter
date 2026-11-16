@@ -20,6 +20,45 @@ public class CellularUtilsTest
     private static final double DELTA = 0.0001; // Tolerance for double comparisons
 
     @Test
+    public void nrUplinkReference_usesReportedBandForOverlappingNarfcn()
+    {
+        final var n1 = CellularUtils.nrUplinkReference(new int[]{1}, 428910);
+        assertEquals("FDD", n1.duplex());
+        assertEquals(390910, n1.arfcn());
+        assertEquals(1954.55, n1.mhz(), DELTA);
+        assertNull(CellularUtils.nrUplinkReference(null, 428910));
+        final var ambiguous = CellularUtils.nrUplinkReference(new int[]{1, 66}, 428910);
+        assertEquals("FDD", ambiguous.duplex());
+        assertEquals(-1, ambiguous.arfcn());
+    }
+
+    @Test
+    public void nrUplinkReference_tddUsesSameReferenceAndSdlHasNoUplink()
+    {
+        final var n78 = CellularUtils.nrUplinkReference(new int[]{78}, 633984);
+        assertEquals("TDD", n78.duplex());
+        assertEquals(633984, n78.arfcn());
+        assertEquals(3509.76, n78.mhz(), DELTA);
+        final var n29 = CellularUtils.nrUplinkReference(new int[]{29}, 144000);
+        assertEquals("SDL", n29.duplex());
+        assertEquals(-1, n29.arfcn());
+    }
+
+    @Test
+    public void lteUplinkReference_supportsZeroEarfcnAndAsymmetricBands()
+    {
+        assertEquals(18000, CellularUtils.lteUplinkReference(0).arfcn());
+        final var b5 = CellularUtils.lteUplinkReference(2452);
+        assertEquals("FDD", b5.duplex());
+        assertEquals(20452, b5.arfcn());
+        assertEquals(829.2, b5.mhz(), DELTA);
+        assertEquals(132671, CellularUtils.lteUplinkReference(67135).arfcn());
+        assertEquals(-1, CellularUtils.lteUplinkReference(67136).arfcn());
+        assertEquals(38650, CellularUtils.lteUplinkReference(38650).arfcn());
+        assertEquals("SDL", CellularUtils.lteUplinkReference(9660).duplex());
+    }
+
+    @Test
     public void narfcnToFrequencyMhz_range1_boundaryValues()
     {
         // Test boundary values for Range 1: 0 ≤ ARFCN ≤ 599,999

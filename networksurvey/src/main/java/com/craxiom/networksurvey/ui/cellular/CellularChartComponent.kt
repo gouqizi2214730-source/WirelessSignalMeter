@@ -42,9 +42,12 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.craxiom.networksurvey.R
+import com.craxiom.networksurvey.ui.rootdiag.SIGNAL_UNAVAILABLE
 import kotlinx.coroutines.delay
 import kotlin.math.ceil
 import kotlin.math.floor
+
+private val signalPlotHeight = 144.dp
 
 @Composable
 internal fun CellularChartComponent(viewModel: CellularChartViewModel) {
@@ -71,7 +74,7 @@ internal fun CellularChartComponent(viewModel: CellularChartViewModel) {
     val colors = MaterialTheme.colorScheme
     val title = stringResource(R.string.cellular_trend)
 
-    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -86,12 +89,10 @@ internal fun CellularChartComponent(viewModel: CellularChartViewModel) {
                     color = colors.onSurfaceVariant,
                 )
             }
-            if (latest != null) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("$latest", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold,
-                        color = colors.primary)
-                    Text("dBm", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
-                }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(latest?.toString() ?: SIGNAL_UNAVAILABLE, style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold, color = colors.primary)
+                Text("dBm", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
             }
         }
 
@@ -100,7 +101,7 @@ internal fun CellularChartComponent(viewModel: CellularChartViewModel) {
             shape = RoundedCornerShape(16.dp),
         ) {
             if (values.size < 2) {
-                Box(Modifier.fillMaxWidth().height(96.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxWidth().height(signalPlotHeight), contentAlignment = Alignment.Center) {
                     Text(
                         stringResource(if (values.isEmpty()) R.string.cellular_trend_waiting else R.string.cellular_trend_waiting_next),
                         Modifier.padding(12.dp),
@@ -136,7 +137,7 @@ private fun SignalPlot(
     val bottomDbm = floor((values.min() - 4) / 10f).toInt() * 10
     val topDbm = maxOf(bottomDbm + 20, ceil((values.max() + 4) / 10f).toInt() * 10)
     Canvas(
-        Modifier.fillMaxWidth().height(168.dp).semantics { contentDescription = title }
+        Modifier.fillMaxWidth().height(signalPlotHeight).semantics { contentDescription = title }
             .drawWithCache {
                 val axisStyle: TextStyle = textStyle.copy(fontSize = 10.sp)
                 val yLabels = listOf(topDbm, (topDbm + bottomDbm) / 2, bottomDbm)

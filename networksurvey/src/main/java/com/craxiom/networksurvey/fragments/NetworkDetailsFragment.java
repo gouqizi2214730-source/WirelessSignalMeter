@@ -8,6 +8,7 @@ import android.content.IntentFilter;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.provider.Settings;
+import android.telephony.TelephonyManager;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
@@ -27,6 +28,7 @@ import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.craxiom.messaging.GsmRecord;
+import com.craxiom.messaging.ConnectionStatus;
 import com.craxiom.messaging.GsmRecordData;
 import com.craxiom.messaging.LteRecord;
 import com.craxiom.messaging.LteRecordData;
@@ -60,12 +62,13 @@ import com.craxiom.networksurvey.util.CalculationUtils;
 import com.craxiom.networksurvey.util.CellularBandwidthUtils;
 import com.craxiom.networksurvey.util.CellularUtils;
 import com.craxiom.networksurvey.util.ColorUtils;
-import com.craxiom.networksurvey.util.NsUtils;
+import com.craxiom.networksurvey.util.OperatorUtil;
 import com.craxiom.networksurvey.util.ParserUtils;
 import com.craxiom.networksurvey.util.TelephonyStateUtils;
 import com.mackhartley.roundedprogressbar.RoundedProgressBar;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -123,6 +126,11 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
     // (onNetworkType always runs just before the same scan's onCellularBatch) and volatile so
     // main-thread readers see the latest value.
     private volatile TelephonyStateUtils.NrMode currentNrMode = TelephonyStateUtils.NrMode.NONE;
+    private volatile NetworkTechnologyInfo currentTechnology;
+    private volatile NrBandwidthReading lastNrBandwidth;
+
+    private record NrBandwidthCell(String plmn, long nci, int pci, int channel) {}
+    private record NrBandwidthReading(NrBandwidthCell cell, int khz, long measuredAt) {}
 
     private FragmentNetworkDetailsBinding binding;
     private CellularViewModel viewModel;
@@ -152,8 +160,12 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
 
         // 全 Compose 渲染：将蜂窝详情 UI 装入 ComposeView
         Fragment parent = getParentFragment();
+        if (parent instanceof MainCellularFragment)
+        {
+            ((MainCellularFragment) parent).setCellularModel(viewModel);
+        }
         CellularDetailsCompose.setContent(binding.cellularDetailsComposeView, viewModel, chartViewModel,
-                this::showCellularInfoDialog, this::showNetworkTechnologyInfoDialog, this::showNrDetailsInfoDialog,
+                this::showNrDetailsInfoDialog,
                 parent instanceof MainCellularFragment ? ((MainCellularFragment) parent).getTopBarScroll() : null);
 
         return binding.getRoot();
@@ -265,6 +277,10 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
         if (this.subscriptionId != subscriptionId) return;
 
         currentNrMode = technologyInfo.nrMode();
+        currentTechnology = technologyInfo;
+        viewModel.setNrMode(currentNrMode);
+        viewModel.setRegisteredPlmn(formatPlmn(technologyInfo.registeredPlmn()));
+        viewModel.setCarrier(technologyInfo.subscriptionCarrier());
 
         final TelephonyStateUtils.HeroResult hero = TelephonyStateUtils.deriveHero(
                 technologyInfo.nrMode(), technologyInfo.baseDataRat(), technologyInfo.registrationRows());
@@ -358,14 +374,21 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
      */
     private void clearCellularUi()
     {
+        lastNrBandwidth = null;
+        viewModel.setNrBandwidthDiagnostic(null);
         viewModel.setServingCellProtocol(CellularProtocol.NONE);
+        viewModel.setLteServingCell(null);
+        viewModel.setNrServingCell(null);
+        viewModel.setNrMode(TelephonyStateUtils.NrMode.NONE);
 
         viewModel.setMcc("");
         viewModel.setMnc("");
+        viewModel.setCellPlmns("");
         viewModel.setAreaCode("");
         viewModel.setCellId(null);
         viewModel.setChannelNumber("");
         viewModel.setFrequency("");
+        viewModel.setUplinkReference(null);
         viewModel.setBand("");
         viewModel.setLteBand("");
 
@@ -378,8 +401,8 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
         viewModel.setSignalTwo(null);
         viewModel.setSignalThree(null);
 
-        viewModel.setNrNeighbors(Collections.emptySortedSet());
-        viewModel.setLteNeighbors(Collections.emptySortedSet());
+        viewModel.setNrNeighbors(Collections.emptyList());
+        viewModel.setLteNeighbors(Collections.emptyList());
         viewModel.setUmtsNeighbors(Collections.emptySortedSet());
         viewModel.setGsmNeighbors(Collections.emptySortedSet());
 
@@ -404,13 +427,31 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
         final List<UmtsRecordData> umtsNeighbors = new ArrayList<>();
         final List<LteRecordData> lteNeighbors = new ArrayList<>();
         final List<NrRecordWrapper> nrNonServing = new ArrayList<>();
+        final NetworkTechnologyInfo technology = currentTechnology;
+        final CellularProtocol preferredRat = currentNrMode == TelephonyStateUtils.NrMode.NON_STANDALONE
+                ? CellularProtocol.LTE : CellularProtocol.NR;
+        int activeLte = 0;
+        int activeNr = 0;
         CellularRecordWrapper servingCellRecord = null;
         for (CellularRecordWrapper record : cellularGroup) {
+            if (record.cellularProtocol == CellularProtocol.LTE) {
+                final LteRecordData data = ((LteRecord) record.cellularRecord).getData();
+                if (isActiveCarrier(data.getServingCell().getValue(), data.getConnectionStatus())) activeLte++;
+            } else if (record.cellularProtocol == CellularProtocol.NR) {
+                final NrRecordData data = ((NrRecord) record.cellularRecord).getData();
+                if (isActiveCarrier(data.getServingCell().getValue(), data.getConnectionStatus())) activeNr++;
+            }
             if (isRegisteredCell(record) &&
-                    (servingCellRecord == null || record.cellularProtocol == CellularProtocol.NR)) {
+                    (servingCellRecord == null || (record.cellularProtocol == preferredRat &&
+                            servingCellRecord.cellularProtocol != preferredRat))) {
                 servingCellRecord = record;
             }
         }
+        if (servingCellRecord == null || servingCellRecord.cellularProtocol != CellularProtocol.NR) {
+            lastNrBandwidth = null;
+            viewModel.setNrBandwidthDiagnostic(null);
+        }
+        int secondaryNrBandwidth = 0;
         for (CellularRecordWrapper cellularRecord : cellularGroup)
         {
             switch (cellularRecord.cellularProtocol)
@@ -451,7 +492,15 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
                     if (cellularRecord == servingCellRecord)
                     {
                         viewModel.setServingCellProtocol(cellularRecord.cellularProtocol);
-                        processLteServingCell(lteData);
+                        final int preciseBandwidth = LteMessageConstants.getLteBandwidthKhz(lteData.getLteBandwidth());
+                        final int[] reported = primaryBandwidths(technology, TelephonyManager.NETWORK_TYPE_LTE,
+                                lteData.hasEarfcn() ? lteData.getEarfcn().getValue() : -1);
+                        final int bandwidth = preciseBandwidth > 0 ? preciseBandwidth
+                                : activeLte == 1 && activeNr == 0 ? CellularBandwidthUtils.singleCarrierBandwidthKhz(reported) : 0;
+                        if (activeLte == 1 && activeNr == 1) {
+                            secondaryNrBandwidth = CellularBandwidthUtils.secondaryBandwidthKhz(reported, preciseBandwidth);
+                        }
+                        processLteServingCell(lteData, cellularRecord.additionalPlmns, bandwidth);
                     } else
                     {
                         lteNeighbors.add(lteData);
@@ -463,7 +512,17 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
                     if (cellularRecord == servingCellRecord)
                     {
                         viewModel.setServingCellProtocol(cellularRecord.cellularProtocol);
-                        processNrServingCell(nrData, ((NrRecordWrapper) cellularRecord).bands);
+                        final boolean singleCarrier = activeNr == 1 && activeLte == 0;
+                        final boolean cellMatches = technology != null && CellularBandwidthUtils.matchesPrimaryNrCell(
+                                technology.registeredNci(), nrData.hasNci() ? nrData.getNci().getValue() : -1,
+                                technology.primaryChannel(), nrData.hasNarfcn() ? nrData.getNarfcn().getValue() : -1);
+                        final int bandwidth = nrServingBandwidth(technology, nrData, singleCarrier && cellMatches);
+                        final int[] reported = technology != null ? technology.cellBandwidthsKhz() : null;
+                        viewModel.setNrBandwidthDiagnostic(new CellularViewModel.NrBandwidthDiagnostic(
+                                reported == null ? List.of() : Arrays.stream(reported).boxed().collect(Collectors.toList()),
+                                technology == null ? 0 : technology.registeredDataRat(),
+                                technology == null ? 0 : technology.baseDataRat(), singleCarrier, cellMatches, bandwidth));
+                        processNrServingCell(nrData, (NrRecordWrapper) cellularRecord, bandwidth);
                     } else
                     {
                         nrNonServing.add((NrRecordWrapper) cellularRecord);
@@ -476,6 +535,7 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
             clearCellularUi();
             chartViewModel.recordSignal(CellularProtocol.NONE, null);
         } else {
+            if (servingCellRecord.cellularProtocol != CellularProtocol.LTE) viewModel.setLteServingCell(null);
             sharedViewModel.updateLatestServingCellInfo(
                     new ServingCellInfo(servingCellRecord, subscriptionId, System.currentTimeMillis()));
         }
@@ -487,8 +547,14 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
         // neighbors table. Devices that report no connection status simply do not show the card.
         final NrRecordWrapper secondaryNrCell = CellularUtils.selectSecondaryServingNrCell(nrNonServing);
         if (secondaryNrCell != null) nrNonServing.remove(secondaryNrCell);
-        viewModel.setNrSecondaryCell(resolveNrSecondaryCellViewState(secondaryNrCell,
-                CellularUtils.getTowerId(servingCellRecord)));
+        final NrSecondaryCellViewState secondaryState = resolveNrSecondaryCellViewState(secondaryNrCell,
+                CellularUtils.getTowerId(servingCellRecord), secondaryNrBandwidth);
+        viewModel.setNrSecondaryCell(secondaryState);
+        if (servingCellRecord == null || servingCellRecord.cellularProtocol != CellularProtocol.NR)
+        {
+            viewModel.setNrServingCell(secondaryNrCell != null && secondaryState != null && !secondaryState.idle()
+                    ? ((NrRecord) secondaryNrCell.cellularRecord).getData() : null);
+        }
 
         processGsmNeighbors(gsmNeighbors);
         processUmtsNeighbors(umtsNeighbors);
@@ -509,6 +575,56 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
         };
     }
 
+    private static boolean isActiveCarrier(boolean registered, ConnectionStatus status)
+    {
+        return registered || status == ConnectionStatus.PRIMARY_SERVING || status == ConnectionStatus.SECONDARY_SERVING;
+    }
+
+    private static int[] primaryBandwidths(NetworkTechnologyInfo technology, int radioType, int channel)
+    {
+        if (technology == null || technology.baseDataRat() != radioType || channel < 0) return null;
+        final int reportedChannel = technology.primaryChannel();
+        return reportedChannel < 0 || reportedChannel == channel ? technology.cellBandwidthsKhz() : null;
+    }
+
+    private int nrServingBandwidth(NetworkTechnologyInfo technology, NrRecordData data, boolean matchedSingleCarrier)
+    {
+        final int channel = data.hasNarfcn() ? data.getNarfcn().getValue() : -1;
+        final long nci = data.hasNci() ? data.getNci().getValue() : -1;
+        final int rat = technology == null ? TelephonyManager.NETWORK_TYPE_UNKNOWN
+                : technology.registeredDataRat() != TelephonyManager.NETWORK_TYPE_UNKNOWN
+                ? technology.registeredDataRat() : technology.baseDataRat();
+        if (rat != TelephonyManager.NETWORK_TYPE_NR || !matchedSingleCarrier)
+        {
+            lastNrBandwidth = null;
+            return 0;
+        }
+
+        final int[] bandwidths = technology.cellBandwidthsKhz();
+        final int khz = CellularBandwidthUtils.singleCarrierBandwidthKhz(bandwidths);
+        final int pci = data.hasPci() ? data.getPci().getValue() : -1;
+        final String plmn = technology.registeredPlmn();
+        if (nci < 0 || pci < 0 || channel < 0 || plmn.isEmpty())
+        {
+            lastNrBandwidth = null;
+            return khz;
+        }
+        final NrBandwidthCell cell = new NrBandwidthCell(plmn, nci, pci, channel);
+        final long now = SystemClock.elapsedRealtime();
+        if (khz > 0)
+        {
+            lastNrBandwidth = new NrBandwidthReading(cell, khz, now);
+            return khz;
+        }
+        final NrBandwidthReading previous = lastNrBandwidth;
+        if ((bandwidths == null || bandwidths.length <= 1) && previous != null
+                && previous.cell().equals(cell) && now - previous.measuredAt() <= NR_IDLE_MAX_AGE_MS)
+            return previous.khz();
+
+        lastNrBandwidth = null;
+        return 0;
+    }
+
     /**
      * Takes in the GSM serving cell details and sets it in the view model so that it can be
      * displayed in the UI.
@@ -520,7 +636,6 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
         chartViewModel.recordSignal(CellularProtocol.GSM,
                 data.hasSignalStrength() ? (int) data.getSignalStrength().getValue() : null);
 
-        viewModel.setCarrier(data.getProvider());
         setMccMncOnViewModel(data.hasPlmn() ? data.getPlmn().getValue() : null,
                 data.hasMcc() ? data.getMcc().getValue() : null,
                 data.hasMnc() ? data.getMnc().getValue() : null);
@@ -543,7 +658,6 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
         chartViewModel.recordSignal(CellularProtocol.UMTS,
                 data.hasRscp() ? (int) data.getRscp().getValue() : null);
 
-        viewModel.setCarrier(data.getProvider());
         setMccMncOnViewModel(data.hasPlmn() ? data.getPlmn().getValue() : null,
                 data.hasMcc() ? data.getMcc().getValue() : null,
                 data.hasMnc() ? data.getMnc().getValue() : null);
@@ -562,20 +676,24 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
      *
      * @param data The details for the LTE serving cell record.
      */
-    private void processLteServingCell(LteRecordData data)
+    private void processLteServingCell(LteRecordData data, List<String> additionalPlmns, int bandwidthKhz)
     {
+        viewModel.setLteServingCell(data);
         chartViewModel.recordSignal(CellularProtocol.LTE,
                 data.hasRsrp() ? (int) data.getRsrp().getValue() : null);
 
-        viewModel.setCarrier(data.getProvider());
         setMccMncOnViewModel(data.hasPlmn() ? data.getPlmn().getValue() : null,
                 data.hasMcc() ? data.getMcc().getValue() : null,
-                data.hasMnc() ? data.getMnc().getValue() : null);
+                data.hasMnc() ? data.getMnc().getValue() : null, additionalPlmns);
         viewModel.setAreaCode(data.hasTac() ? String.valueOf(data.getTac().getValue()) : "");
         viewModel.setCellId(data.hasEci() ? (long) data.getEci().getValue() : null);
 
         // Set EARFCN without band information
         viewModel.setChannelNumber(data.hasEarfcn() ? String.valueOf(data.getEarfcn().getValue()) : "");
+        viewModel.setFrequency(data.hasEarfcn() ? formatFrequency(
+                CellularUtils.downlinkEarfcnToFrequencyMhz(data.getEarfcn().getValue())) : "");
+        viewModel.setUplinkReference(data.hasEarfcn()
+                ? CellularUtils.lteUplinkReference(data.getEarfcn().getValue()) : null);
 
         // Set LTE band field with band number and name
         if (data.hasEarfcn())
@@ -602,7 +720,7 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
         }
 
         viewModel.setPci(data.hasPci() ? formatPci(data.getPci().getValue()) : "");
-        viewModel.setBandwidth(LteMessageConstants.getLteBandwidth(data.getLteBandwidth()));
+        viewModel.setBandwidth(bandwidthKhz > 0 ? CellularBandwidthUtils.formatBandwidthMhz(bandwidthKhz) : "");
         viewModel.setTa(data.hasTa() ? String.valueOf(data.getTa().getValue()) : "");
         viewModel.setCqi(data.hasCqi() ? String.valueOf(data.getCqi().getValue()) : "");
 
@@ -617,27 +735,30 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
      *
      * @param data The details for the NR serving cell record.
      */
-    private void processNrServingCell(NrRecordData data, int[] bands)
+    private void processNrServingCell(NrRecordData data, NrRecordWrapper wrapper, int bandwidthKhz)
     {
+        viewModel.setNrServingCell(data);
         chartViewModel.recordSignal(CellularProtocol.NR,
                 data.hasSsRsrp() ? (int) data.getSsRsrp().getValue() : null);
 
-        viewModel.setCarrier(data.getProvider());
         setMccMncOnViewModel(data.hasPlmn() ? data.getPlmn().getValue() : null,
                 data.hasMcc() ? data.getMcc().getValue() : null,
-                data.hasMnc() ? data.getMnc().getValue() : null);
+                data.hasMnc() ? data.getMnc().getValue() : null, wrapper.additionalPlmns);
         viewModel.setAreaCode(data.hasTac() ? String.valueOf(data.getTac().getValue()) : "");
         viewModel.setCellId(data.hasNci() ? data.getNci().getValue() : null);
 
         // Set NARFCN without band information
         viewModel.setChannelNumber(data.hasNarfcn() ? String.valueOf(data.getNarfcn().getValue()) : "");
 
-        viewModel.setBand(CellularUtils.formatNrBands(bands,
+        viewModel.setBand(CellularUtils.formatNrBands(wrapper.bands,
                 data.hasNarfcn() ? data.getNarfcn().getValue() : -1));
+        viewModel.setUplinkReference(data.hasNarfcn()
+                ? CellularUtils.nrUplinkReference(wrapper.bands, data.getNarfcn().getValue()) : null);
 
         viewModel.setPci(data.hasPci() ? formatPci(data.getPci().getValue()) : "");
 
         viewModel.setFrequency(data.hasNarfcn() ? formatNrFrequency(data.getNarfcn().getValue()) : "");
+        viewModel.setBandwidth(bandwidthKhz > 0 ? CellularBandwidthUtils.formatBandwidthMhz(bandwidthKhz) : "");
 
         viewModel.setTa(data.hasTa() ? String.valueOf(data.getTa().getValue()) : "");
 
@@ -663,7 +784,11 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
      */
     private String formatNrFrequency(int narfcn)
     {
-        final double frequencyMhz = CellularUtils.narfcnToFrequencyMhz(narfcn);
+        return formatFrequency(CellularUtils.narfcnToFrequencyMhz(narfcn));
+    }
+
+    private String formatFrequency(double frequencyMhz)
+    {
         if (frequencyMhz <= 0) return "";
 
         return getString(R.string.mhz_value_label, String.format(Locale.US, "%.3f", frequencyMhz));
@@ -683,7 +808,7 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
      *                        has since left, so it is never held as idle.
      */
     private NrSecondaryCellViewState resolveNrSecondaryCellViewState(NrRecordWrapper secondaryNrCell,
-                                                                     String servingCellId)
+                                                                     String servingCellId, int bandwidthKhz)
     {
         final long nowMs = SystemClock.elapsedRealtime();
         final NrSecondaryCellSighting sighting = viewModel.getLastNrSecondaryCellSighting();
@@ -696,7 +821,7 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
         switch (cardState)
         {
             case ACTIVE:
-                final NrSecondaryCellViewState state = buildNrSecondaryCellViewState(secondaryNrCell);
+                final NrSecondaryCellViewState state = buildNrSecondaryCellViewState(secondaryNrCell, bandwidthKhz);
                 viewModel.setLastNrSecondaryCellSighting(
                         new NrSecondaryCellSighting(state, nowMs, servingCellId));
                 viewModel.setNrLastSeenText("");
@@ -727,7 +852,7 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
      * Builds the view state for the NR Secondary Cell details card from the NR record the device
      * reported as SECONDARY_SERVING (the 5G NSA data leg, or an NR CA SCell under SA).
      */
-    private NrSecondaryCellViewState buildNrSecondaryCellViewState(NrRecordWrapper wrapper)
+    private NrSecondaryCellViewState buildNrSecondaryCellViewState(NrRecordWrapper wrapper, int bandwidthKhz)
     {
         final NrRecordData data = ((NrRecord) wrapper.cellularRecord).getData();
 
@@ -740,7 +865,7 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
                 data.hasSsRsrp() ? (int) data.getSsRsrp().getValue() : null,
                 data.hasSsRsrq() ? (int) data.getSsRsrq().getValue() : null,
                 data.hasSsSinr() ? (int) data.getSsSinr().getValue() : null,
-                false);
+                false, bandwidthKhz > 0 ? CellularBandwidthUtils.formatBandwidthMhz(bandwidthKhz) : "");
     }
     /**
      * Takes in the current group of UMTS neighbors, converts them to a {@link UmtsNeighbor}, and then
@@ -795,10 +920,11 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
             if (data.hasRsrp()) builder.rsrp((int) data.getRsrp().getValue());
             if (data.hasRsrq()) builder.rsrq((int) data.getRsrq().getValue());
             if (data.hasTa()) builder.ta(data.getTa().getValue());
+            if (data.hasSnr()) builder.sinr((int) data.getSnr().getValue());
             return builder.build();
         }).sorted().collect(Collectors.toCollection(TreeSet::new));
 
-        viewModel.setLteNeighbors(lteNeighbors);
+        viewModel.setLteNeighbors(List.copyOf(lteNeighbors));
     }
 
     /**
@@ -815,10 +941,12 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
             if (data.hasPci()) builder.pci(data.getPci().getValue());
             if (data.hasSsRsrp()) builder.ssRsrp((int) data.getSsRsrp().getValue());
             if (data.hasSsRsrq()) builder.ssRsrq((int) data.getSsRsrq().getValue());
+            if (data.hasSsSinr()) builder.ssSinr((int) data.getSsSinr().getValue());
+            if (data.hasCsiSinr()) builder.csiSinr((int) data.getCsiSinr().getValue());
             return builder.build();
         }).sorted().collect(Collectors.toCollection(TreeSet::new));
 
-        viewModel.setNrNeighbors(nrNeighbors);
+        viewModel.setNrNeighbors(List.copyOf(nrNeighbors));
     }
     /**
      * Builds the two-tone pill text: the label in the faded label color, the separator and value in
@@ -838,64 +966,6 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
         }
         return builder;
     }
-    /**
-     * Shows the Network Technology info dialog: an explanation of the hero line and the
-     * Voice / Data / Branding pills.
-     */
-    private void showNetworkTechnologyInfoDialog()
-    {
-        if (getContext() == null) return;
-        FragmentDialogs.showCellularInfo(getParentFragmentManager(),
-                getString(R.string.network_technology_title),
-                getString(R.string.network_technology_explanation));
-    }
-    /**
-     * Displays a dialog with some information about cellular terms.
-     */
-    private void showCellularInfoDialog()
-    {
-        final Context context = getContext();
-        if (context == null) return;
-
-        CellularProtocol protocol = viewModel.getServingCellProtocol().getValue();
-
-        // Default to LTE as a fallback
-        String cellularInfoTitle = getString(R.string.lte_info_description);
-        CharSequence cellularInfoBody = getString(R.string.lte_cellular_terms_explanation);
-
-        if (protocol == null) protocol = CellularProtocol.LTE;
-        switch (protocol)
-        {
-            case NONE, LTE ->
-            {
-                cellularInfoTitle = getString(R.string.lte_info_description);
-                cellularInfoBody = getText(R.string.lte_cellular_terms_explanation);
-            }
-            case GSM ->
-            {
-                cellularInfoTitle = getString(R.string.gsm_info_description);
-                cellularInfoBody = getText(R.string.gsm_cellular_terms_explanation);
-            }
-            case CDMA ->
-            {
-                cellularInfoTitle = "How did you find CDMA?";
-                cellularInfoBody = "CDMA is no longer supported. I am impressed you were able to find a CDMA network! Honestly, send me an email at craxiomdev@gmail.com and let me know where you found it.";
-            }
-            case UMTS ->
-            {
-                cellularInfoTitle = getString(R.string.umts_info_description);
-                cellularInfoBody = getText(R.string.umts_cellular_terms_explanation);
-            }
-            case NR ->
-            {
-                cellularInfoTitle = getString(R.string.nr_info_description);
-                cellularInfoBody = getText(R.string.nr_cellular_terms_explanation);
-            }
-        }
-
-        FragmentDialogs.showCellularInfo(getParentFragmentManager(), cellularInfoTitle, cellularInfoBody);
-    }
-
     /**
      * Displays a dialog explaining what a 5G NR secondary cell is, plus the terms shown on the
      * card. Deliberately not the generic NR terms dialog: that one documents fields (MCC/MNC, TAC,
@@ -955,14 +1025,31 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
      */
     private void setMccMncOnViewModel(String plmn, Integer mcc, Integer mnc)
     {
-        if (plmn != null)
-        {
-            viewModel.setMcc(NsUtils.extractMccFromPlmn(plmn));
-            viewModel.setMnc(NsUtils.extractMncFromPlmn(plmn));
-        } else
-        {
-            viewModel.setMcc(mcc != null ? String.valueOf(mcc) : "");
-            viewModel.setMnc(mnc != null ? String.valueOf(mnc) : "");
-        }
+        setMccMncOnViewModel(plmn, mcc, mnc, List.of());
+    }
+
+    private void setMccMncOnViewModel(String plmn, Integer mcc, Integer mnc, List<String> additionalPlmns)
+    {
+        String identity = plmn == null ? "" : plmn.replace("-", "");
+        if (!OperatorUtil.isValidPlmn(identity) && mcc != null && mnc != null
+                && mcc >= 1 && mcc <= 999 && mnc >= 0 && mnc <= 999)
+            identity = String.format(Locale.ROOT, "%03d%02d", mcc, mnc);
+        final String displayedIdentity = formatPlmn(identity);
+        viewModel.setMcc(!displayedIdentity.isEmpty() ? identity.substring(0, 3)
+                : mcc != null ? String.valueOf(mcc) : "");
+        viewModel.setMnc(!displayedIdentity.isEmpty() ? identity.substring(3)
+                : mnc != null ? String.valueOf(mnc) : "");
+
+        final List<String> broadcast = new ArrayList<>();
+        if (!displayedIdentity.isEmpty()) broadcast.add(displayedIdentity);
+        additionalPlmns.stream().map(NetworkDetailsFragment::formatPlmn)
+                .filter(value -> !value.isEmpty() && !value.equals(displayedIdentity))
+                .distinct().sorted().forEach(broadcast::add);
+        viewModel.setCellPlmns(String.join(" · ", broadcast));
+    }
+
+    private static String formatPlmn(String plmn)
+    {
+        return OperatorUtil.isValidPlmn(plmn) ? plmn.substring(0, 3) + "/" + plmn.substring(3) : "";
     }
 }

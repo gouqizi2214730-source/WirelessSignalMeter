@@ -7,6 +7,24 @@ import com.craxiom.networksurvey.model.CellularProtocol
 import com.craxiom.networksurvey.model.CellularRecordWrapper
 import com.craxiom.networksurvey.model.StationInfo
 
+internal data class MapNeighborCell(val isNr: Boolean, val pci: Int, val channel: Int)
+
+internal fun CellularRecordWrapper.mapNeighborCell(): MapNeighborCell? = when (val record = cellularRecord) {
+    is NrRecord -> record.data.let {
+        if (it.hasPci() && it.hasNarfcn() && it.pci.value in 0..1007 && it.narfcn.value in 1..3_279_165 &&
+            !it.servingCell.value && it.connectionStatus != ConnectionStatus.PRIMARY_SERVING &&
+            it.connectionStatus != ConnectionStatus.SECONDARY_SERVING
+        ) MapNeighborCell(true, it.pci.value, it.narfcn.value) else null
+    }
+    is LteRecord -> record.data.let {
+        if (it.hasPci() && it.hasEarfcn() && it.pci.value in 0..503 && it.earfcn.value in 0..262_143 &&
+            !it.servingCell.value && it.connectionStatus != ConnectionStatus.PRIMARY_SERVING &&
+            it.connectionStatus != ConnectionStatus.SECONDARY_SERVING
+        ) MapNeighborCell(false, it.pci.value, it.earfcn.value) else null
+    }
+    else -> null
+}
+
 internal fun List<CellularRecordWrapper>.mapServingCell(): CellularRecordWrapper? {
     var best: CellularRecordWrapper? = null
     var bestRank = 0
