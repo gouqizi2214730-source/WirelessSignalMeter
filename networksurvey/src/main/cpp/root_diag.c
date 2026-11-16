@@ -134,7 +134,7 @@ static const struct code_info k_default_codes[] = {
     { 0xB823, "NR RRC Serving Cell Info" },
     { 0xB825, "NR RRC Configuration Info" },
     { 0xB97F, "NR ML1 Meas Database Update" },
-    /* 1.3: NR SINR / PDSCH sources, as subscribed by Cellular-Pro (assets/diag_lte.cfg) */
+    /* 1.3: NR SINR / PDSCH log codes */
     { 0xB975, "NR ML1 Serving Cell Beam Mgmt" },
     { 0xB8D8, "NR LL1 LOG Serving SNR" },
     { 0xB8DD, "NR LL1 FW Serving FTL" },
@@ -2164,15 +2164,13 @@ static void parse_nr_mib(const uint8_t *b, int n) {
 /* ------------------------------------------------------------------ */
 /* 1.3 NR SINR / PDSCH parsers.                                         */
 /* Layout sources (see static2/static_logcode_analysis.md):             */
-/*  - Cellular-Pro libd001.so CQualcommNRTraceAnalysis (B975/B8D8/B8DD   */
-/*    handlers: scaling, valid ranges, source priority B975>B8D8>B8DD)   */
 /*  - MobileInsight dm_collector_c (B975 v2.1, B8DD v7, B888 v2.2)       */
 /* No device sample yet -> every value here is tagged "tentative":1 and  */
 /* cross-checked (PCI == serving PCI, RSRP close to B97F) before use.    */
 /* ------------------------------------------------------------------ */
 static inline int32_t rds32(const uint8_t *p) { return (int32_t)rd32(p); }
 
-/* linear SNR (Q10, as in Cellular-Pro B8D8/B8DD: valid 6..0x9C4000) -> dB, max over rx */
+/* Linear SNR: convert the maximum valid Q10 sample (6..0x9C4000) to dB. */
 static double snr_q10_max(const uint8_t *p, int n, int stride, int *nvalid, int *nbad) {
     int32_t best = 0; *nvalid = 0; *nbad = 0;
     for (int i = 0; i < n; i++) {
@@ -2189,7 +2187,7 @@ static void nr_set_sinr(double v, const char *src, int prio, int pci) {
     if (v < -23.0 || v > 40.0) return;
     if (pci >= 0 && g_nr.pci != NA_I && pci != g_nr.pci) return;
     int64_t now = mono_ms();
-    /* Cellular-Pro priority: B975 (prio 3) > B8D8 (2) > B8DD (1); lower prio only if higher one is stale (>3 s) */
+    /* Prefer B975 (3), then B8D8 (2), then B8DD (1). Lower priority can replace a sample after 3 s. */
     if (g_nr.t_sinr && prio < g_nr.sinr_prio && now - g_nr.t_sinr < 3000) return;
     g_nr.sinr = v; g_nr.t_sinr = now; g_nr.sinr_prio = prio;
     snprintf(g_nr.sinr_src, sizeof(g_nr.sinr_src), "%s", src);
@@ -2204,13 +2202,11 @@ static int snr_throttle(int idx) {
 
 /* --- 0xB975 NR ML1 Serving Cell Beam Management --- */
 /* 1.4: version-dispatched layouts (body offsets incl. the 4-byte version word).
-   Sources: Walktour 4.6 libQualcommParser CQualcommDecoder_5GNRML1::Gain_NR_ML1_ServingCellBeamManagement_V65537..V0x20001
-            + ParseServingCellBeamManagementMRInfo (SNR: ver < 0x20001 -> 10*log10(raw/65536), ver >= 0x20001 -> s32/128 dB),
-            Cellular-Pro V1_2/V1_3/V1_5 handlers, MobileInsight v2.1 (rsrp@12 rsrq@16, no SNR field).
+   MobileInsight v2.1 documents RSRP at 12 and RSRQ at 16, without an SNR field.
    1.2        : pci@4(10b) rsrp@20 rsrq@24 snr@32 (Q16 linear)
    1.3/1.4/1.5: pci@4(10b) rsrp@12 rsrq@16 snr@24 (Q16 linear)
    2.1        : pci@4(10b) rsrp@12 rsrq@16 snr@24 (s32 /128 dB)
-   other 2.x  : try the 2.1 layout, tagged tentative (Walktour explicitly skips 2.3)
+   other 2.x  : try the 2.1 layout, tagged tentative
    other      : old heuristic (both Q16 layouts), tagged tentative                                 */
 static void parse_nr_b975(const uint8_t *b, int n) {
     if (n < 40) return;
@@ -2284,7 +2280,7 @@ static void parse_nr_b8d8(const uint8_t *b, int n) {
     default: unknown_layout(0xB8D8, version, b, n, "serving SNR version"); return;
     }
     if (n < sample_at + 16) { unknown_layout(0xB8D8, version, b, n, "serving SNR length"); return; }
-    /* 1.5 (Cellular-Pro f_00297ab8 + run3 check against NR measurementReport SINR):
+    /* 1.5: layout checked against NR measurementReport SINR in run3.
        u32@4: bits0-15 slot counter, bits16-25 PCI, bits26-31 carrier index (0 = PCC)
        u32@8 bit0: 0 = SSB (-> serving "SSB SINR"), 1 = TRS/CSI-RS
        snr[4] s32@12, Q10 linear, valid 6..0x9C4000; SINR = 10log10(max/1024), [-23,40]
@@ -2296,11 +2292,10 @@ static void parse_nr_b8d8(const uint8_t *b, int n) {
 }
 
 /* --- 0xB8DD NR LL1 FW Serving FTL --- */
-/* 1.4: version 7 (u32 == 7) confirmed by Walktour 4.6 Parse_LL1_FW_Serving_FTL_V7 + MobileInsight v7:
+/* 1.4: version 7 (u32 == 7), using bit positions also documented in MobileInsight v7:
    bitstream @4: skip14, cell id 10b (bits 14..23), rs type 1b (bit 24, 0=SSB 1=TRS), skip7, carrier 8b (bits 32..39),
-   skip16, skip8, 10x50b + 12b reserved -> snr[4] u32 @76, Q10 linear, SINR = 10*log10(max/1024) (Walktour + Cellular-Pro;
-   MobileInsight's 4.241*ln(raw-30.2)-29.27 is an empirical fit and is not used).
-   Other versions: keep the 1.3 candidate scan (Cellular-Pro @68 / @80 stride 8 / @76), sinr only if exactly one passes. */
+   skip16, skip8, 10x50b + 12b reserved -> snr[4] u32 @76, Q10 linear, SINR = 10*log10(max/1024).
+   Other versions: try offsets 68, 80 (stride 8), and 76. Emit SINR only if exactly one candidate passes. */
 static void parse_nr_b8dd(const uint8_t *b, int n) {
     if (n < 24) return;
     int rel_min = rd16(b), rel_maj = rd16(b + 2);
@@ -2599,7 +2594,7 @@ static void parse_lte_csf(uint16_t code, const uint8_t *b, int n) {
     layout_seen(code, version, b, n);
     int size = 0, cc_bit, cqi_bit, mode_bit, rank = 0;
     if (code == 0xB14D && version == 164) {
-        /* Walktour's type 2 and 4 are wideband CQI feedback. The v164
+        /* Types 2 and 4 carry wideband CQI feedback. The v164
            samples have an extra low bit before this CQI field. */
         size = 36;
         if (n == size) {
@@ -2624,7 +2619,7 @@ static void parse_lte_csf(uint16_t code, const uint8_t *b, int n) {
         cqi_bit = version == 142 ? 51 : 42;
         mode_bit = version == 142 ? 64 : 58;
     } else if (version == 164) {
-        /* v163 Walktour carrier, rank and CW0 prefix, validated by v164 samples. */
+        /* v163 carrier, rank and CW0 prefix, validated by v164 samples. */
         size = 60;
         cc_bit = 22;
         cqi_bit = 47;
@@ -2771,7 +2766,7 @@ static void parse_lte_pucch_power(uint16_t code, const uint8_t *b, int n) {
     int version = b[0], header, size, count, power_at;
     enum lte_schedule_kind kind;
     if (code == 0xB16F && (version == 48 || version == 49)) {
-        /* Walktour v48 power control: 12-byte entries. v49's actual power
+        /* v48 power control: 12-byte entries. v49's actual power
            agrees with all time-aligned B13C v162 PUCCH transmissions. */
         header = 4; size = 12; count = b[3]; power_at = 10;
         kind = LTE_PUCCH_POWER;
@@ -3114,16 +3109,13 @@ static void parse_lte_mac_tb(uint16_t code, const uint8_t *b, int n) {
 
 /* ===== 1.7: B8A7 / B825 / B887 / B884 from static analysis (see DiagCap_B887_B884_static_analysis.md) =====
    Layout facts (bit offsets, little-endian bit fields, relative to payload / record / item start, payload includes
-   the 4-byte version word) were cross-checked between:
-     QBM  = qcom-band-menu qbm_layouts.h (GPLv3; used as a reference for layout facts only, code here is our own),
-     CP   = Cellular-Pro 2.0.9.1 libd003 decoders (FUN_00293510 B887 dispatch, FUN_0028fb30/FUN_00290804 B884) +
-            libd001 analysis (f_002b592c B887, f_002aee64 B884),
-     WT   = Walktour libQualcommParser (B887 2.4 item bit sequence).
+   the 4-byte version word) were cross-checked. QBM refers to qcom-band-menu qbm_layouts.h
+   (GPLv3; used as a reference for layout facts only, code here is our own).
    "tentative":0 only where two independent sources agree. */
 
 static int pos_fits(int off, int bits, int nbytes) { return off + bits <= nbytes * 8; }
 
-/* --- 0xB8A7 NR5G ML1 CSF report (QBM table; CP logs "ri, cri, cqi, carrierid"; run3/run4 v3.5 matches) --- */
+/* --- 0xB8A7 NR5G ML1 CSF report (RI, CRI, CQI, carrier ID; v3.5 matched run3/run4 samples) --- */
 struct b8a7_l { uint32_t ver; int rc_off, rec_start, reps_at, rep_bytes; };
 static const struct b8a7_l B8A7_L[] = {
     { 0x20000, 120, 16, 8, 40 }, { 0x20001, 120, 16, 8, 60 }, { 0x20002, 120, 16, 12, 60 }, { 0x20003, 120, 16, 12, 60 },
@@ -3234,7 +3226,7 @@ static void parse_nr_b825(const uint8_t *b, int n) {
 }
 
 /* --- 0xB887 NR5G MAC PDSCH Status: one item per TB ---
-   Common item fields (QBM 2.1-3.14; CP 3.6/3.10/3.13 extraction; WT 2.4):
+   Common item fields:
      pci{32,10} arfcn{42,22} tb_size{69,18} bytes  scs_mu{87,3}  mcs{90,5}  rbs{96,9}  rnti{114,4} (0 C-RNTI, 3 CS-RNTI)
      layers{125,2}+1  crc{128,1} (1 pass)  new_tx{129,1}
    Per version: record count / start, item size, scell, bw code, modulation, rx count, FR2 flag. */
@@ -3248,7 +3240,7 @@ static const struct b887_l B887_L[] = {
     { 0x30004, 56, 8, 20, 4, 25, 146, 149, 3, 29, 0 },
     { 0x30005, 56, 8, 24, 4, 25, 146, 149, 3, 29, 0 },
     { 0x30006, 56, 8, 24, 4, 25, 146, 149, 3, 29, 1 }, { 0x30007, 56, 8, 24, 4, 25, 146, 149, 3, 29, 1 },
-    { 0x30008, 56, 8, 24, 4, 25, 146, 149, 3, 29, 0 },   /* QBM: "decoded with 3.6's layout"; CP skips 3.8 */
+    { 0x30008, 56, 8, 24, 4, 25, 146, 149, 3, 29, 0 },   /* QBM: "decoded with 3.6's layout" */
     { 0x3000a, 56, 8, 28, 4, 25, 146, 149, 3, 29, 1 },
     { 0x3000d, 56, 8, 36, 1, 22, 147, 150, 3, -1, 1 }, { 0x3000e, 56, 8, 36, 1, 22, 147, 150, 3, -1, 0 },
 };
@@ -3378,11 +3370,11 @@ static void parse_nr_b887(const uint8_t *b, int n) {
     }
 }
 
-/* --- 0xB884 NR5G MAC UL Physical Channel Power Control (QBM 3.3/3.5; CP V3_3 decoder handles 3.3-3.5) ---
+/* --- 0xB884 NR5G MAC UL Physical Channel Power Control (QBM 3.3/3.5) ---
    header 8 B (records = byte 7); record 12 B (carriers = record byte 4); carrier 4 B (channels = byte 0);
    channel 16 B: carrier bits0-3, type bits4-7 (1..5; QBM: 4 = PUSCH, 5 = PUCCH), power s12 @8, max s12 @44 (0.1 dB);
-   transmitted power = min(power, max) (QBM and CP both cap it).
-   1.8: s12 @20 (0.1 dB) = DL pathloss: CP averages it over PUSCH (type 4) blocks into "Pathloss DL" (param 0x500014);
+   transmitted power = min(power, max).
+   1.8: s12 @20 (0.1 dB) = DL path loss, averaged over PUSCH (type 4) blocks;
    run5: PL + serving RSRP stays near-constant (see run5 analysis). Single source -> reported, flagged in the md. */
 struct ul_acc { int used; uint32_t n[6], capped[6]; double sum[6], mn[6], mx[6], pmax_sum[6], pl_sum[6]; };
 static struct ul_acc g_ul[8];
@@ -3467,7 +3459,7 @@ static void parse_nr_b884(const uint8_t *b, int n) {
                 struct ul_acc *a = &g_ul[cc];
                 if (!a->n[t]) { a->mn[t] = v; a->mx[t] = v; }
                 a->used = 1; a->n[t]++; a->sum[t] += v; a->pmax_sum[t] += mx / 10.0; if (pw > mx) a->capped[t]++;
-                a->pl_sum[t] += s12(lebits(q, 20, 12)) / 10.0;   /* 1.8: DL pathloss, s12 @20 0.1 dB (CP f_002aee64 -> param 0x500014 "Pathloss DL", from PUSCH blocks) */
+                a->pl_sum[t] += s12(lebits(q, 20, 12)) / 10.0;   /* 1.8: DL path loss, s12 @20 in 0.1 dB */
                 if (v < a->mn[t]) a->mn[t] = v;
                 if (v > a->mx[t]) a->mx[t] = v;
             }
@@ -3477,8 +3469,7 @@ static void parse_nr_b884(const uint8_t *b, int n) {
 
 /* --- 0xB883 NR5G MAC UL Physical Channel Schedule Report (1.9) ---
    Layout facts: qcom-band-menu qbm_layouts.h (2.11, 3.15-3.27; own code here), MobileInsight (2.8/2.11 field list),
-   Cellular-Pro libd003 has decoder classes V1_5/V2_7/V2_11/V2_15/V2_17/V3_14/V3_16 (field offsets not recovered),
-   Walktour only 1.4/2.6-2.8.  Payload: records -> carriers -> carrier header + channel blocks selected by a mask
+   Payload: records -> carriers -> carrier header + channel blocks selected by a mask
    (1 PUSCH fixed, 2 PUCCH count-prefixed, 4 SRS count-prefixed, 8 PRACH fixed, 16 = unknown -> reject).
    The whole packet is walked first and only used when the walk ends exactly at the packet end.
    UL BLER = HARQ-retransmitted PUSCH bytes / all PUSCH bytes (QBM: matches NSG's MAC UL BLER within 0.3 points). */
@@ -3492,7 +3483,7 @@ static const struct b883_l B883_L[] = {
     { 0x2000b, { 120, 8 }, 128, { 32, 8 }, 64, 32, { 0, 3 }, { 7, 5 }, 320, 32, 128, 32, 128, 64,
       { 43, 18 }, { 13, 5 }, { 18, 3 }, { 64, 2 }, { 32, 9 }, { 237, 3 }, { 220, 4 }, { 224, 4 }, 0x11, { 72, 2 }, 1, 0 },
     B883_3X(0x3000f, 128, 61, 8, 5, 0),     /* 3.15 */
-    B883_3X(0x30010, 128, 61, 8, 5, 1),     /* 3.16: not in QBM (CP has a V3_16 class); 3.15/3.17 rows identical -> guess */
+    B883_3X(0x30010, 128, 61, 8, 5, 1),     /* 3.16: tentative, using the identical 3.15 and 3.17 layouts */
     B883_3X(0x30011, 128, 61, 8, 5, 0),     /* 3.17 */
     B883_3X(0x30012, 128, 61, 8, 5, 1),     /* 3.18 guess */
     B883_3X(0x30013, 128, 61, 8, 6, 1),     /* 3.19 guess */
@@ -3646,7 +3637,7 @@ static void parse_nr_b883(const uint8_t *b, int n) {
 
 /* ------------------------------------------------------------------ */
 /* IMS (1.9): SIP messages 0x156E, session setup 0x1830, registration 0x1832; RTP/RTCP/voice stats raw only.
-   0x156E v1 header (SCAT diag1xlogparser + Walktour Gain_IMS_Message_156E agree, 16 B):
+   0x156E v1 header (SCAT diag1xlogparser, 16 B):
      u8 ver, u8 dir (0 DL / 1 UL), u8 has_sdp, u8 call_id_len, u16 len, u16 sip_len, u16 msg_type, u16 status, u32 ?
      then call_id[call_id_len] (NUL included), then the SIP text [sip_len] (NUL included).
    Privacy: JSON never carries URIs, numbers, IMSI/IMPU/IMPI or IP addresses; Call-ID only as a 32-bit hash.
