@@ -1,20 +1,7 @@
-# Security Policy
+# 无线无忧安全报告说明
 
-## Supported Versions
+请注明应用版本、Android 版本、设备型号、是否启用 Root 或 DIAG，以及问题的复现步骤和影响范围。
 
-Network Survey only supports the latest version. Users must update to the latest version to receive security updates and improvements. Older versions are not maintained or supported. All patches will be applied only to the latest version.
+如果 [GitHub Security](https://github.com/niceboat0/WirelessSignalMeter/security) 页面提供私密报告入口，请通过该入口发送报告。若入口暂不可用，可在 [GitHub Issues](https://github.com/niceboat0/WirelessSignalMeter/issues) 留下简要联系请求，详细复现材料待建立私密沟通渠道后再发送。
 
-## Reporting a Vulnerability
-
-If you discover a security vulnerability in Network Survey, please report it promptly to ensure the safety and integrity of the application.
-
-### How to Report:
-- Email security reports to craxiomdev [at] gmail.com with a detailed description of the issue, steps to reproduce, and any relevant logs or screenshots.
-- Do **not** disclose the vulnerability publicly until an official fix has been released.
-
-### What to Expect:
-- Acknowledgment of the report within **96 hours**.
-- Updates on the investigation and remediation timeline.
-- A security patch will be deployed in the next available release.
-
-We appreciate responsible disclosure and will credit researchers who assist in keeping Network Survey secure.
+公开讨论前请移除精确位置、用户或设备标识、账号凭据和原始基带包。关于诊断文件包含的数据，请参阅[数据与隐私说明](privacy_policy.md)。

@@ -1,4 +1,14 @@
-# Changelog
+# 无线无忧更新记录
+
+## 1.2.0 · 2026-11-17
+
+- 加入 Root DIAG 信令详情和 QMDL 录制、导出功能。滚动浏览信令历史时停止自动跟随。
+- 完善 LTE / NR 服务小区和邻区的测量显示。邻区按 RSRP 排序，信号柱颜色可在设置中调整。
+- 区分注册 PLMN 和小区广播 PLMN，改善共建共享小区的运营商显示。无 Root 模式可查看双工和上下行参考频点及频率。
+- 5G 带宽有有效值时显示。诊断日志可导出 Android 上报的带宽数据。
+- 基站工参可按基站 ID 搜索。地图以不同颜色标出服务小区和实测邻区的连线。
+
+以下为上游 Network Survey 的历史更新记录，链接指向上游版本。
 
 ## [1.58](https://github.com/christianrowlands/android-network-survey/releases/tag/v1.58) - Unreleased
 

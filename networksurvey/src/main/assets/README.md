@@ -1,4 +1,4 @@
-The company identifiers provided in the company_identifiers.yaml are pulled from: https://bitbucket.org/bluetooth-SIG/public/src/main/assigned_numbers/uuids/service_class.yaml
+The Bluetooth SIG publishes the [company identifiers](https://bitbucket.org/bluetooth-SIG/public/src/main/assigned_numbers/company_identifiers/company_identifiers.yaml).
 
 To download the latest version of that file and package it with this app, run the following command:
 
@@ -6,10 +6,10 @@ To download the latest version of that file and package it with this app, run th
 ./gradlew downloadBluetoothCompanyIdentifiers
 ```
 
-The same is true for the member_uuids.yaml file, which is pulled from: https://bitbucket.org/bluetooth-SIG/public/src/main/assigned_numbers/uuids/service_class.yaml
+The Bluetooth SIG also publishes the [member UUIDs](https://bitbucket.org/bluetooth-SIG/public/src/main/assigned_numbers/uuids/member_uuids.yaml).
 
 To download the latest version of that file and package it with this app, run the following command:
 
 ```bash
-./gradlew downloadBluetoothMemberUuid
+./gradlew downloadBluetoothMemberUuids
 ```

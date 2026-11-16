@@ -1,134 +1,40 @@
-# Network Survey Android App
+# 无线无忧 · WirelessSignalMeter
 
-![Build Status](https://github.com/christianrowlands/android-network-survey/actions/workflows/android.yaml/badge.svg)
-[![License](https://img.shields.io/badge/license-Apache%202-green.svg?style=flat)](https://github.com/christianrowlands/android-network-survey/blob/develop/LICENSE)
-![Latest Release](https://img.shields.io/github/release/christianrowlands/android-network-survey.svg?logo=github)
-[![Translation status](https://hosted.weblate.org/widget/network-survey-android-app/svg-badge.svg)](https://hosted.weblate.org/engage/network-survey-android-app/)
+无线无忧是基于 [Network Survey](https://github.com/christianrowlands/android-network-survey) 开发的 Android 蜂窝网络测量工具，用于查看 LTE / 5G NR 服务小区、邻区和基带信令，也支持基站工参导入和地图匹配。
 
-[<img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png"
-alt="Download at https://play.google.com/store/apps/details?id=com.craxiom.networksurvey]"
-width="
-32%">](https://play.google.com/store/apps/details?id=com.craxiom.networksurvey&referrer=utm_source%3Dgithub-android-readme)
-[<img src="https://gitlab.com/IzzyOnDroid/repo/-/raw/master/assets/IzzyOnDroid.png"
-alt="Get it on IzzyOnDroid"
-width="32%">](https://apt.izzysoft.de/fdroid/index/apk/com.craxiom.networksurvey)
-[<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
-alt="Get it on F-Droid"
-width="32%">](https://f-droid.org/packages/com.craxiom.networksurvey/)
+## 功能
 
-The Network Survey Android App provides a basic survey capability for logging and analyzing
-Cellular networks, Wi-Fi networks, Bluetooth Devices, and GNSS constellations. Capture detailed
-records of signal strength, network information, and device data. All data can be conveniently
-logged to GeoPackage or CSV files for offline analysis. Alternatively, choose to live stream the
-data via MQTT or gRPC protocols for real-time monitoring and integration with other systems.
+- **信号页**显示运营商、注册及广播 PLMN、小区标识、上下行参考频点及频率、双工模式和信号趋势。邻区按 RSRP 排序。5G 带宽有可用值时显示。
+- **Root DIAG**在兼容的 Qualcomm 设备上读取基带诊断，显示支持的 RRC / NAS 等信令和分层吞吐率，并可录制 QMDL。可用日志和字段取决于设备及基带版本。
+- **基站工参和地图**支持导入 CSV、按基站 ID 搜索。地图以蓝线连接服务小区，以橙线连接匹配到工参的实测邻区。
+- **其他工具**包括 Wi-Fi 信号、GNSS 卫星信息和服务器测速。
 
-The Network Survey user manual can be found [here](https://networksurvey.app/manual).
+## 使用
 
-<p align="center">
-  <img src="screenshots/dashboard.png" alt="Cellular Details" width="190"/>
-  <img src="screenshots/cellular_details.png" alt="Cellular Details" width="190"/>
-  <img src="screenshots/wi-fi_details.png" alt="Wi-Fi Details" width="190"/>
-  <img src="screenshots/gnss_details.png" alt="GNSS Details" width="190"/>
-</p>
+当前构建支持 Android 13 及以上的 `arm64-v8a` 设备。无 Root 模式使用 Android 提供的小区与信号数据。Root 诊断需要设备授权及可用的 Qualcomm DIAG 接口。
 
-## CDR Log Files
+- 在 **设置 → 基站工参**导入 CSV，检查字段映射后保存。在 **工具 → 基站地图**授权定位即可查看匹配结果。
+- 在 **工具 → 信令**的筛选菜单开始或停止录制 QMDL，再选择导出。需要保留上一份录制时请先导出。
+- 在 **设置 → 导出诊断日志**保存 JSONL。提交问题时请先阅读[数据与隐私说明](privacy_policy.md)。
 
-**Introduction:**
-The Network Survey app now includes a feature for logging Call Detail Records (CDR). This
-functionality provides insight into various interactions your phone has with the cellular network.
+## 从源码构建
 
-**What is a CDR?**
-A Call Detail Record (CDR) is a data record that documents specific interactions a phone has with
-the cellular network. These interactions include phone calls, SMS and MMS messages, and changes in
-cell tower connections.
+安装 Android Studio、Android SDK Platform 37 和 NDK `27.3.13750724`。将 Gradle JDK 配置为 Android Studio 自带的 JBR。模块为 `networksurvey`，当前构建变体为 `cdr`，发布包名为 `com.wireless.signalmeter.new`。
 
-**Use Cases:**
-
-- **Monitoring Network Activity:** Record and review your phone's cellular network interactions.
-- **Educational Insight:** Gain an understanding of how cellular networks operate.
-- **Privacy Monitoring:** Check if your phone is connecting to unexpected cell towers.
-
-**Note on Feature Limitations:**
-
-- The regular version of Network Survey does not log SMS or MMS events in the CDR due to Google
-  Play's policy against apps requesting full SMS permissions.
-- Logging the "other" phone number associated with call events is also not supported in the regular
-  version.
-- RCS chats are not logged by either version. Android only lets the default messaging app see RCS
-  messages, so there is no way for Network Survey to record them.
-
-**Alternative Version with Extended Features:**
-If you're interested in CDR logging that includes SMS and MMS events and call details:
-
-1. **Install from Source:** You can build and install the app using the source code available in
-   this repository.
-2. **Download Pre-Built APK:** Access the latest "*cdr-release.apk" under the latest release on
-   our [GitHub Releases page](https://github.com/christianrowlands/android-network-survey/releases).
-3. **IzzyOnDroid:** Install
-   from [IzzyOnDroid](https://apt.izzysoft.de/fdroid/index/apk/com.craxiom.networksurvey).
-
-## Tracking And Privacy
-
-The version of this app on the Play Store has Firebase Crashlytics and Analytics set up. This means
-that app crash logs and analytics are sent off the device to Firebase. If you don't want to
-participate in this type of tracking then you have three options.
-
-1. Install the app
-   from [IzzyOnDroid](https://apt.izzysoft.de/fdroid/index/apk/com.craxiom.networksurvey).
-2. Install the app from the source code in this repo specifying the CDR build variant.
-3. Install the app using the CDR APK from
-   the [Release Page](https://github.com/christianrowlands/android-network-survey/releases).
-
-The [privacy policy for this app](privacy_policy.md) contains more information on the data that is
-sent to Firebase for the Google Play Store version of this app.
-
-## Getting Started
-
-To build and install the project follow the steps below:
-
-    1) Clone the repo.
-    2) Open Android Studio, and then open the root directory of the cloned repo.
-    3) Connect an Android Phone (make sure debugging is enabled on the device).
-    4) Install and run the app by clicking the "Play" button in Android Studio.
-
-If you want to build using the command line, the apk can be built and installed using the following
-commands. Make sure your phone is connected to your computer before running the install command.
-
-There are two build variants available for this app. The default build variant is the regular
-version of the app which is the "Google Play" version. As noted in the privacy section, the
-"Google Play" version has Firebase Crashlytics and Analytics enabled. The second build variant is
-the "CDR" version. The "CDR" version does not have Firebase Crashlytics and Analytics enabled, and
-it has the extended CDR logging features (as discussed above).
-
-### Build and Install the Regular Version
-
-> NOTE: If building on Windows, replace `./gradlew` with `gradlew`
-
-```shell
-./gradlew assembleRegularDebug
-./gradlew installRegularDebug
+```sh
+./gradlew :networksurvey:assembleCdrRelease
+./gradlew :networksurvey:testCdrDebugUnitTest
 ```
 
-### Build and Install the CDR Version
+Windows PowerShell 下将 `./gradlew` 替换为 `.\gradlew.bat`。APK 输出到 `networksurvey/build/outputs/apk/cdr/release/`。安装前可运行 `apksigner verify --print-certs <APK文件>` 检查签名。覆盖安装要求包名和签名与已安装版本一致。当前源码的 Release 配置使用构建环境的调试签名。
 
-```shell
-./gradlew assembleCdrDebug
-./gradlew installCdrDebug
-```
+设备回归检查见[测试指南](docs/TESTING.md)，版本变更见[更新记录](CHANGELOG.md)。
 
-### Run Tests
+## 调查记录与集成
 
-> NOTE: This requires a connected device (physical device or Android Emulator)
+以下集成沿用上游 Network Survey 的协议说明。相关功能与配置以当前构建为准。
 
-```
-./gradlew connectedAndroidTest
-```
-
-### Prerequisites
-
-Install Android Studio to work on this code.
-
-## gRPC Survey Record Streaming
+### gRPC Survey Record Streaming
 
 The Network Survey app supports streaming GSM, CDMA, UMTS, LTE, and 802.11 survey records to a gRPC
 server. More specifically,
@@ -142,7 +48,7 @@ https://github.com/christianrowlands/ns-messaging-go-grpc-server
 The server does not do anything useful, but serves as an example of how one might be created in
 GoLang.
 
-## MQTT Broker Survey Record Streaming
+### MQTT Broker Survey Record Streaming
 
 Currently, GSM, CDMA, UMTS, LTE, NR, 802.11, Bluetooth and GNSS survey records are sent to a
 connected MQTT broker. They are published on the following MQTT Topics:
@@ -197,89 +103,13 @@ you can use the `mqtt_topic_prefix` field to change the topic to something like
 }
 ```
 
-## Intent API
+### Intent API
 
 The Network Survey app supports an Intent API that allows other apps to start and stop a survey. The
 Intent API is documented on the [Intent API website](https://www.networksurvey.app/intent-api).
 
-## Upload Feature
+## 反馈与许可
 
-The **Upload Feature** allows users to voluntarily contribute collected **cellular and Wi-Fi survey
-data** to third-party databases. This feature is **optional** and you decide if you want to use it.
+一般问题请通过本仓库的 [GitHub Issues](https://github.com/niceboat0/WirelessSignalMeter/issues) 提交。安全问题请参阅[安全报告说明](SECURITY.md)。
 
-### Supported Upload Destinations:
-
-- **[OpenCelliD](https://opencellid.org/)** – A global open-source cell tower database.
-- **[BeaconDB](https://beacondb.net/)** – A crowdsourced geolocation database.
-
-When started by the user, survey records are stored locally and can be uploaded at any time. No
-personally identifiable information (such as phone numbers or IMEIs) is included in uploads.
-
-For more details, visit the *
-*[Network Survey User Manual](https://networksurvey.app/manual#data-upload)**.
-
-## APK Verification
-
-To verify the authenticity of Network Survey, compare the signing certificate
-SHA-256 fingerprint using `apksigner verify --print-certs <apk-file>` or apps
-like AppVerifier.
-
-### Google Play Store
-
-Package: `com.craxiom.networksurvey`
-SHA-256:
-`F5:85:5E:DE:9F:51:DD:EF:D7:2B:1C:D5:A2:29:76:1A:B7:35:2B:30:AD:4F:5F:CE:6D:E2:48:73:9F:4B:4C:79`
-
-### GitHub Releases / Direct APK
-
-Package: `com.craxiom.networksurvey`
-SHA-256:
-`AB:F5:AD:29:11:FE:31:91:6F:4E:25:5C:17:33:A3:F6:BC:2C:AB:2F:28:16:C9:58:7D:E1:1A:41:58:71:AF:07`
-
-Verification info also published at: https://networksurvey.app/manual/permissions/apk-verification/
-
-## Translations
-
-Network Survey is localized with the help of the community using
-[Weblate](https://weblate.org/), a libre web-based continuous localization platform. If you
-would like to help translate the app into your language, you can contribute directly from
-your browser with no coding required at the
-[Network Survey project on Weblate](https://hosted.weblate.org/engage/network-survey-android-app/).
-
-A big thank you to everyone who has helped translate Network Survey.
-
-## Credits and Acknowledgements
-
-### Credits
-
-This project uses elements from the **[GPSTest Android app](https://github.com/barbeau/gpstest)**,
-specifically the GPS user interface components. We appreciate the GPSTest app for making these
-resources available and acknowledge their contribution to the open source community.
-
-This project also leveraged the code from *
-*[Tower Collector](https://github.com/zamojski/TowerCollector)**
-for the upload of survey records to OpenCellID and BeaconDB. We appreciate the Tower Collector app.
-
-### Acknowledgements
-
-We would like to express our gratitude to all the contributors who have dedicated their time and
-skills to this project. Your contributions have been invaluable to the development and success of
-this application.
-
-Thank you to:
-
-<a href="https://github.com/christianrowlands/android-network-survey/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=christianrowlands/android-network-survey" />
-</a>
-
-Made with [contrib.rocks](https://contrib.rocks).
-
-Your commitment and hard work are sincerely appreciated.
-
-## Changelog
-
-See the change log for details about each release: [`CHANGELOG.md`](CHANGELOG.md)
-
-## Contact
-
-* **Christian Rowlands** - [Craxiom](https://github.com/christianrowlands)
+本仓库沿用 [Apache License 2.0](LICENSE)。感谢上游 [Network Survey](https://github.com/christianrowlands/android-network-survey) 的维护者和贡献者，以及 [GPSTest](https://github.com/barbeau/gpstest) 与 [Tower Collector](https://github.com/zamojski/TowerCollector) 项目提供的相关组件和实现参考。

@@ -1,15 +1,15 @@
-# Network Survey Testing Guide
+# 无线无忧测试指南
 
-This document contains manual testing procedures for the Network Survey application. These tests help ensure the app functions correctly under various conditions, particularly with Android's power management features.
+## 信号、信令和地图回归
 
-## Table of Contents
+1. 在无 Root 或未授权 DIAG 的设备上，分别在 LTE 和 NR 下查看服务小区。检查运营商、注册 PLMN、频点与双工模式。系统未提供 5G 带宽且没有该小区的保存值时，带宽行应隐藏。
+2. 在兼容设备开启 Root DIAG，检查信令列表和详情。手动滚动历史记录应停止自动跟随。开始、停止并导出一份 QMDL，确认文件可读取。
+3. 导入含经纬度的 CSV 工参，按基站 ID 搜索。打开基站地图并授权定位，检查服务小区蓝线和已匹配实测邻区的橙线。切换小区或关闭连线图层时，旧连线应消失。
+4. 导出一次常规 JSONL，确认文件可读取。带宽缺失时可检查 `android_nr_bandwidth` 记录中的 `reported_khz` 和 `cell_matches`。
 
-- [Power Management Tests](#power-management-tests)
-  - [Test #3: Doze Mode Behavior](#test-3-doze-mode-behavior)
-  - [Test #4: Wake Lock Monitoring](#test-4-wake-lock-monitoring)
-- [Future Test Sections](#future-test-sections)
+## 上游电源管理测试
 
----
+以下为继承自 Network Survey 的 Doze 和 Wake Lock 测试步骤，需在连接了 Android 设备的环境中执行。
 
 ## Power Management Tests
 
@@ -149,7 +149,3 @@ _This section will be expanded with additional test categories:_
 - [ ] UI/UX Tests
 - [ ] Performance Tests
 - [ ] Compatibility Tests
-
----
-
-*Last Updated: 2025-01-02*

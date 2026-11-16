@@ -1,31 +1,23 @@
 ---
-name: Bug report
-about: Create a report to help us improve
+name: 问题反馈
+about: 报告无线无忧的显示、采集或功能问题
 title: ''
 labels: ''
 assignees: ''
 
 ---
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+## 问题描述
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+描述实际表现、期望结果及复现步骤。出现于信号页、信令或地图时，请注明相关页面。
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+## 运行环境
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
+- 应用版本
+- 设备型号和 Android 版本
+- 网络制式和 SIM 数量
+- 是否有 Root 授权，是否使用 DIAG
 
-**Smartphone (please complete the following information):**
- - Device: [e.g. Pixel 8]
- - Android Version: [e.g. Android 14]
+## 截图和日志
 
-**Additional context**
-Add any other context about the problem here.
+截图或诊断日志有助于复现。公开上传前请移除精确位置、用户及设备标识。原始 QMDL 可在需要时通过私密渠道提供。

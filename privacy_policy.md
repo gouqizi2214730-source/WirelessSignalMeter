@@ -1,3 +1,15 @@
-# Network Survey Android App Privacy Policy
+# 无线无忧数据与隐私说明
 
-The Network Survey Privacy Policy has moved. The new location can be found here: https://www.networksurvey.app/privacy-policy
+适用于本仓库的无线无忧 CDR 构建，发布包名为 `com.wireless.signalmeter.new`。当前 CDR 变体没有引入 Firebase Analytics 或 Crashlytics 依赖。
+
+## 数据用途
+
+- **信号和地图**使用设备上报的运营商、小区标识、频点和信号测量。定位用于 Android 小区信息权限、地图定位和工参匹配。导入的工参和地图打点保存在设备上。
+- **Root 诊断**在获得设备授权且 DIAG 接口可用时读取基带记录。用户启动 QMDL 录制后，原始包保存在应用存储中，由用户选择导出位置。原始数据可能含小区、网络或用户标识。
+- **JSONL 诊断导出**用于排查采集和解析问题。常规导出省略部分用户及小区标识，仍可能包含设备型号、基带版本、时间和测量信息。勾选原始样本后可能包含小区标识。
+
+## 联网与分享
+
+地图底图、更新检查、在线设备厂商查询和测速需要访问对应的网络服务。配置调查数据上传或 MQTT / gRPC 流式传输时，数据会发送至所选目标。可在 Android 系统设置中管理应用权限，在应用内管理调查、录制和传输。
+
+在公开 Issue 中分享截图或日志前，请检查其中的精确位置、工参内容、用户或设备标识。QMDL 和含原始样本的文件适合通过私密渠道提供。
