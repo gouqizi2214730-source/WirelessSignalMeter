@@ -1,21 +1,50 @@
-# 无线无忧 · WirelessSignalMeter
+<p align="center">
+  <img src="networksurvey/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png" width="104" alt="无线无忧应用图标">
+</p>
 
-无线无忧是基于 [Network Survey](https://github.com/christianrowlands/android-network-survey) 开发的 Android 蜂窝网络测量工具，用于查看 LTE / 5G NR 服务小区、邻区和基带信令，也支持基站工参导入和地图匹配。
+<h1 align="center">无线无忧 · WirelessSignalMeter</h1>
 
-## 功能
+<p align="center">Android LTE / 5G NR 信号测量、基带信令与基站地图</p>
 
-- **信号页**显示运营商、注册及广播 PLMN、小区标识、上下行参考频点及频率、双工模式和信号趋势。邻区按 RSRP 排序。5G 带宽有可用值时显示。
-- **Root DIAG**在兼容的 Qualcomm 设备上读取基带诊断，显示支持的 RRC / NAS 等信令和分层吞吐率，并可录制 QMDL。可用日志和字段取决于设备及基带版本。
-- **基站工参和地图**支持导入 CSV、按基站 ID 搜索。地图以蓝线连接服务小区，以橙线连接匹配到工参的实测邻区。
-- **其他工具**包括 Wi-Fi 信号、GNSS 卫星信息和服务器测速。
+<p align="center">
+  <img src="https://img.shields.io/badge/Android-13%2B-1B835C?style=flat-square" alt="Android 13 及以上">
+  <img src="https://img.shields.io/badge/ABI-arm64--v8a-3454A5?style=flat-square" alt="支持 arm64-v8a">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-6E5494?style=flat-square" alt="Apache License 2.0"></a>
+</p>
 
-## 使用
+<p align="center">
+  <a href="#快速开始">快速开始</a> ·
+  <a href="#从源码构建">源码构建</a> ·
+  <a href="CHANGELOG.md">更新记录</a> ·
+  <a href="https://github.com/niceboat0/WirelessSignalMeter/issues">问题反馈</a>
+</p>
 
-当前构建支持 Android 13 及以上的 `arm64-v8a` 设备。无 Root 模式使用 Android 提供的小区与信号数据。Root 诊断需要设备授权及可用的 Qualcomm DIAG 接口。
+## 能做什么
 
-- 在 **设置 → 基站工参**导入 CSV，检查字段映射后保存。在 **工具 → 基站地图**授权定位即可查看匹配结果。
-- 在 **工具 → 信令**的筛选菜单开始或停止录制 QMDL，再选择导出。需要保留上一份录制时请先导出。
-- 在 **设置 → 导出诊断日志**保存 JSONL。提交问题时请先阅读[数据与隐私说明](privacy_policy.md)。
+| 功能 | 界面与数据 |
+| --- | --- |
+| **服务小区与邻区** | 查看服务小区的 RSRP、RSRQ、SINR、注册与广播 PLMN、频点、双工模式和信号趋势。邻区按 RSRP 排序，5G 带宽随可用数据显示。 |
+| **信令与 QMDL** | 在支持 Root DIAG 的设备上查看 RRC / NAS 等信令、部分物理层调度与分层吞吐率，录制和导出原始基带包。 |
+| **工参与基站地图** | 导入 CSV、按基站 ID 搜索。蓝线连接服务小区，橙线连接匹配到工参的实测邻区。 |
+| **网络工具** | 查看 Wi-Fi 信号和 GNSS 卫星信息，或使用服务器测速。 |
+
+```mermaid
+flowchart LR
+    A["Android 小区数据"] --> C["信号页"]
+    B["Qualcomm DIAG（Root）"] --> C
+    B --> D["信令与 QMDL"]
+    C --> E["基站地图"]
+    F["CSV 基站工参"] --> E
+```
+
+## 快速开始
+
+使用 Android 13 及以上的 `arm64-v8a` 设备。普通信号页读取 Android 小区数据。DIAG 信令和 QMDL 需要 Root 授权以及可用的 Qualcomm DIAG 接口，字段覆盖随设备和基带版本变化。
+
+1. **信号测量** · 打开「信号」，按需授予系统权限，查看当前小区、邻区和信号趋势。
+2. **地图匹配** · 在「设置 → 基站工参」导入 CSV 并检查字段映射，然后打开「工具 → 基站地图」。
+3. **记录信令** · 在「工具 → 信令」的筛选菜单开始或停止录制 QMDL。需要保留上一份录制时请先导出。
+4. **反馈问题** · 从「设置 → 导出诊断日志」保存 JSONL，并参阅[数据与隐私说明](privacy_policy.md)。
 
 ## 从源码构建
 
@@ -30,7 +59,17 @@ Windows PowerShell 下将 `./gradlew` 替换为 `.\gradlew.bat`。APK 输出到 
 
 设备回归检查见[测试指南](docs/TESTING.md)，版本变更见[更新记录](CHANGELOG.md)。
 
-## 调查记录与集成
+## 文档
+
+| 文档 | 内容 |
+| --- | --- |
+| [更新记录](CHANGELOG.md) | 无线无忧版本变更及上游历史 |
+| [测试指南](docs/TESTING.md) | 信号、信令、基站地图和导出的回归步骤 |
+| [数据与隐私说明](privacy_policy.md) | 日志、数据传输与分享 |
+| [安全报告说明](SECURITY.md) | 安全问题的报告渠道 |
+
+<details>
+<summary>调查记录与集成 · gRPC、MQTT 和 Intent API</summary>
 
 以下集成沿用上游 Network Survey 的协议说明。相关功能与配置以当前构建为准。
 
@@ -107,6 +146,8 @@ you can use the `mqtt_topic_prefix` field to change the topic to something like
 
 The Network Survey app supports an Intent API that allows other apps to start and stop a survey. The
 Intent API is documented on the [Intent API website](https://www.networksurvey.app/intent-api).
+
+</details>
 
 ## 反馈与许可
 
