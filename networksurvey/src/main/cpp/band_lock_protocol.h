@@ -1,0 +1,180 @@
+/*
+ * Lock command templates adapted from niceboat0/diag-research, lockband v104.
+ * See docs/LOCKBAND.md for the source revision and device limitations.
+ */
+#ifndef WIRELESS_BAND_LOCK_PROTOCOL_H
+#define WIRELESS_BAND_LOCK_PROTOCOL_H
+
+#include <stdint.h>
+#include <stddef.h>
+
+#define LB_MMODE "/nv/item_files/modem/mmode"
+#define LB_LTE_BANDS LB_MMODE "/lte_bandpref"
+#define LB_NR_BANDS LB_MMODE "/nr_band_pref"
+#define LB_LTE_DIR "/nv/item_files/modem/lte/rrc/efs"
+#define LB_LTE_FREQ LB_LTE_DIR "/cell_restrict_opt_params"
+#define LB_LTE_CELL LB_LTE_DIR "/cell_lock_list"
+#define LB_LTE_CSP "/nv/item_files/modem/lte/rrc/csp"
+#define LB_NR_DIR "/nv/item_files/modem/nr5g/RRC"
+#define LB_NR_FREQ LB_NR_DIR "/earfcn_lock"
+#define LB_NR_CELL LB_NR_DIR "/pci_lock_info"
+
+static void lb_u32(uint8_t *p, uint32_t v) {
+    for (int i = 0; i < 4; i++) p[i] = (uint8_t)(v >> (8 * i));
+}
+
+static uint32_t lb_read32(const uint8_t *p) {
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
+        ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+static int lb_copy_path(uint8_t *out, int at, const char *path) {
+    do { out[at++] = (uint8_t)*path; } while (*path++);
+    return at;
+}
+
+/* Decimal arguments are validated again in the native boundary. */
+static int lb_number(const char *s, uint32_t max, uint32_t *out) {
+    uint32_t value = 0;
+    if (!s || !*s) return 0;
+    for (; *s; s++) {
+        if (*s < '0' || *s > '9') return 0;
+        unsigned digit = (unsigned)(*s - '0');
+        if (digit > max || value > (max - digit) / 10) return 0;
+        value = value * 10 + digit;
+    }
+    *out = value;
+    return 1;
+}
+
+static int lb_bands(const char *s, int max, uint8_t *mask, int bytes) {
+    for (int i = 0; i < bytes; i++) mask[i] = 0;
+    if (!s || !*s) return 0;
+    while (*s) {
+        char word[4];
+        int count = 0;
+        while (*s && *s != ',') {
+            if (count == 3) return 0;
+            word[count++] = *s++;
+        }
+        word[count] = 0;
+        uint32_t band;
+        if (!lb_number(word, (uint32_t)max, &band) || band == 0 || band > (unsigned)bytes * 8) return 0;
+        mask[(band - 1) / 8] |= (uint8_t)(1u << ((band - 1) % 8));
+        if (*s == ',' && !*++s) return 0;
+    }
+    return 1;
+}
+
+static int lb_scs(uint32_t khz) {
+    switch (khz) {
+        case 15: return 0;
+        case 30: return 1;
+        case 60: return 2;
+        case 120: return 3;
+        default: return -1;
+    }
+}
+
+static int lb_mkdir(uint8_t *out, const char *path, uint8_t a, uint8_t b) {
+    lb_u32(out, 0x0009134b);
+    out[4] = a; out[5] = b;
+    return lb_copy_path(out, 6, path);
+}
+
+static int lb_put(uint8_t *out, const char *path, const uint8_t *data, int size, int lte_band) {
+    lb_u32(out, 0x0026134b);
+    lb_u32(out + 4, (uint32_t)size);
+    int length = 0;
+    while (path[length]) length++;
+    lb_u32(out + 8, lte_band ? (uint32_t)length + 1 : 0x241);
+    out[12] = lte_band ? 0xff : 0x26;
+    out[13] = lte_band ? 0x03 : 0x13;
+    for (int i = 0; i < size; i++) out[14 + i] = data[i];
+    return lb_copy_path(out, 14 + size, path);
+}
+
+static int lb_sync(uint8_t *out, const char *path) {
+    lb_u32(out, 0x0030134b);
+    out[4] = 0x1f; out[5] = 0x01;
+    return lb_copy_path(out, 6, path);
+}
+
+static int lb_unlink(uint8_t *out, const char *path) {
+    lb_u32(out, 0x0008134b);
+    return lb_copy_path(out, 4, path);
+}
+
+/* Reply matching follows the on-device captures from diag-research:
+ * the field right before the echoed subsystem command is NOT a plain copy of
+ * our transaction id (frames 1-2 happen to line up, later frames carry the
+ * router-side sequence, e.g. 0x96 on frame 3), so matching keys on the echoed
+ * command itself. PUT replies carry a 2-byte tag echo plus a u32 status,
+ * MKDIR/UNLINK a bare u32, SYNC and CM replies echo free-form payloads. */
+enum { LB_ACK_STATUS = 0, LB_ACK_PUT = 1, LB_ACK_LOOSE = 2 };
+
+static int lb_find_reply(const uint8_t *b, int size, uint32_t cmd) {
+    if (size < 20 || lb_read32(b) != 0x40) return -1;
+    for (int at = 12; at + 4 <= size; at++)
+        if (lb_read32(b + at) == cmd) return at + 4;
+    return -1;
+}
+
+/* Map an ACK payload tail to 0 = accepted, 1 = rejected, -1 = not this shape.
+ * expected_tag is the PUT request tag as it appears on the wire (bytes 26 13
+ * read MSB-first = 0x2613; lte_bandpref uses ff 03 = 0xff03).
+ * status_out receives the parsed status word when the shape is recognized. */
+static int lb_ack(const uint8_t *b, int size, int at, int kind, uint32_t expected_tag,
+        int allow_eexist, int allow_enoent, uint32_t *status_out) {
+    int remaining = size - at;
+    if (kind == LB_ACK_PUT) {
+        if (remaining < 6) return -1;
+        if (expected_tag != 0 && (uint32_t)((b[at] << 8) | b[at + 1]) != expected_tag) return -1;
+        uint32_t status = lb_read32(b + at + 2);
+        if (status_out) *status_out = status;
+        return status == 0 ? 0 : 1;
+    }
+    if (kind == LB_ACK_STATUS) {
+        if (remaining != 4) return -1;
+        uint32_t status = lb_read32(b + at);
+        if (status_out) *status_out = status;
+        if (status == 0 || (allow_eexist && (status == 6 || status == 17)) ||
+            (allow_enoent && status == 2)) return 0;
+        return 1;
+    }
+    /* LOOSE: the echoed command is the acknowledgement (SYNC token replies and
+     * CM configuration echoes do not carry a u32 errno field). */
+    return 0;
+}
+
+/* CM instant band-preference frame 4b 0f 28 00, the ONLY route verified live
+ * to move an LTE band-1..32 selection on the reference SM-S9370. */
+static int lb_cm_band(uint8_t *out, uint32_t mask32) {
+    lb_u32(out, 0x00280f4b);
+    lb_u32(out + 4, 0);
+    lb_u32(out + 8, 0x10);
+    lb_u32(out + 12, 3);
+    lb_u32(out + 16, 0x40000000);
+    lb_u32(out + 20, mask32);
+    lb_u32(out + 24, 0x100);
+    lb_u32(out + 28, 2);
+    lb_u32(out + 32, 4);
+    return 36;
+}
+
+/* GET data extraction as exercised on-device since v95: find the ff03 marker
+ * inside a reply frame and read `expected` bytes after it. A leading '/' after
+ * the marker marks the echoed request (the path follows ff03 there), not data. */
+static int lb_get_data(const uint8_t *b, int size, uint32_t tx, int expected, uint8_t *out) {
+    (void)tx;
+    if (size < 24 || lb_read32(b) != 0x40) return 0;
+    for (int at = 12; at + 2 + expected <= size; at++) {
+        if (b[at] != 0xff || b[at + 1] != 0x03) continue;
+        if (b[at + 2] == '/') continue;
+        for (int i = 0; i < expected; i++) out[i] = b[at + 2 + i];
+        return 1;
+    }
+    return 0;
+}
+
+#endif
