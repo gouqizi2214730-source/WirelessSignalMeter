@@ -25,7 +25,7 @@ public final class AndroidLteSinrReader
                          int cellRssnr, int cellSinr, Long snapshotTimestampMs,
                          List<Integer> snapshotRssnr, List<Integer> snapshotSinr,
                          String snapshotDecision, String snapshotError,
-                         int selectedSinr, String selectedSource)
+                         int selectedSinr, String selectedSource, String taskId, String clockId)
     {
     }
 
@@ -35,6 +35,12 @@ public final class AndroidLteSinrReader
 
     public static int read(CellInfoLte cell, SignalStrength snapshot, int subscriptionId,
                            int eligibleCells, long nowMs)
+    {
+        return read(cell, snapshot, subscriptionId, eligibleCells, nowMs, null, null);
+    }
+
+    public static int read(CellInfoLte cell, SignalStrength snapshot, int subscriptionId,
+                           int eligibleCells, long nowMs, String taskId, String clockId)
     {
         CellSignalStrengthLte strength = cell.getCellSignalStrength();
         int raw = strength.getRssnr();
@@ -103,7 +109,7 @@ public final class AndroidLteSinrReader
             add(new Sample(System.currentTimeMillis(), nowMs, subscriptionId, true,
                     connectionStatus, eligibleCells, cellTimestamp, raw, cellSinr,
                     snapshotTimestamp, List.copyOf(snapshotRssnr), List.copyOf(snapshotSinr),
-                    decision, error, selected, source));
+                    decision, error, selected, source, taskId, clockId));
         }
         return selected;
     }

@@ -276,8 +276,8 @@ private fun LteRecordData.withDiag(diag: JSONObject?) = JSONObject(diag?.toStrin
     if (hasMcc()) fill("mcc", mcc.value)
     if (hasMnc()) fill("mnc", mnc.value)
     if (hasTac()) fill("tac", tac.value)
-    if (hasRsrp()) fill("rsrp", rsrp.value)
-    if (hasRsrq()) fill("rsrq", rsrq.value)
+    if (hasRsrp() && number("rsrp") == null) { fill("rsrp", rsrp.value); put("rsrp_src", "Android API") }
+    if (hasRsrq() && number("rsrq") == null) { fill("rsrq", rsrq.value); put("rsrq_src", "Android API") }
     if (hasSignalStrength()) fill("rssi", signalStrength.value)
     if (hasSnr() && snr.value.isFinite() && number("sinr") == null) {
         put("sinr", snr.value)
@@ -308,9 +308,9 @@ private fun NrRecordData.withDiag(diag: JSONObject?) = JSONObject(diag?.toString
     if (hasMcc()) fill("mcc", mcc.value)
     if (hasMnc()) fill("mnc", mnc.value)
     if (hasTac()) fill("tac", tac.value)
-    if (hasSsRsrp()) fill("rsrp", ssRsrp.value)
-    if (hasSsRsrq()) fill("rsrq", ssRsrq.value)
-    if (hasSsSinr()) fill("sinr", ssSinr.value)
+    if (hasSsRsrp() && number("rsrp") == null) { fill("rsrp", ssRsrp.value); put("rsrp_src", "Android SS-RSRP") }
+    if (hasSsRsrq() && number("rsrq") == null) { fill("rsrq", ssRsrq.value); put("rsrq_src", "Android SS-RSRQ") }
+    if (hasSsSinr() && number("sinr") == null) { fill("sinr", ssSinr.value); put("sinr_src", "Android SS-SINR") }
 }
 
 @Composable
@@ -926,7 +926,19 @@ private fun servingCellFields(
         (if (lteCell?.has("dl_bw_prb") == true) lteCell else lteMib).fixedSignalFields(listOf("dl_bw_prb")) +
         lteCell.fixedSignalFields(listOf("ul_bw_prb")) + lteMib.fixedSignalFields(listOf("tx_antennas")) +
         transmitPower + commonAccessFields + lteAccessFields + lteMacFields
-    return ServingParameterFields(summary, engineering)
+    val observation = records["serving"].orEmpty().firstOrNull {
+        it.data.optString("rat") == identity.rat && it.data.channel("pci") == identity.pci &&
+            it.data.channel("arfcn") == identity.arfcn
+    }
+    return ServingParameterFields(summary, engineering + listOf(
+        DiagField("RSRP 来源", data?.optString("rsrp_src")?.ifBlank { data.optString("meas_src") }.signalDisplayValue()),
+        DiagField("RSRQ 来源", data?.optString("rsrq_src")?.ifBlank { data.optString("meas_src") }.signalDisplayValue()),
+        DiagField("SINR 来源", data?.optString("sinr_src").signalDisplayValue()),
+        DiagField("服务小区观测龄期", observation?.let {
+            val age = it.data.optLong("seen_age_ms", -1)
+            if (age >= 0) "${age + (SystemClock.elapsedRealtime() - it.receivedAt).coerceAtLeast(0)} ms" else null
+        }.signalDisplayValue()),
+    ))
 }
 
 private fun lteDuplexMode(band: Int?): String? = when (band ?: 0) {

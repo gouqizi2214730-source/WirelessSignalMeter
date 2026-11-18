@@ -1,6 +1,7 @@
 package com.craxiom.networksurvey.ui.speedtest
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
@@ -31,6 +32,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.craxiom.networksurvey.R
 import com.craxiom.networksurvey.db.SpeedTestDbHelper
+import com.craxiom.networksurvey.db.SurveyTaskStore
+import com.craxiom.networksurvey.model.SurveyEvent
+import com.craxiom.networksurvey.ui.SurveyTaskBar
 import com.craxiom.networksurvey.model.SpeedTestRecord
 import com.craxiom.networksurvey.ui.dashboard.DashboardCardDefaults
 import com.craxiom.networksurvey.ui.dashboard.DashboardCardHeader
@@ -209,7 +213,18 @@ fun SpeedTestScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         values = emptyList()
         status = "正在连接"
         test = scope.launch {
+            var taskId: String? = null
+            suspend fun event(kind: String, title: String, detail: String = "") = withContext(Dispatchers.IO) {
+                val id = taskId ?: return@withContext
+                SurveyTaskStore.get(context).append(SurveyEvent(
+                    java.util.UUID.randomUUID().toString(), id, System.currentTimeMillis(),
+                    SystemClock.elapsedRealtime(), SurveyTaskStore.CLOCK_ID, "speedtest", kind, title, detail,
+                ))
+            }
             try {
+                // Capture once: task switches during a request must not steal its eventual result.
+                taskId = withContext(Dispatchers.IO) { SurveyTaskStore.get(context).ensure().id }
+                event("speed_start", "测速开始", "${server.protocol.name} · 默认网络路由 · $count 次")
                 for (index in 1..count) {
                     status = if (count == 1) "正在测速" else "正在进行第 $index / $count 次测速"
                     sample = null
@@ -226,6 +241,7 @@ fun SpeedTestScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     result = reading
                     records = withContext(Dispatchers.IO) {
                         db.insert(SpeedTestRecord().apply {
+                            this.taskId = taskId
                             time = System.currentTimeMillis()
                             serverType = server.protocol.name
                             serverUrl = endpoint.substringBefore('?')
@@ -236,6 +252,8 @@ fun SpeedTestScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         })
                         db.getRecent(15)
                     }
+                    event("speed_result", "测速完成（第 $index 次）",
+                        "${if (isUpload) "上传" else "下载"} · ${formatRate(reading.average)} · ${formatTraffic(reading.bytes)} · 默认网络路由")
                     if (index < count) {
                         status = "已完成 $index / $count 次 · $wait 秒后继续"
                         delay(wait * 1_000L)
@@ -244,10 +262,12 @@ fun SpeedTestScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 status = "测速完成"
             } catch (cancelled: CancellationException) {
                 status = "已停止"
+                withContext(NonCancellable) { runCatching { event("speed_cancel", "测速取消") } }
                 throw cancelled
             } catch (error: Exception) {
                 status = speedError(error)
                 sample = null
+                runCatching { event("speed_error", "测速失败", status) }
             } finally {
                 test = null
             }
@@ -281,6 +301,7 @@ fun SpeedTestScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                item("task") { SurveyTaskBar() }
                 item("measurement") {
                     SpeedPanel(
                         title = if (test != null || result != null) {
@@ -426,6 +447,8 @@ fun SpeedTestScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                             color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                         Text(record.serverUrl.orEmpty().substringBefore('?'), color = colors.onSurfaceVariant,
                             style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        record.taskId?.let { Text("任务 $it", style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis) }
                     }
                 }
             }

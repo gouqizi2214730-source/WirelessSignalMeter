@@ -23,7 +23,7 @@ import java.util.List;
 public class SpeedTestDbHelper
 extends SQLiteOpenHelper {
     private static final String DB_NAME = "speed_test.db";
-    private static final int DB_VERSION = 1;
+    private static final int DB_VERSION = 2;
     private static final String TABLE = "speed_records";
     private static final String COL_ID = "_id";
     private static final String COL_TIME = "time";
@@ -45,16 +45,15 @@ extends SQLiteOpenHelper {
     }
 
     private SpeedTestDbHelper(Context ctx) {
-        super(ctx, DB_NAME, null, 1);
+        super(ctx, DB_NAME, null, DB_VERSION);
     }
 
     public void onCreate(SQLiteDatabase db) {
-        db.execSQL("CREATE TABLE speed_records (_id INTEGER PRIMARY KEY AUTOINCREMENT, time INTEGER, server_type TEXT, server_url TEXT, download_speed INTEGER, upload_speed INTEGER, data_size INTEGER, duration INTEGER, ping_delay INTEGER, continuous INTEGER)");
+        db.execSQL("CREATE TABLE speed_records (_id INTEGER PRIMARY KEY AUTOINCREMENT, time INTEGER, server_type TEXT, server_url TEXT, download_speed INTEGER, upload_speed INTEGER, data_size INTEGER, duration INTEGER, ping_delay INTEGER, continuous INTEGER, task_id TEXT)");
     }
 
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        db.execSQL("DROP TABLE IF EXISTS speed_records");
-        this.onCreate(db);
+        if (oldVersion < 2) db.execSQL("ALTER TABLE speed_records ADD COLUMN task_id TEXT");
     }
 
     public long insert(SpeedTestRecord r) {
@@ -69,6 +68,7 @@ extends SQLiteOpenHelper {
         cv.put(COL_DURATION, Integer.valueOf(r.getDuration()));
         cv.put(COL_PING, Integer.valueOf(r.getPingDelay()));
         cv.put(COL_CONTINUOUS, Integer.valueOf(r.isContinuous() ? 1 : 0));
+        cv.put("task_id", r.getTaskId());
         long id = db.insert(TABLE, null, cv);
         return id;
     }
@@ -119,6 +119,7 @@ extends SQLiteOpenHelper {
         r.setDuration(this.getInt(c, COL_DURATION, 0));
         r.setPingDelay(this.getInt(c, COL_PING, 0));
         r.setContinuous(this.getInt(c, COL_CONTINUOUS, 0) == 1);
+        r.setTaskId(this.getString(c, "task_id", null));
         return r;
     }
 

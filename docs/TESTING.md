@@ -291,6 +291,33 @@ adb shell dumpsys deviceidle whitelist | grep networksurvey
 
 ---
 
+## Task Association and Event Replay
+
+On Windows with the cached project Kotlin dependencies and Android Studio JBR:
+
+```powershell
+.\networksurvey\src\test\host\test_road_events.ps1
+node .\networksurvey\src\test\host\test_task_schema.cjs
+```
+
+The first command compiles the production Kotlin matcher, observation tracker and CSV code.
+It covers task/SIM/clock isolation, stale positioning, device-only speed locations,
+old/new CSV round trips, task-boundary backlog and a 50,000-point / 10,000-event window.
+The second executes extracted production SQL on host SQLite; it is not an Android test.
+
+`SurveyTaskStoreAndroidTest` checks the actual Android database lifecycle and captured-task
+completion in an isolated test database. Run it with a connected device via the existing
+Android instrumentation runner. It has not been run on the development machine.
+
+Device checks: create a task; collect two SIMs; change LTE/NR cells; open road events;
+select an event and then its map marker; verify the same row/sample is selected.
+Try unavailable GPS, poor accuracy, navigation away/back, process restart, explicit task end,
+and starting a new task during a repeated speed test. Old speed results must stay on the old
+task, unknown DIAG subscription ownership must not be guessed, and default-route speed
+locations must not be labeled as a SIM's throughput.
+
+See [TASK-EVENT-MAP.md](TASK-EVENT-MAP.md) for export formats, limits and foreground-only scope.
+
 ## Native APK Compatibility
 
 On Windows, check the assembled APK's ELF LOAD segments with the Android NDK:

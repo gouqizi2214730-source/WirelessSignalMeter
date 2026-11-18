@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.craxiom.networksurvey.R
+import com.craxiom.networksurvey.ui.SurveyTaskBar
 import com.craxiom.networksurvey.ui.dashboard.DashboardCardDefaults
 import com.craxiom.networksurvey.ui.main.appbar.AppBarAction
 import com.craxiom.networksurvey.ui.main.appbar.TitleBar
@@ -141,11 +142,17 @@ private val fieldLabels = mapOf(
     "ims_pdn" to "IMS data session", "call" to "Call state", "why" to "Last event",
     "ver" to "Packet version", "rrc_release" to "RRC release", "status" to "Response Code", "dt_ms" to "Interval (ms)",
     "access" to "Access Network", "codec" to "Codec", "cause" to "Cause", "src" to "Log Code",
+    "from_pci" to "Source PCI", "to_pci" to "Target PCI",
+    "from_arfcn" to "Source ARFCN", "to_arfcn" to "Target ARFCN",
+    "task_id" to "Task ID", "received_time_ms" to "Received time (ms)",
+    "received_elapsed_ms" to "Received monotonic time (ms)", "clock_id" to "Clock domain",
+    "sinr_rx2" to "SINR Rx2", "sinr_rx3" to "SINR Rx3",
+    "retx_pct" to "Retransmission", "crc_fail" to "CRC failures",
 )
 
 private fun valueOf(key: String, value: Any): String = when {
     key.endsWith("_dbm") || key in setOf("rsrp", "rsrp_rx0", "rsrp_rx1", "rssi", "rsrp_filt") -> "$value dBm"
-    key.endsWith("_db") || key in setOf("rsrq", "sinr", "rsrq_filt", "rsrq_rx0", "rsrq_rx1", "sinr_rx0", "sinr_rx1") -> "$value dB"
+    key.endsWith("_db") || key in setOf("rsrq", "sinr", "rsrq_filt", "rsrq_rx0", "rsrq_rx1", "sinr_rx0", "sinr_rx1", "sinr_rx2", "sinr_rx3") -> "$value dB"
     key.endsWith("_mhz") -> "$value MHz"
     key.endsWith("_khz") -> "$value kHz"
     key.endsWith("mbps") -> "$value Mbps"
@@ -371,6 +378,7 @@ internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
         contentWindowInsets = WindowInsets.safeDrawing,
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
+            SurveyTaskBar()
             Box(Modifier.align(Alignment.End).padding(end = 12.dp)) {
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         val running = status.status in setOf(RootDiagStatus.Checking, RootDiagStatus.Starting, RootDiagStatus.Running)
@@ -589,6 +597,9 @@ internal fun DiagEstimate() {
 private val packetHeaderKeys = listOf(
     "ver", "rrc_release", "std_version", "rat", "ch", "rbid", "pci", "nci", "ncgi",
     "arfcn", "sfn_subframe", "sfn", "subframe", "pdu", "len", "reassembled_len", "seg", "src",
+    "from_pci", "from_arfcn", "to_pci", "to_arfcn", "rrc_transaction_id",
+    "task_id", "received_time_ms", "received_elapsed_ms", "clock_id",
+    "collector_run", "message_id", "related_message_id",
 )
 private val messageMetadataKeys = packetHeaderKeys.toSet() + setOf(
     "t", "type", "msg", "display_msg", "dir", "guess", "tentative", "nci_hex", "mr_status", "mr_bit",

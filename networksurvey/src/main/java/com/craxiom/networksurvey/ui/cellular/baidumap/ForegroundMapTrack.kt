@@ -9,9 +9,12 @@ import android.os.SystemClock
 import android.telephony.SubscriptionManager
 import androidx.preference.PreferenceManager
 import com.craxiom.networksurvey.db.MapPointDbHelper
+import com.craxiom.networksurvey.db.SurveyTaskStore
 import com.craxiom.networksurvey.listeners.ICellularSurveyRecordListener
 import com.craxiom.networksurvey.model.CellularRecordWrapper
 import com.craxiom.networksurvey.model.MapPointRecord
+import com.craxiom.networksurvey.model.ObservedCell
+import com.craxiom.networksurvey.model.ObservedCellEvents
 import com.craxiom.networksurvey.services.NetworkSurveyService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -69,6 +72,8 @@ internal class ForegroundMapTrack(context: Context, private val scope: Coroutine
     private var writer: Job? = null
     private var gpsListener: LocationListener? = null
     @Volatile private var foregroundFix: Location? = null
+    @Volatile private var tasks: SurveyTaskStore? = null
+    private data class Capture(val cell: ObservedCell, val point: MapPointRecord?, val generation: Long, val mission: String?)
 
     fun attach(service: NetworkSurveyService) {
         if (connection === service) return
@@ -92,16 +97,33 @@ internal class ForegroundMapTrack(context: Context, private val scope: Coroutine
                 // The device may lack this provider.
             }
         }
-        val samples = Channel<Pair<MapPointRecord, Long>>(64)
+        val samples = Channel<Capture>(64)
         writer = scope.launch {
+            val store = try { withContext(Dispatchers.IO) { SurveyTaskStore.get(app) } }
+            catch (error: android.database.SQLException) {
+                Timber.w(error, "Could not open survey tasks")
+                return@launch
+            }
+            tasks = store
             val lastSaved = mutableMapOf<String, MapPointRecord>()
+            var cellEvents = ObservedCellEvents()
             var savedGeneration: Long? = null
-            for ((point, generation) in samples) {
+            for ((cell, point, generation, mission) in samples) {
                 if (savedGeneration != generation) {
                     lastSaved.clear()
+                    cellEvents = ObservedCellEvents()
                     savedGeneration = generation
                 }
-                val source = "${point.simSlot}:${point.plmnDisplay}"
+                try {
+                    withContext(Dispatchers.IO) {
+                        store.bindMission(cell.taskId, mission)
+                        cellEvents.accept(cell).forEach(store::append)
+                    }
+                } catch (error: android.database.SQLException) {
+                    Timber.w(error, "Could not save survey event")
+                }
+                if (point == null) continue
+                val source = "${point.taskId}:${point.subscriptionId}:${point.simSlot}:${point.plmnDisplay}"
                 val previous = lastSaved[source]
                 if (previous != null && previous.cellId == point.cellId &&
                     previous.netType == point.netType && previous.rsrp == point.rsrp &&
@@ -125,14 +147,35 @@ internal class ForegroundMapTrack(context: Context, private val scope: Coroutine
             override fun onCellularBatch(cellularGroup: List<CellularRecordWrapper>, subscriptionId: Int) {
                 val generation = MapTrack.currentGeneration
                 if (!MapTrack.isEnabled(app)) return
+                val station = cellularGroup.mapServingCell()?.toStationInfo() ?: return
+                val task = try { tasks?.observationTask() } catch (error: android.database.SQLException) {
+                    Timber.w(error, "Could not start survey task")
+                    null
+                } ?: return
                 val now = SystemClock.elapsedRealtimeNanos()
+                val stamp = System.currentTimeMillis()
+                val slot = SubscriptionManager.getSlotIndex(subscriptionId).takeIf { it >= 0 }
+                val rat = if (station.networkType in setOf("NR", "5G")) "NR" else "LTE"
+                val cell = ObservedCell(task.id, subscriptionId, slot, stamp, now / 1_000_000,
+                    SurveyTaskStore.CLOCK_ID, rat, station.cellId.takeIf { it > 0 },
+                    station.pci.takeIf { it in 0..1007 }, station.earfcn.takeIf { it >= 0 },
+                    "${station.mcc}-${station.mnc}".takeIf { station.mcc > 0 })
                 val location = listOfNotNull(foregroundFix, service.primaryLocationListener?.latestLocation)
                     .filter { now - it.elapsedRealtimeNanos in 0..10_000_000_000L &&
                         BaiduMapArea.isValid(it.latitude, it.longitude) }
-                    .minByOrNull { if (it.hasAccuracy()) it.accuracy else Float.MAX_VALUE } ?: return
-                val station = cellularGroup.mapServingCell()?.toStationInfo() ?: return
-                if (station.rsrp !in -160..-20 && station.sinr !in -40..50) return
-                samples.trySend(MapPointRecord().apply {
+                    .minByOrNull { if (it.hasAccuracy()) it.accuracy else Float.MAX_VALUE }
+                val mission = service.missionIdForRecords.takeIf { service.isMissionSessionActive }
+                val point = if (location == null || station.rsrp !in -160..-20 && station.sinr !in -40..50) null
+                else MapPointRecord().apply {
+                    taskId = task.id
+                    missionId = mission
+                    this.subscriptionId = subscriptionId
+                    timestamp = stamp
+                    elapsedRealtimeMs = cell.elapsedMs
+                    clockId = cell.clockId
+                    locationAgeMs = (now - location.elapsedRealtimeNanos) / 1_000_000
+                    locationAccuracyM = if (location.hasAccuracy()) location.accuracy else -1f
+                    locationProvider = location.provider
                     latitude = location.latitude
                     longitude = location.longitude
                     rsrp = station.rsrp
@@ -146,10 +189,11 @@ internal class ForegroundMapTrack(context: Context, private val scope: Coroutine
                     mcc = station.mcc
                     mnc = station.mnc
                     tac = station.tac
-                    simSlot = SubscriptionManager.getSlotIndex(subscriptionId)
+                    simSlot = slot ?: -1
                     netType = station.networkType
                     remark = "自动打点"
-                } to generation)
+                }
+                samples.trySend(Capture(cell, point, generation, mission))
             }
         }
         listener = recordListener

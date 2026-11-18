@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.craxiom.networksurvey.model.SurveyEvent
 import java.io.StringWriter
 
 class RoadCoverageTest {
@@ -96,6 +97,103 @@ class RoadCoverageTest {
         }
         readRoadCsv(csv.reader())
     }
+
+    @Test
+    fun separatesExplicitTasksAndClockDomainsWithoutWaitingForGap() {
+        val p = point(1_795_000_000_000L, 0, -100.0).copy(taskId = "a", subscriptionId = 1, clockId = "boot1")
+        val tracks = roadTracks(listOf(p, p.copy(time = p.time + 1, taskId = "b"),
+            p.copy(time = p.time + 2, clockId = "boot2")))
+        assertEquals(3, tracks.size)
+    }
+
+    @Test
+    fun roundTripsTaskSubscriptionAndLocationQuality() {
+        val p = point(1_795_000_000_000L, 0, -100.0).copy(
+            taskId = "task,quoted", missionId = "mission", subscriptionId = 12, clockId = "clock",
+            elapsedMs = 2_000, locationAgeMs = 123, locationAccuracyM = 4.5, locationProvider = "gps")
+        val text = StringWriter().apply { writeRoadCsv(this, listOf(p)) }.toString()
+        assertEquals(listOf(p), readRoadCsv(text.reader()))
+    }
+
+    @Test
+    fun linksUsingMonotonicTimeAcrossWallClockAdjustment() {
+        val p = point(1_795_000_000_000L, 0, -100.0).copy(taskId = "a", subscriptionId = 1,
+            clockId = "clock", elapsedMs = 10_000, locationAgeMs = 10, locationAccuracyM = 5.0)
+        val event = event(p).copy(time = p.time + 3_600_000, elapsedMs = 10_500)
+        val result = linkRoadEvents(listOf(RoadTrack(listOf(p))), listOf(event)).single()
+        assertEquals(0, result.trackIndex)
+        assertEquals(0, result.sampleIndex)
+    }
+
+    @Test
+    fun refusesCrossTaskCrossSimCrossBootAndExpiredPositions() {
+        val p = point(1_795_000_000_000L, 0, -100.0).copy(taskId = "a", subscriptionId = 1,
+            clockId = "clock", elapsedMs = 10_000, locationAgeMs = 10, locationAccuracyM = 5.0)
+        val events = listOf(event(p).copy(taskId = "b"), event(p).copy(subscriptionId = 2),
+            event(p).copy(clockId = "another"), event(p).copy(elapsedMs = 20_001),
+            event(p).copy(pci = 99))
+        assertTrue(linkRoadEvents(listOf(RoadTrack(listOf(p))), events).all { it.sampleIndex == null })
+        for (bad in listOf(p.copy(locationAgeMs = 10_001), p.copy(locationAccuracyM = 101.0))) {
+            assertNull(linkRoadEvents(listOf(RoadTrack(listOf(bad))), listOf(event(p))).single().sampleIndex)
+        }
+    }
+
+    @Test
+    fun unknownDiagSubscriptionRequiresUniqueMatchingCellSource() {
+        val p = point(1_795_000_000_000L, 0, -100.0).copy(taskId = "a", subscriptionId = 1,
+            clockId = "clock", elapsedMs = 10_000)
+        val root = event(p).copy(subscriptionId = null, simSlot = null, source = "root_diag")
+        val one = RoadTrack(listOf(p))
+        val other = RoadTrack(listOf(p.copy(simSlot = 1, subscriptionId = 2)))
+        assertEquals(0, linkRoadEvents(listOf(one), listOf(root)).single().sampleIndex)
+        assertNull(linkRoadEvents(listOf(one, other), listOf(root)).single().sampleIndex)
+        assertNull(linkRoadEvents(listOf(one), listOf(root.copy(pci = null))).single().sampleIndex)
+        assertNull(linkRoadEvents(listOf(one), listOf(root.copy(arfcn = null))).single().sampleIndex)
+    }
+
+    @Test
+    fun speedUsesDevicePositionWithoutClaimingNetworkSimAndUnlocatedEventsRemain() {
+        val p = point(1_795_000_000_000L, 0, -100.0).copy(taskId = "a", subscriptionId = 1)
+        val speed = event(p).copy(subscriptionId = null, simSlot = null, rat = null, pci = null, arfcn = null,
+            source = "speedtest")
+        val links = linkRoadEvents(listOf(RoadTrack(listOf(p))), listOf(speed))
+        assertEquals(speed, links.single().event)
+        assertEquals(0, links.single().sampleIndex)
+        assertTrue(links.single().devicePositionOnly)
+        assertNull(links.single().event.simSlot)
+        assertEquals(speed, linkRoadEvents(emptyList(), listOf(speed)).single().event)
+        val otherSim = p.copy(subscriptionId = 2, simSlot = 1)
+        assertTrue(linkRoadEvents(listOf(RoadTrack(listOf(p)), RoadTrack(listOf(otherSim))), listOf(speed))
+            .single().devicePositionOnly)
+        assertNull(linkRoadEvents(listOf(RoadTrack(listOf(p)),
+            RoadTrack(listOf(otherSim.copy(latitude = 35.0)))), listOf(speed)).single().sampleIndex)
+    }
+
+    @Test
+    fun indexedMatcherHandlesFullReplayWindow() {
+        val p = point(1_795_000_000_000L, 0, -100.0).copy(taskId = "a", subscriptionId = 1,
+            clockId = "clock", elapsedMs = 10_000)
+        val points = List(ROAD_SAMPLE_LIMIT) { i -> p.copy(time = p.time + i * 2_000,
+            elapsedMs = p.elapsedMs!! + i * 2_000) }
+        val events = points.filterIndexed { i, _ -> i % 5 == 0 }.mapIndexed { i, sample -> event(sample).copy(id = "$i") }
+        val links = linkRoadEvents(listOf(RoadTrack(points)), events)
+        assertEquals(10_000, links.size)
+        assertTrue(links.withIndex().all { (i, link) -> link.sampleIndex == i * 5 })
+    }
+
+    @Test
+    fun matchesNearestCompatibleCellAndDoesNotInventIdentityForLegacyRows() {
+        val p = point(1_795_000_000_000L, 0, -100.0).copy(taskId = "a", subscriptionId = 1,
+            clockId = "clock", elapsedMs = 10_000)
+        val points = listOf(p, p.copy(time = p.time + 2_000, elapsedMs = 12_000, pci = 88))
+        val e = event(p).copy(elapsedMs = 12_000)
+        assertEquals(0, linkRoadEvents(listOf(RoadTrack(points)), listOf(e)).single().sampleIndex)
+        assertNull(linkRoadEvents(listOf(RoadTrack(listOf(p.copy(taskId = null)))), listOf(e)).single().sampleIndex)
+    }
+
+    private fun event(p: RoadSample) = SurveyEvent("event", p.taskId!!, p.time,
+        p.elapsedMs ?: 0, p.clockId.orEmpty(), "android", "cell_change", "observed",
+        subscriptionId = p.subscriptionId, simSlot = p.simSlot, rat = p.rat, pci = p.pci, arfcn = p.arfcn)
 
     private fun point(time: Long, simSlot: Int, rsrp: Double?) = RoadSample(
         time, 30.0, 101.0, rsrp, null, null, "NR", 27, 627264, "460-11", simSlot,

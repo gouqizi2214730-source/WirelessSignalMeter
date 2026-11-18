@@ -18,6 +18,9 @@ public class SpeedTestRecord {
     private int duration;
     private int pingDelay;
     private boolean continuous;
+    private String taskId;
+    public String getTaskId() { return taskId; }
+    public void setTaskId(String value) { taskId = value; }
 
     public long getId() {
         return this.id;

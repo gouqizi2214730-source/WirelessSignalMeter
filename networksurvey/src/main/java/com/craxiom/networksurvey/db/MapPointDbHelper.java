@@ -29,7 +29,7 @@ import java.util.TimeZone;
 public class MapPointDbHelper extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "mappoint.db";
-    private static final int DB_VERSION = 2;
+    private static final int DB_VERSION = 3;
 
     public static final String TABLE = "map_point";
     public static final String COL_ID = "id";
@@ -55,7 +55,9 @@ public class MapPointDbHelper extends SQLiteOpenHelper {
             "CREATE TABLE map_point (id INTEGER PRIMARY KEY AUTOINCREMENT, latitude REAL, " +
             "longitude REAL, rsrp INTEGER, sinr INTEGER, rsrq INTEGER, gnb_id INTEGER, " +
             "cell_id INTEGER, sector_id INTEGER, pci INTEGER, earfcn INTEGER, mcc INTEGER, " +
-            "mnc INTEGER, tac INTEGER, net_type TEXT, remark TEXT, timestamp INTEGER, sim_slot INTEGER NOT NULL DEFAULT -1)";
+            "mnc INTEGER, tac INTEGER, net_type TEXT, remark TEXT, timestamp INTEGER, sim_slot INTEGER NOT NULL DEFAULT -1, " +
+            "task_id TEXT, mission_id TEXT, subscription_id INTEGER NOT NULL DEFAULT -1, elapsed_ms INTEGER NOT NULL DEFAULT 0, " +
+            "clock_id TEXT, location_age_ms INTEGER NOT NULL DEFAULT -1, location_accuracy_m REAL NOT NULL DEFAULT -1, location_provider TEXT)";
 
     private static MapPointDbHelper instance;
 
@@ -79,12 +81,23 @@ public class MapPointDbHelper extends SQLiteOpenHelper {
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         if (oldVersion < 2) db.execSQL("ALTER TABLE " + TABLE + " ADD COLUMN " + COL_SIM_SLOT + " INTEGER NOT NULL DEFAULT -1");
+        if (oldVersion < 3) {
+            db.execSQL("ALTER TABLE map_point ADD COLUMN task_id TEXT");
+            db.execSQL("ALTER TABLE map_point ADD COLUMN mission_id TEXT");
+            db.execSQL("ALTER TABLE map_point ADD COLUMN subscription_id INTEGER NOT NULL DEFAULT -1");
+            db.execSQL("ALTER TABLE map_point ADD COLUMN elapsed_ms INTEGER NOT NULL DEFAULT 0");
+            db.execSQL("ALTER TABLE map_point ADD COLUMN clock_id TEXT");
+            db.execSQL("ALTER TABLE map_point ADD COLUMN location_age_ms INTEGER NOT NULL DEFAULT -1");
+            db.execSQL("ALTER TABLE map_point ADD COLUMN location_accuracy_m REAL NOT NULL DEFAULT -1");
+            db.execSQL("ALTER TABLE map_point ADD COLUMN location_provider TEXT");
+        }
         createIndexes(db);
     }
 
     private void createIndexes(SQLiteDatabase db) {
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_mp_lat_lon ON map_point (latitude, longitude)");
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_mp_time ON map_point (timestamp)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_mp_task_time ON map_point (task_id,timestamp)");
     }
 
     /** 插入一条打点记录，返回行 id（-1 失败）。 */
@@ -107,6 +120,14 @@ public class MapPointDbHelper extends SQLiteOpenHelper {
         cv.put(COL_REMARK, r.getRemark());
         cv.put(COL_TIME, r.getTimestamp());
         cv.put(COL_SIM_SLOT, r.getSimSlot());
+        cv.put("task_id", r.getTaskId());
+        cv.put("mission_id", r.getMissionId());
+        cv.put("subscription_id", r.getSubscriptionId());
+        cv.put("elapsed_ms", r.getElapsedRealtimeMs());
+        cv.put("clock_id", r.getClockId());
+        cv.put("location_age_ms", r.getLocationAgeMs());
+        cv.put("location_accuracy_m", r.getLocationAccuracyM());
+        cv.put("location_provider", r.getLocationProvider());
         return getWritableDatabase().insert(TABLE, null, cv);
     }
 
@@ -154,6 +175,14 @@ public class MapPointDbHelper extends SQLiteOpenHelper {
                 r.setRemark(c.getString(c.getColumnIndexOrThrow(COL_REMARK)));
                 r.setTimestamp(c.getLong(c.getColumnIndexOrThrow(COL_TIME)));
                 r.setSimSlot(c.getInt(c.getColumnIndexOrThrow(COL_SIM_SLOT)));
+                r.setTaskId(c.getString(c.getColumnIndexOrThrow("task_id")));
+                r.setMissionId(c.getString(c.getColumnIndexOrThrow("mission_id")));
+                r.setSubscriptionId(c.getInt(c.getColumnIndexOrThrow("subscription_id")));
+                r.setElapsedRealtimeMs(c.getLong(c.getColumnIndexOrThrow("elapsed_ms")));
+                r.setClockId(c.getString(c.getColumnIndexOrThrow("clock_id")));
+                r.setLocationAgeMs(c.getLong(c.getColumnIndexOrThrow("location_age_ms")));
+                r.setLocationAccuracyM(c.getFloat(c.getColumnIndexOrThrow("location_accuracy_m")));
+                r.setLocationProvider(c.getString(c.getColumnIndexOrThrow("location_provider")));
                 list.add(r);
             }
         } finally {
@@ -185,7 +214,7 @@ public class MapPointDbHelper extends SQLiteOpenHelper {
                     new OutputStreamWriter(new FileOutputStream(f), StandardCharsets.UTF_8));
             // BOM：Excel 识别 UTF-8
             w.write(0xFEFF);
-            w.write("经度,纬度,RSRP(dBm),SINR(dB),RSRQ(dB),基站ID,小区ID,PCI,频点,PLMN,TAC,网络制式,备注,时间\n");
+            w.write("经度,纬度,RSRP(dBm),SINR(dB),RSRQ(dB),基站ID,小区ID,PCI,频点,PLMN,TAC,网络制式,备注,时间,task_id,mission_id,sim_slot,subscription_id,elapsed_ms,clock_id,location_age_ms,location_accuracy_m,location_provider\n");
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US);
             sdf.setTimeZone(TimeZone.getDefault());
             for (MapPointRecord p : all) {
@@ -193,7 +222,10 @@ public class MapPointDbHelper extends SQLiteOpenHelper {
                         optionalMeasurement(p.getSinr()) + "," + optionalMeasurement(p.getRsrq()) + "," + p.getGnbId() + "," +
                         p.getCellId() + "," + p.getPci() + "," + p.getEarfcn() + "," +
                         p.getPlmnDisplay() + "," + p.getTac() + "," + p.getNetType() + "," +
-                        csvEscape(p.getRemark()) + "," + sdf.format(new Date(p.getTimestamp())) + "\n");
+                        csvEscape(p.getRemark()) + "," + sdf.format(new Date(p.getTimestamp())) + "," +
+                        csvEscape(p.getTaskId()) + "," + csvEscape(p.getMissionId()) + "," + p.getSimSlot() + "," +
+                        p.getSubscriptionId() + "," + p.getElapsedRealtimeMs() + "," + csvEscape(p.getClockId()) + "," +
+                        p.getLocationAgeMs() + "," + p.getLocationAccuracyM() + "," + csvEscape(p.getLocationProvider()) + "\n");
             }
             w.close();
             return f.getAbsolutePath();
