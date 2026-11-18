@@ -129,8 +129,13 @@ static int exchange(const uint8_t *payload, int size, int kind, uint32_t tag,
     return fail("No recognized modem acknowledgement. The operation may be partial; refresh before retrying.");
 }
 
-static int read_mask_to(const char *path, int bytes, uint8_t *mask, int timeout_ms) {
+/* Read up to `bytes` of an item into mask, clamped to the caller's buffer
+ * capacity (the probe reads 164-byte cell-lock lists; a caller passing a
+ * smaller buffer must fail closed, never overrun the stack). */
+static int read_mask_to(const char *path, int bytes, uint8_t *mask,
+        int mask_cap, int timeout_ms) {
     uint8_t payload[160], response[8192];
+    if (bytes < 1 || bytes > mask_cap) return 1;
     lb_u32(payload, 0x0027134b); lb_u32(payload + 4, (uint32_t)bytes);
     lb_u32(payload + 8, (uint32_t)strlen(path) + 1);
     payload[12] = 0xff; payload[13] = 0x03;
@@ -149,7 +154,8 @@ static int read_mask_to(const char *path, int bytes, uint8_t *mask, int timeout_
 }
 
 static int read_mask(const char *path, int bytes, uint8_t *mask) {
-    return read_mask_to(path, bytes, mask, 3000);
+    /* every mask caller uses a 64-byte buffer */
+    return read_mask_to(path, bytes, mask, 64, 3000);
 }
 
 static int restore_mask(const char *name, int bytes, uint8_t *mask) {
@@ -270,7 +276,7 @@ static int nr_marker_exists(void) {
 
 static int nr_nsa_present(void) {
     uint8_t mask[64];
-    return read_mask_to(LB_NR_NSA_BANDS, 64, mask, 1500) == 0;
+    return read_mask_to(LB_NR_NSA_BANDS, 64, mask, sizeof(mask), 1500) == 0;
 }
 
 /* NR-NSA restore readiness: either a backup exists, or the item is absent on
@@ -285,49 +291,57 @@ static int nr_band_command(const char *bands, int restore) {
     uint8_t mask[64] = {0};
     int nsa = nr_nsa_present();
     if (restore) {
+        /* NSA item restores ITS OWN backup when we have one; a missing NSA
+         * backup means the item was first materialised by our lock, so
+         * removing it returns the modem default (same rule as the main item).
+         * Never overwrite it with the MAIN item's configuration afterwards. */
         if (nsa) {
             uint8_t nsa_mask[64];
-            if (restore_mask("nr-nsa-original.bin", 64, nsa_mask) == 0)
-                put_file(LB_MMODE, LB_NR_NSA_BANDS, LB_MMODE, nsa_mask,
-                    64, 0x7a, 0x7a, 0);
-            else
-                remove_file(LB_NR_NSA_BANDS, LB_MMODE);
+            if (restore_mask("nr-nsa-original.bin", 64, nsa_mask) == 0) {
+                if (put_file(LB_MMODE, LB_NR_NSA_BANDS, LB_MMODE, nsa_mask,
+                    64, 0x7a, 0x7a, 0)) return 1;
+            } else if (remove_file(LB_NR_NSA_BANDS, LB_MMODE)) {
+                return 1;
+            }
         }
+        /* Main item: no-baseline marker path removes the lock file and lets
+         * the modem rebuild defaults; otherwise write the stored mask back. */
         if (nr_marker_exists()) {
-            if (nsa && remove_file(LB_NR_NSA_BANDS, LB_MMODE)) return 1;
             if (remove_file(LB_NR_BANDS, LB_MMODE)) return 1;
             return reboot_modem();
         }
         if (restore_mask("nr-original.bin", 64, mask))
             return fail("No original NR band mask is available for this device.");
-    } else {
-        if (!lb_bands(bands, 512, mask, 64)) return fail("Invalid band list.");
-        int backup = backup_mask(LB_NR_BANDS, "nr-original.bin", 64);
-        if (backup == 1) return 1;
-        if (backup == 2) {
-            puts("Note: the original NR mask is not readable (lock item not materialised yet). Restoring will remove the lock file instead.");
-            int fd = openat(state_dir, "nr-no-original",
-                O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
-            if (fd < 0 && errno != EEXIST)
-                return fail("Cannot record the missing baseline; no band changes were made.");
-            if (fd >= 0) {
-                int ok = fsync(fd) == 0;
-                close(fd);
-                if (!ok) {
-                    unlinkat(state_dir, "nr-no-original", 0);
-                    return fail("Cannot persist the missing baseline; no band changes were made.");
-                }
-            }
-            if (fsync(state_dir)) return fail("Cannot sync the missing baseline; no band changes were made.");
-        }
-        if (nsa) {
-            int nsa_backup = backup_mask(LB_NR_NSA_BANDS, "nr-nsa-original.bin", 64);
-            if (nsa_backup == 1)
-                return fail("Cannot persist the original NR-NSA backup. No band changes were made.");
-            if (nsa_backup == 2)
-                puts("Note: nr_nsa_band_pref found but not readable now; restoring will remove it.");
-        }
+        if (put_file(LB_MMODE, LB_NR_BANDS, LB_MMODE, mask, 64, 0x7a, 0x7a, 0)) return 1;
+        return reboot_modem();
     }
+    if (!lb_bands(bands, 512, mask, 64)) return fail("Invalid band list.");
+    int backup = backup_mask(LB_NR_BANDS, "nr-original.bin", 64);
+    if (backup == 1) return 1;
+    if (backup == 2) {
+        puts("Note: the original NR mask is not readable (lock item not materialised yet). Restoring will remove the lock file instead.");
+        int fd = openat(state_dir, "nr-no-original",
+            O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
+        if (fd < 0 && errno != EEXIST)
+            return fail("Cannot record the missing baseline; no band changes were made.");
+        if (fd >= 0) {
+            int ok = fsync(fd) == 0;
+            close(fd);
+            if (!ok) {
+                unlinkat(state_dir, "nr-no-original", 0);
+                return fail("Cannot persist the missing baseline; no band changes were made.");
+            }
+        }
+        if (fsync(state_dir)) return fail("Cannot sync the missing baseline; no band changes were made.");
+    }
+    if (nsa) {
+        int nsa_backup = backup_mask(LB_NR_NSA_BANDS, "nr-nsa-original.bin", 64);
+        if (nsa_backup == 1)
+            return fail("Cannot persist the original NR-NSA backup. No band changes were made.");
+        if (nsa_backup == 2)
+            puts("Note: nr_nsa_band_pref found but not readable now; restoring will remove it.");
+    }
+    /* lock path writes BOTH items with the new mask */
     if (nsa && put_file(LB_MMODE, LB_NR_NSA_BANDS, LB_MMODE, mask, 64, 0x7a, 0x7a, 0)) return 1;
     if (put_file(LB_MMODE, LB_NR_BANDS, LB_MMODE, mask, 64, 0x7a, 0x7a, 0)) return 1;
     return reboot_modem();
@@ -368,9 +382,13 @@ static int nv_dial_tone(void) {
     return 0;
 }
 
+/* item probes ask for the full on-disk size (e.g. the 164-byte cell-lock
+ * list); the buffer must cover the largest item we probe. */
+#define LB_PROBE_BUF 256
+
 static void print_cap(const char *key, const char *path, int bytes) {
-    uint8_t mask[64];
-    int ok = read_mask_to(path, bytes, mask, 1500) == 0;
+    uint8_t buf[LB_PROBE_BUF];
+    int ok = read_mask_to(path, bytes, buf, sizeof(buf), 1500) == 0;
     printf("CAP %s %d\n", key, ok);
 }
 
