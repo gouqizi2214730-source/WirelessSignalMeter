@@ -159,6 +159,7 @@ fun BaiduTowerMapScreen(
     var showLabels by rememberSaveable { mutableStateOf(true) }
     var showPoints by rememberSaveable { mutableStateOf(true) }
     var showLink by rememberSaveable { mutableStateOf(true) }
+    var satellite by rememberSaveable { mutableStateOf(false) }
     var netFilter by rememberSaveable { mutableStateOf("全部") }
     var metric by rememberSaveable { mutableStateOf("RSRP") }
     var servingParam by remember { mutableStateOf<EngineeringParam?>(null) }
@@ -238,6 +239,13 @@ fun BaiduTowerMapScreen(
                 }.getOrDefault(emptyList())
             }
         }
+    }
+    /* 卫星/普通瓦片切换：SDK 内置能力（BaiduMap.MAP_TYPE_SATELLITE），切换仅
+     * 重绘底图，扇区/打点/连线覆盖物不受影响；卫星图层级上限低于普通图。 */
+    LaunchedEffect(ready, satellite) {
+        area?.baiduMap?.setMapType(
+            if (satellite) BaiduMap.MAP_TYPE_SATELLITE else BaiduMap.MAP_TYPE_NORMAL
+        )
     }
     LaunchedEffect(map, ready, currentViewport, sectorCandidates, selected?.id, servingParam?.id, showLabels) {
         if (map == null || !ready || currentViewport == null) return@LaunchedEffect
@@ -623,10 +631,11 @@ fun BaiduTowerMapScreen(
 
     if (showLayers) {
         MapLayerSheet(
-            showLabels, showPoints, showLink, metric, pointCount, pointActionBusy,
+            showLabels, showPoints, showLink, satellite, metric, pointCount, pointActionBusy,
             onToggleLabels = { showLabels = !showLabels },
             onTogglePoints = { showPoints = !showPoints },
             onToggleLink = { showLink = !showLink },
+            onToggleSatellite = { satellite = !satellite },
             onMetric = { metric = it },
             onDismiss = { showLayers = false },
             onClear = {
@@ -886,12 +895,14 @@ private fun MapLayerSheet(
     labels: Boolean,
     points: Boolean,
     link: Boolean,
+    satellite: Boolean,
     metric: String,
     pointCount: Int,
     busy: Boolean,
     onToggleLabels: () -> Unit,
     onTogglePoints: () -> Unit,
     onToggleLink: () -> Unit,
+    onToggleSatellite: () -> Unit,
     onMetric: (String) -> Unit,
     onDismiss: () -> Unit,
     onClear: () -> Unit,
@@ -907,6 +918,7 @@ private fun MapLayerSheet(
                 FilterChip(selected = labels, onClick = onToggleLabels, label = { Text("扇区名称") })
                 FilterChip(selected = points, onClick = onTogglePoints, label = { Text("打点") })
                 FilterChip(selected = link, onClick = onToggleLink, label = { Text("小区连线") })
+                FilterChip(selected = satellite, onClick = onToggleSatellite, label = { Text("卫星图") })
             }
             if (link) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
