@@ -57,6 +57,10 @@ internal data class BandLockCommand(val arguments: List<String>, val restartsMod
         )
 
         fun mode(mode: LockNetworkMode) = BandLockCommand(listOf("mode", mode.argument), false)
-        fun probe() = BandLockCommand(listOf("probe"), false)
+
+        /** probe carries the device identity so the helper logs it and future
+         * per-model profiles can key off the same arguments. */
+        fun probe(model: String, soc: String) =
+            BandLockCommand(listOf("probe", model, soc), false)
     }
 }

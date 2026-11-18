@@ -22,6 +22,8 @@ internal enum class LockAvailability { Checking, Ready, Unavailable }
 internal data class BandLockState(
     val availability: LockAvailability = LockAvailability.Checking,
     val busy: Boolean = false,
+    val channel: String = "",
+    val caps: List<Pair<String, Boolean>> = emptyList(),
     val lteBackup: Boolean = false,
     val nrBackup: Boolean = false,
     val result: Int? = null,
@@ -37,12 +39,12 @@ internal class BandLockViewModel(application: Application) : AndroidViewModel(ap
 
     init { refresh() }
 
-    fun refresh() = run(BandLockCommand.probe())
+    fun refresh() = run(BandLockCommand.probe(Build.MODEL, Build.SOC_MODEL))
     fun clearLog() { if (!mutableState.value.busy) mutableState.value = mutableState.value.copy(log = "") }
 
     fun run(command: BandLockCommand) {
         if (mutableState.value.busy) return
-        val probe = command.arguments == listOf("probe")
+        val probe = command.arguments.firstOrNull() == "probe"
         if (!probe && mutableState.value.availability != LockAvailability.Ready) return
         mutableState.value = mutableState.value.copy(busy = true, result = null)
         viewModelScope.launch {
@@ -57,6 +59,10 @@ internal class BandLockViewModel(application: Application) : AndroidViewModel(ap
                     availability = if (probe) {
                         if (ready) LockAvailability.Ready else LockAvailability.Unavailable
                     } else current.availability,
+                    channel = if (probe) outcome.output.lineSequence()
+                        .firstOrNull { it.startsWith("CHANNEL ") }
+                        ?.removePrefix("CHANNEL ")?.trim().orEmpty() else current.channel,
+                    caps = if (probe) parseCaps(outcome.output) else current.caps,
                     lteBackup = if (probe && ready) outcome.output.contains("BACKUP lte 1") else
                         current.lteBackup || (accepted && command.arguments.first() == "lte-band"),
                     nrBackup = if (probe && ready) outcome.output.contains("BACKUP nr 1") else
@@ -129,6 +135,13 @@ internal class BandLockViewModel(application: Application) : AndroidViewModel(ap
             return Outcome(running.waitFor(), output.toString())
         } finally { input.close() }
     }
+
+    private fun parseCaps(output: String): List<Pair<String, Boolean>> =
+        output.lineSequence().filter { it.startsWith("CAP ") }.mapNotNull { line ->
+            val parts = line.trim().split(Regex("\\s+"))
+            val key = parts.getOrNull(1) ?: return@mapNotNull null
+            key to (parts.getOrNull(2) == "1")
+        }.toList()
 
     private fun appendLog(line: String) {
         mutableState.value = mutableState.value.copy(log = (mutableState.value.log + line + "\n").takeLast(24_000))

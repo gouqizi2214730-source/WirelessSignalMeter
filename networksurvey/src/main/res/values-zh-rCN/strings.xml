@@ -217,6 +217,7 @@
     <string name="tool_band_lock_title">锁网</string>
     <string name="tool_band_lock_description">LTE / NR 锁频段、频点、小区与网络制式</string>
     <string name="lock_ready">Root 与 DIAG 通道可用</string>
+    <string name="lock_channel_caps">通道 %1$s · %2$s</string>
     <string name="lock_checking">正在检测 Root 与 DIAG</string>
     <string name="lock_unavailable">未获得 Root 授权，或设备不提供受支持的高通 DIAG 通道</string>
     <string name="lock_working">正在执行操作</string>
