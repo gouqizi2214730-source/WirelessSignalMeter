@@ -7,13 +7,6 @@ plugins {
     alias(libs.plugins.dependency.license.report)
 }
 
-// Exclude google-services and crashlytics if the json file is missing and for debug builds
-if (file("google-services.json").exists() && !gradle.startParameter.taskNames.any { it.contains("Debug") || it.contains("test") }) {
-    logger.quiet("Using the google-services.json file")
-    apply plugin: "com.google.gms.google-services"
-    apply plugin: "com.google.firebase.crashlytics"
-}
-
 import com.github.jk1.license.filter.LicenseBundleNormalizer
 import com.github.jk1.license.render.SimpleHtmlReportRenderer
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget

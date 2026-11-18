@@ -20,8 +20,6 @@ kotlin = "2.4.10"
 # KSP2 versions independently of Kotlin. 2.3.10+ is required for Kotlin 2.4.x
 # (older KSP cannot handle Kotlin 2.4's default module names containing ':').
 ksp = "2.3.10"
-googleServices = "4.5.0"
-firebaseCrashlyticsGradle = "3.0.7"
 licenseReport = "3.1.4"
 
 # Library version groups (shared across multiple library entries)
@@ -31,7 +29,6 @@ grpc = "1.83.1"
 navigation = "2.9.8"
 networkSurveyMessaging = "2.6.0"
 composeBom = "2026.08.00"
-firebaseBom = "34.17.0"
 
 # Single-library versions
 androidxAppcompat = "1.8.0"
@@ -143,18 +140,6 @@ commons-csv = { module = "org.apache.commons:commons-csv", version.ref = "common
 vico-compose-m3 = { module = "com.patrykandpatrick.vico:compose-m3", version.ref = "vico" }
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 
-# Firebase (regular flavor only)
-firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
-firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
-firebase-crashlytics = { module = "com.google.firebase:firebase-crashlytics" }
-
-# Firebase-related Gradle plugins, exposed as [libraries] (not [plugins]) so the
-# root build.gradle can add them to the buildscript classpath only when
-# google-services.json is present. This keeps F-Droid / IzzyOnDroid builds
-# (which build the CDR flavor without google-services.json) free of any
-# Firebase artifacts on the build classpath.
-google-services-gradle-plugin = { module = "com.google.gms:google-services", version.ref = "googleServices" }
-firebase-crashlytics-gradle-plugin = { module = "com.google.firebase:firebase-crashlytics-gradle", version.ref = "firebaseCrashlyticsGradle" }
 
 # Test dependencies
 junit = { module = "junit:junit", version.ref = "junit" }
