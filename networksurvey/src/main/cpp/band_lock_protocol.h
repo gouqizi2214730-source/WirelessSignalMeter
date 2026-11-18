@@ -11,6 +11,9 @@
 #define LB_MMODE "/nv/item_files/modem/mmode"
 #define LB_LTE_BANDS LB_MMODE "/lte_bandpref"
 #define LB_NR_BANDS LB_MMODE "/nr_band_pref"
+/* NSA devices keep a SEPARATE NR band preference item (seen in the ZTE
+ * T-Phone lock library); when it exists both items must carry the mask. */
+#define LB_NR_NSA_BANDS LB_MMODE "/nr_nsa_band_pref"
 #define LB_LTE_DIR "/nv/item_files/modem/lte/rrc/efs"
 #define LB_LTE_FREQ LB_LTE_DIR "/cell_restrict_opt_params"
 #define LB_LTE_CELL LB_LTE_DIR "/cell_lock_list"
@@ -98,6 +101,33 @@ static int lb_sync(uint8_t *out, const char *path) {
     lb_u32(out, 0x0030134b);
     out[4] = 0x1f; out[5] = 0x01;
     return lb_copy_path(out, 6, path);
+}
+
+/* Classic NV read request: [opcode 0x26][item u16 LE][129 B slot].
+ * Used as the transport dial tone for non-Samsung Qualcomm devices (the
+ * diag-research v95 on-device capture: item 10 answers a full 158 B reply). */
+static int lb_nv_read(uint8_t *out, uint32_t item) {
+    out[0] = 0x26;
+    out[1] = (uint8_t)(item & 0xff);
+    out[2] = (uint8_t)((item >> 8) & 0xff);
+    for (int i = 0; i < 129; i++) out[3 + i] = 0;
+    return 132;
+}
+
+/* Abstract-socket name helpers. The Samsung diag-router binds an abstract
+ * name built from 108 zero bytes (verified live on SM-S9370); the AOSP
+ * diagservices style is the short abstract name "diag". */
+#define LB_ABSTRACT_MAX 108
+static int lb_zero_abstract_name(uint8_t *sun_path) {
+    for (int i = 0; i < LB_ABSTRACT_MAX; i++) sun_path[i] = 0;
+    return LB_ABSTRACT_MAX;
+}
+
+static int lb_short_abstract_name(uint8_t *sun_path, const char *name) {
+    sun_path[0] = 0;
+    int i = 0;
+    while (name[i] && i < LB_ABSTRACT_MAX - 1) { sun_path[1 + i] = (uint8_t)name[i]; i++; }
+    return i + 1;
 }
 
 static int lb_unlink(uint8_t *out, const char *path) {

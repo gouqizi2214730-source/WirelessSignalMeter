@@ -39,6 +39,28 @@ __declspec(dllexport) int test_band_lock_protocol(void) {
     CHECK(lb_read32(data + 8) == 0x10 && lb_read32(data + 12) == 3);
     CHECK(lb_read32(data + 16) == 0x40000000 && lb_read32(data + 20) == 0x10);
     CHECK(lb_read32(data + 24) == 0x100 && lb_read32(data + 28) == 2 && lb_read32(data + 32) == 4);
+    /* Classic NV read dial tone: opcode 0x26, item 10 little endian, 129 B slot. */
+    size = lb_nv_read(data, 10);
+    CHECK(size == 132 && data[0] == 0x26 && data[1] == 10 && data[2] == 0);
+    CHECK(data[3] == 0 && data[131] == 0);
+    /* Transport abstract names: Samsung binds 108 zero bytes; the generic
+     * diagservices style prepends the NUL marker to "diag". */
+    uint8_t sun_path[LB_ABSTRACT_MAX];
+    CHECK(lb_zero_abstract_name(sun_path) == LB_ABSTRACT_MAX);
+    int all_zero = 1;
+    for (int i = 0; i < LB_ABSTRACT_MAX; i++) if (sun_path[i]) all_zero = 0;
+    CHECK(all_zero);
+    int short_len = lb_short_abstract_name(sun_path, "diag");
+    CHECK(short_len == 5 && sun_path[0] == 0 && sun_path[1] == 'd' && sun_path[4] == 'g');
+    /* The NSA band item lives under mmode like the main NR item (manual
+     * compare: the freestanding build must not lean on CRT string helpers). */
+    const char *nsa = LB_NR_NSA_BANDS;
+    const char *mmode = LB_MMODE;
+    CHECK(nsa[0] == '/');
+    int same_prefix = 1, differs = 0;
+    for (int i = 0; mmode[i]; i++) if (nsa[i] != mmode[i]) same_prefix = 0;
+    for (int i = 0; nsa[i] || LB_NR_BANDS[i]; i++) if (nsa[i] != LB_NR_BANDS[i]) differs = 1;
+    CHECK(same_prefix && differs);
     /* GET extraction: the ff03 marker search from the on-device captures.
      * The echoed transaction is no longer a matching key (router-side frames
      * were observed with unrelated values, e.g. 0x96 on the third frame). */

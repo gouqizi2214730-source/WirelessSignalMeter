@@ -154,6 +154,17 @@ internal fun BandLockScreen(rootDiag: RootDiagViewModel, onBack: () -> Unit, mod
                 }
                 LockIconButton(R.string.lock_refresh, Icons.Rounded.Refresh, !state.busy, model::refresh)
             }
+            /* Multi-device capability card: which transport the helper bound and
+             * which lock items the modem answers for. */
+            if (state.availability == LockAvailability.Ready &&
+                (state.channel.isNotEmpty() || state.caps.isNotEmpty())) {
+                Text(
+                    stringResource(R.string.lock_channel_caps,
+                        state.channel.ifEmpty { "-" }, capsLine(state.caps)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             Text(stringResource(R.string.lock_scope), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -330,6 +341,24 @@ private fun LockNumberField(value: String, onChange: (String) -> Unit, label: St
         label = { Text(label) }, supportingText = { Text("$min–$max") },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
 }
+
+/* Short capability names for the probe card line. */
+private fun shortCapName(key: String) = when (key) {
+    "nv" -> "NV"
+    "lte_bandpref" -> "LTE"
+    "nr_band_pref" -> "NR"
+    "nr_nsa_band_pref" -> "NSA"
+    "cell_lock_list" -> "CELL"
+    "cell_restrict" -> "LTE-FRQ"
+    "nr_earfcn_lock" -> "NR-FRQ"
+    "nr_pci_lock_info" -> "NR-PCI"
+    else -> key
+}
+
+private fun capsLine(caps: List<Pair<String, Boolean>>): String =
+    if (caps.isEmpty()) "" else caps.joinToString(" ") { (key, ok) ->
+        "${shortCapName(key)}${if (ok) "\u2713" else "\u2717"}"
+    }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

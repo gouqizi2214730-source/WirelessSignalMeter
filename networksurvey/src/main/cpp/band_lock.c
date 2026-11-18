@@ -36,29 +36,66 @@ static int receive(uint8_t *data, int size, int timeout) {
     return (int)recv(router, data, (size_t)size, 0);
 }
 
-static int connect_router(void) {
-    router = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
-    if (router < 0) return fail("Cannot create DIAG socket.");
-    struct sockaddr_un address = { .sun_family = AF_UNIX };
-    if (connect(router, (struct sockaddr *)&address, sizeof(address)) != 0)
-        return fail("This device does not expose the supported diag-router channel.");
+/* Transport candidates, tried in order. The Samsung diag-router binds an
+ * abstract name built from 108 zero bytes (verified live on SM-S9370);
+ * generic Qualcomm devices usually expose the diagservices-style abstract
+ * name "diag". The registration handshake is the oracle: a candidate counts
+ * only when it returns a valid client id. */
+struct lb_transport {
+    const char *label;
+    int zero_name;
+    int seqpacket;
+};
+static const struct lb_transport lb_transports[] = {
+    { "samsung-diag-router", 1, 1 },
+    { "diag-stream", 0, 0 },
+    { "diag-seqpacket", 0, 1 },
+};
+
+static int register_client(void) {
     uint8_t reg[24] = {0}, response[8192];
     lb_u32(reg, 0x17);
     lb_u32(reg + 4, (uint32_t)getpid());
     lb_u32(reg + 8, UINT32_MAX);
     reg[12] = reg[13] = 0xff;
     lb_u32(reg + 14, 18);
-    if (write(router, reg, sizeof(reg)) != sizeof(reg)) return fail("DIAG registration write failed.");
-    long long deadline = monotonic_ms() + 5000;
+    if (write(router, reg, sizeof(reg)) != sizeof(reg)) return 0;
+    long long deadline = monotonic_ms() + 1500;
     while (monotonic_ms() < deadline) {
-        int size = receive(response, sizeof(response), 400);
+        int size = receive(response, sizeof(response), 300);
         if (size >= 8 && lb_read32(response) == 0x20000) {
             client_id = lb_read32(response + 4);
-            if (client_id && client_id != UINT32_MAX) return 0;
-            break;
+            return client_id && client_id != UINT32_MAX;
         }
     }
-    return fail("DIAG did not return a valid client ID.");
+    return 0;
+}
+
+static int connect_router(void) {
+    for (unsigned t = 0; t < sizeof(lb_transports) / sizeof(lb_transports[0]); t++) {
+        const struct lb_transport *tr = &lb_transports[t];
+        int fd = socket(AF_UNIX,
+            (tr->seqpacket ? SOCK_SEQPACKET : SOCK_STREAM) | SOCK_CLOEXEC, 0);
+        if (fd < 0) continue;
+        struct sockaddr_un address;
+        memset(&address, 0, sizeof(address));
+        address.sun_family = AF_UNIX;
+        int namelen = tr->zero_name ?
+            lb_zero_abstract_name((uint8_t *)address.sun_path) :
+            lb_short_abstract_name((uint8_t *)address.sun_path, "diag");
+        if (connect(fd, (struct sockaddr *)&address,
+                (socklen_t)(offsetof(struct sockaddr_un, sun_path) + namelen)) == 0) {
+            router = fd;
+            if (register_client()) {
+                printf("CHANNEL %s\n", tr->label);
+                return 0;
+            }
+            router = -1;
+        }
+        close(fd);
+    }
+    return fail("This device does not expose a supported diag channel "
+        "(tried samsung-diag-router, diag-stream, diag-seqpacket).");
 }
 
 static int send_frame(const uint8_t *payload, int size, uint32_t *tx) {
@@ -92,15 +129,20 @@ static int exchange(const uint8_t *payload, int size, int kind, uint32_t tag,
     return fail("No recognized modem acknowledgement. The operation may be partial; refresh before retrying.");
 }
 
-static int read_mask(const char *path, int bytes, uint8_t *mask) {
+/* Read up to `bytes` of an item into mask, clamped to the caller's buffer
+ * capacity (the probe reads 164-byte cell-lock lists; a caller passing a
+ * smaller buffer must fail closed, never overrun the stack). */
+static int read_mask_to(const char *path, int bytes, uint8_t *mask,
+        int mask_cap, int timeout_ms) {
     uint8_t payload[160], response[8192];
+    if (bytes < 1 || bytes > mask_cap) return 1;
     lb_u32(payload, 0x0027134b); lb_u32(payload + 4, (uint32_t)bytes);
     lb_u32(payload + 8, (uint32_t)strlen(path) + 1);
     payload[12] = 0xff; payload[13] = 0x03;
     int size = lb_copy_path(payload, 14, path);
     uint32_t tx;
     if (send_frame(payload, size, &tx)) return 1;
-    long long deadline = monotonic_ms() + 3000;
+    long long deadline = monotonic_ms() + timeout_ms;
     while (monotonic_ms() < deadline) {
         int length = receive(response, sizeof(response), 300);
         if (length > 0 && lb_get_data(response, length, tx, bytes, mask)) {
@@ -109,6 +151,11 @@ static int read_mask(const char *path, int bytes, uint8_t *mask) {
         }
     }
     return 1;
+}
+
+static int read_mask(const char *path, int bytes, uint8_t *mask) {
+    /* every mask caller uses a 64-byte buffer */
+    return read_mask_to(path, bytes, mask, 64, 3000);
 }
 
 static int restore_mask(const char *name, int bytes, uint8_t *mask) {
@@ -217,7 +264,9 @@ static int lte_band_command(const char *bands, int restore) {
 
 /* nr_band_pref exists on the reference device but only answers GET after a
  * first PUT materialises it: the first lock records a "no baseline" marker and
- * restoring removes the lock file so the modem rebuilds its default set. */
+ * restoring removes the lock file so the modem rebuilds its default set.
+ * NSA devices (T-Phone lock library) keep a separate nr_nsa_band_pref; when
+ * readable, both items are written with the same mask so NSA camping follows. */
 static int nr_marker_exists(void) {
     int fd = openat(state_dir, "nr-no-original", O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
     if (fd < 0) return 0;
@@ -225,35 +274,88 @@ static int nr_marker_exists(void) {
     return 1;
 }
 
+static int nr_nsa_present(void) {
+    uint8_t mask[64];
+    return read_mask_to(LB_NR_NSA_BANDS, 64, mask, sizeof(mask), 1500) == 0;
+}
+
+/* A backup file may exist yet be unusable (short/corrupt/incomplete write).
+ * Distinguishing it from "no backup at all" matters: the no-backup path may
+ * delete the live item, which is not recoverable. */
+static int backup_exists(const char *name) {
+    struct stat st;
+    return fstatat(state_dir, name, &st, AT_SYMLINK_NOFOLLOW) == 0 && S_ISREG(st.st_mode);
+}
+
+/* NR-NSA restore readiness: either a backup exists, or the item is absent on
+ * this device (nothing to restore), so restore can proceed either way. */
+static int nsa_backup_possible(void) {
+    uint8_t mask[64];
+    if (restore_mask("nr-nsa-original.bin", 64, mask) == 0) return 1;
+    return !nr_nsa_present();
+}
+
 static int nr_band_command(const char *bands, int restore) {
     uint8_t mask[64] = {0};
     if (restore) {
+        /* NSA item: an existing local backup is authoritative and must be
+         * restored even when the runtime probe fails right now (a transient
+         * probe failure must never skip a real backup). Only when there is no
+         * backup do we fall back to "it was materialised by our first lock, so
+         * remove it" - and that path itself probes; a probe failure there
+         * leaves the item untouched, which is the safe direction. */
+        uint8_t nsa_mask[64];
+        if (restore_mask("nr-nsa-original.bin", 64, nsa_mask) == 0) {
+            if (put_file(LB_MMODE, LB_NR_NSA_BANDS, LB_MMODE, nsa_mask,
+                64, 0x7a, 0x7a, 0)) return 1;
+        } else if (backup_exists("nr-nsa-original.bin")) {
+            /* A stored-but-unusable backup must not fall through to "remove the
+             * live item": a corrupt backup is recoverable, deleting the modem's
+             * original configuration is not. */
+            return fail("The stored NR-NSA backup is unreadable; refusing to remove the live item.");
+        } else if (nr_nsa_present()) {
+            if (remove_file(LB_NR_NSA_BANDS, LB_MMODE)) return 1;
+        }
+        /* Main item: no-baseline marker path removes the lock file and lets
+         * the modem rebuild defaults; otherwise write the stored mask back. */
         if (nr_marker_exists()) {
             if (remove_file(LB_NR_BANDS, LB_MMODE)) return 1;
             return reboot_modem();
         }
         if (restore_mask("nr-original.bin", 64, mask))
             return fail("No original NR band mask is available for this device.");
-    } else {
-        if (!lb_bands(bands, 512, mask, 64)) return fail("Invalid band list.");
-        int backup = backup_mask(LB_NR_BANDS, "nr-original.bin", 64);
-        if (backup == 1) return 1;
-        if (backup == 2) {
-            puts("Note: the original NR mask is not readable (lock item not materialised yet). Restoring will remove the lock file instead.");
-            int fd = openat(state_dir, "nr-no-original",
-                O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
-            if (fd < 0 && errno != EEXIST)
-                return fail("Cannot record the missing baseline; no band changes were made.");
-            if (fd >= 0) {
-                int ok = fsync(fd) == 0;
-                close(fd);
-                if (!ok) {
-                    unlinkat(state_dir, "nr-no-original", 0);
-                    return fail("Cannot persist the missing baseline; no band changes were made.");
-                }
+        if (put_file(LB_MMODE, LB_NR_BANDS, LB_MMODE, mask, 64, 0x7a, 0x7a, 0)) return 1;
+        return reboot_modem();
+    }
+    if (!lb_bands(bands, 512, mask, 64)) return fail("Invalid band list.");
+    int backup = backup_mask(LB_NR_BANDS, "nr-original.bin", 64);
+    if (backup == 1) return 1;
+    if (backup == 2) {
+        puts("Note: the original NR mask is not readable (lock item not materialised yet). Restoring will remove the lock file instead.");
+        int fd = openat(state_dir, "nr-no-original",
+            O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
+        if (fd < 0 && errno != EEXIST)
+            return fail("Cannot record the missing baseline; no band changes were made.");
+        if (fd >= 0) {
+            int ok = fsync(fd) == 0;
+            close(fd);
+            if (!ok) {
+                unlinkat(state_dir, "nr-no-original", 0);
+                return fail("Cannot persist the missing baseline; no band changes were made.");
             }
-            if (fsync(state_dir)) return fail("Cannot sync the missing baseline; no band changes were made.");
         }
+        if (fsync(state_dir)) return fail("Cannot sync the missing baseline; no band changes were made.");
+    }
+    if (nr_nsa_present()) {
+        /* The NSA item answered a read seconds ago, so its original value DOES
+         * exist. Failing to capture it now (transient read or local write
+         * error) would leave the lock with no way back -> refuse to lock
+         * rather than overwrite an ensemble we cannot restore. */
+        int nsa_backup = backup_mask(LB_NR_NSA_BANDS, "nr-nsa-original.bin", 64);
+        if (nsa_backup == 1) return 1;   /* local persistence error already reported */
+        if (nsa_backup == 2)
+            return fail("Cannot capture the original NR-NSA mask. No band changes were made.");
+        if (put_file(LB_MMODE, LB_NR_NSA_BANDS, LB_MMODE, mask, 64, 0x7a, 0x7a, 0)) return 1;
     }
     if (put_file(LB_MMODE, LB_NR_BANDS, LB_MMODE, mask, 64, 0x7a, 0x7a, 0)) return 1;
     return reboot_modem();
@@ -278,14 +380,51 @@ static int cell_list(const char *text, uint8_t *data) {
     return count;
 }
 
+/* Classic-NV dial tone: send NV read item 10 and see whether the modem
+ * answers with a full-size reply (v95 on-device capture). Cheap capability
+ * signal for devices whose EFS layout differs. */
+static int nv_dial_tone(void) {
+    uint8_t payload[132], response[8192];
+    int size = lb_nv_read(payload, 10);
+    uint32_t tx;
+    if (send_frame(payload, size, &tx)) return 0;
+    long long deadline = monotonic_ms() + 1500;
+    while (monotonic_ms() < deadline) {
+        int length = receive(response, sizeof(response), 300);
+        if (length >= 100) return 1;
+    }
+    return 0;
+}
+
+/* item probes ask for the full on-disk size (e.g. the 164-byte cell-lock
+ * list); the buffer must cover the largest item we probe. */
+#define LB_PROBE_BUF 256
+
+static void print_cap(const char *key, const char *path, int bytes) {
+    uint8_t buf[LB_PROBE_BUF];
+    int ok = read_mask_to(path, bytes, buf, sizeof(buf), 1500) == 0;
+    printf("CAP %s %d\n", key, ok);
+}
+
 static int execute(int argc, char **argv) {
     const char *cmd = argv[0];
-    if (!strcmp(cmd, "probe") && argc == 1) {
+    if (!strcmp(cmd, "probe") && argc <= 3) {
         uint8_t mask[64];
         puts("RESULT ready");
+        if (argc >= 2) printf("DEVICE model %s\n", argv[1]);
+        if (argc >= 3) printf("DEVICE soc %s\n", argv[2]);
+        print_cap("lte_bandpref", LB_LTE_BANDS, 8);
+        print_cap("nr_band_pref", LB_NR_BANDS, 64);
+        print_cap("nr_nsa_band_pref", LB_NR_NSA_BANDS, 64);
+        print_cap("cell_lock_list", LB_LTE_CELL, 164);
+        print_cap("cell_restrict", LB_LTE_FREQ, 36);
+        print_cap("nr_earfcn_lock", LB_NR_FREQ, 8);
+        print_cap("nr_pci_lock_info", LB_NR_CELL, 12);
+        printf("CAP nv %d\n", nv_dial_tone());
         printf("BACKUP lte %d\n", !restore_mask("lte-original.bin", 8, mask) ||
             !read_mask(LB_LTE_BANDS, 8, mask));
         printf("BACKUP nr %d\n", !restore_mask("nr-original.bin", 64, mask) || nr_marker_exists());
+        printf("BACKUP nr_nsa %d\n", !nsa_backup_possible());
         return 0;
     }
     if ((!strcmp(cmd, "lte-band") || !strcmp(cmd, "nr-band")) && argc == 2)

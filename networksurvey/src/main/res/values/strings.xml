@@ -272,6 +272,7 @@
     <string name="tool_band_lock_title">Network lock</string>
     <string name="tool_band_lock_description">LTE / NR band, channel, cell and network mode</string>
     <string name="lock_ready">Root and DIAG channel available</string>
+    <string name="lock_channel_caps">Channel %1$s · %2$s</string>
     <string name="lock_checking">Checking Root and DIAG</string>
     <string name="lock_unavailable">Root authorization or the supported Qualcomm DIAG channel is unavailable</string>
     <string name="lock_working">Operation in progress</string>

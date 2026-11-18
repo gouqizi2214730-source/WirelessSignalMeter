@@ -60,4 +60,11 @@ class BandLockCommandTest {
         assertEquals(listOf("nr-cell-clear"), BandLockCommand.restore(LockRadio.Nr, LockTarget.Cell).arguments)
         assertEquals(listOf("mode", "auto"), BandLockCommand.mode(LockNetworkMode.Auto).arguments)
     }
+
+    @Test
+    fun probeCarriesDeviceIdentityForMultiDeviceRouting() {
+        val cmd = BandLockCommand.probe("SM-S9370", "SM8750")
+        assertEquals(listOf("probe", "SM-S9370", "SM8750"), cmd.arguments)
+        assertTrue(!cmd.restartsModem)
+    }
 }
