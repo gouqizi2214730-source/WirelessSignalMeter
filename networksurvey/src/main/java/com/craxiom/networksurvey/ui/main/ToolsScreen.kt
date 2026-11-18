@@ -19,6 +19,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.GpsFixed
 import androidx.compose.material.icons.rounded.Map
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Timeline
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Sensors
 import androidx.compose.material.icons.rounded.Wifi
@@ -45,6 +47,8 @@ import com.craxiom.networksurvey.ui.dashboard.DashboardCardDefaults
 internal fun ToolsScreen(
     bottomPadding: Dp,
     onOpenMap: () -> Unit,
+    onOpenRoadCoverage: () -> Unit,
+    onOpenBandLock: () -> Unit,
     onOpenGnss: () -> Unit,
     onOpenSpeedTest: () -> Unit,
     onOpenWifi: () -> Unit,
@@ -63,6 +67,18 @@ internal fun ToolsScreen(
                 ToolCard(
                     R.string.tool_tower_map_title, R.string.tool_tower_map_description,
                     Icons.Rounded.Map, colors.primary, onOpenMap,
+                )
+            }
+            item {
+                ToolCard(
+                    R.string.tool_road_coverage_title, R.string.tool_road_coverage_description,
+                    Icons.Rounded.Timeline, colors.primary, onOpenRoadCoverage,
+                )
+            }
+            item {
+                ToolCard(
+                    R.string.tool_band_lock_title, R.string.tool_band_lock_description,
+                    Icons.Rounded.Lock, colors.tertiary, onOpenBandLock,
                 )
             }
             item {

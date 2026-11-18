@@ -41,6 +41,8 @@ import com.craxiom.networksurvey.ui.acknowledgments.AcknowledgmentsScreen
 import com.craxiom.networksurvey.ui.activesurvey.SurveyMonitorScreen
 import com.craxiom.networksurvey.ui.cellular.CalculatorScreen
 import com.craxiom.networksurvey.ui.cellular.baidumap.BaiduTowerMapScreen
+import com.craxiom.networksurvey.ui.cellular.baidumap.RoadCoverageScreen
+import com.craxiom.networksurvey.ui.bandlock.BandLockScreen
 import com.craxiom.networksurvey.ui.cellular.model.ServingCellInfo
 import com.craxiom.networksurvey.ui.cellular.towermap.ProviderColorOverrideScreen
 import com.craxiom.networksurvey.ui.cellular.towermap.ProviderColorOverrideViewModel
@@ -282,6 +284,14 @@ fun NavGraphBuilder.mainGraph(
             GnssToolScreen(onBack = { mainNavController.navigateUp() })
         }
 
+        composable(NavOption.RoadCoverage.name) {
+            RoadCoverageScreen(onBack = { mainNavController.navigateUp() })
+        }
+
+        composable(NavOption.BandLock.name) {
+            BandLockScreen(rootDiag = rootDiag, onBack = { mainNavController.navigateUp() })
+        }
+
         composable(NavOption.Signaling.name) {
             SignalingScreen(rootDiag, onBack = { mainNavController.navigateUp() })
         }
@@ -336,6 +346,8 @@ enum class NavOption {
     TowerMapSettings,
     QrCodeShare,
     TowerMap,
+    RoadCoverage,
+    BandLock,
     Wifi,
     Gnss,
     Signaling,
