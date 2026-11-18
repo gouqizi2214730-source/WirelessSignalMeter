@@ -262,11 +262,34 @@ static int lte_band_command(const char *bands, int restore) {
     return 0;
 }
 
+/* NR unlock semantics follow the Dingli ROOT(QUALCOMM) plugin: there is no
+ * SET_UNLOCKBAND - a band mask is "unlocked" by rewriting the FULL supported
+ * set (see diag-research reports/v98_dmg6_official_sequences.md §7). The
+ * modem applies nr_band_pref at baseband boot, so one full-set write + SSR
+ * restores every factory band (incl. n28) instead of trusting a possibly
+ * stale/narrow backup. */
+#define NR_FULL_SET "1,3,28,41,77,78,79"
+
+static int mask_bits(const uint8_t *m, int bytes) {
+    int count = 0;
+    for (int i = 0; i < bytes; i++) {
+        uint8_t b = m[i];
+        while (b) { count += b & 1; b >>= 1; }
+    }
+    return count;
+}
+
+static int nr_full_bits(void) {
+    uint8_t mask[64];
+    return lb_bands(NR_FULL_SET, 512, mask, 64) ? mask_bits(mask, 64) : 0;
+}
+
 /* nr_band_pref exists on the reference device but only answers GET after a
- * first PUT materialises it: the first lock records a "no baseline" marker and
- * restoring removes the lock file so the modem rebuilds its default set.
- * NSA devices (T-Phone lock library) keep a separate nr_nsa_band_pref; when
- * readable, both items are written with the same mask so NSA camping follows. */
+ * first PUT materializes it: the first lock records a "no baseline" marker and
+ * restoring removes the marker, so the modem rebuilds its default set.
+ * NSAccess devices (T-Phone lock library) keep a separate nr_nsa_band_pref;
+ * when readable, both items are written with the same mask so NSA camping
+ * follows. */
 static int nr_marker_exists(void) {
     int fd = openat(state_dir, "nr-no-original", O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
     if (fd < 0) return 0;
@@ -277,14 +300,6 @@ static int nr_marker_exists(void) {
 static int nr_nsa_present(void) {
     uint8_t mask[64];
     return read_mask_to(LB_NR_NSA_BANDS, 64, mask, sizeof(mask), 1500) == 0;
-}
-
-/* A backup file may exist yet be unusable (short/corrupt/incomplete write).
- * Distinguishing it from "no backup at all" matters: the no-backup path may
- * delete the live item, which is not recoverable. */
-static int backup_exists(const char *name) {
-    struct stat st;
-    return fstatat(state_dir, name, &st, AT_SYMLINK_NOFOLLOW) == 0 && S_ISREG(st.st_mode);
 }
 
 /* NR-NSA restore readiness: either a backup exists, or the item is absent on
@@ -298,36 +313,31 @@ static int nsa_backup_possible(void) {
 static int nr_band_command(const char *bands, int restore) {
     uint8_t mask[64] = {0};
     if (restore) {
-        /* NSA item: an existing local backup is authoritative and must be
-         * restored even when the runtime probe fails right now (a transient
-         * probe failure must never skip a real backup). Only when there is no
-         * backup do we fall back to "it was materialised by our first lock, so
-         * remove it" - and that path itself probes; a probe failure there
-         * leaves the item untouched, which is the safe direction. */
-        uint8_t nsa_mask[64];
-        if (restore_mask("nr-nsa-original.bin", 64, nsa_mask) == 0) {
-            if (put_file(LB_MMODE, LB_NR_NSA_BANDS, LB_MMODE, nsa_mask,
-                64, 0x7a, 0x7a, 0)) return 1;
-        } else if (backup_exists("nr-nsa-original.bin")) {
-            /* A stored-but-unusable backup must not fall through to "remove the
-             * live item": a corrupt backup is recoverable, deleting the modem's
-             * original configuration is not. */
-            return fail("The stored NR-NSA backup is unreadable; refusing to remove the live item.");
-        } else if (nr_nsa_present()) {
-            if (remove_file(LB_NR_NSA_BANDS, LB_MMODE)) return 1;
+        /* Dingli NR-unlock semantics: there is no SET_UNLOCKBAND - a band mask
+         * is unlocked by rewriting the FULL supported set again. The modem
+         * applies nr_band_pref at baseband boot, so one write + SSR returns
+         * every factory band (incl. n28). Never restore a possibly-dirty
+         * backup, never delete the item: a full-set rewrite is authoritative. */
+        if (!lb_bands(NR_FULL_SET, 512, mask, 64))
+            return fail("Invalid default NR band set.");
+        if (nr_nsa_present()) {
+            if (put_file(LB_MMODE, LB_NR_NSA_BANDS, LB_MMODE, mask, 64, 0x7a, 0x7a, 0)) return 1;
         }
-        /* Main item: no-baseline marker path removes the lock file and lets
-         * the modem rebuild defaults; otherwise write the stored mask back. */
-        if (nr_marker_exists()) {
-            if (remove_file(LB_NR_BANDS, LB_MMODE)) return 1;
-            return reboot_modem();
-        }
-        if (restore_mask("nr-original.bin", 64, mask))
-            return fail("No original NR band mask is available for this device.");
         if (put_file(LB_MMODE, LB_NR_BANDS, LB_MMODE, mask, 64, 0x7a, 0x7a, 0)) return 1;
         return reboot_modem();
     }
     if (!lb_bands(bands, 512, mask, 64)) return fail("Invalid band list.");
+    /* Dirty-backup detection: surface a previous backup that is narrower than
+     * the full set (e.g. an earlier n1+n78 lock). Unlock now rewrites the full
+     * set, so that narrow backup must not be mistaken for a restore baseline. */
+    {
+        uint8_t prior[64];
+        if (restore_mask("nr-original.bin", 64, prior) == 0) {
+            int prev = mask_bits(prior, 64);
+            if (prev < nr_full_bits())
+                printf("Note: the previous NR backup is a %d-band mask; unlock restores the FULL set (n1,n3,n28,n41,n77,n78,n79).\n", prev);
+        }
+    }
     int backup = backup_mask(LB_NR_BANDS, "nr-original.bin", 64);
     if (backup == 1) return 1;
     if (backup == 2) {
@@ -406,6 +416,37 @@ static void print_cap(const char *key, const char *path, int bytes) {
     printf("CAP %s %d\n", key, ok);
 }
 
+/* AT passthrough over a modem AT port (e.g. /dev/smd0). The AT command family
+ * is per-vendor (Huawei ^NRFREQLOCK, Qualcomm AT+QNWPREFCFG, ...), so the
+ * tool stays generic: the caller supplies the node and the raw command. */
+static int at_command(const char *node, const char *cmd) {
+    int fd = open(node, O_RDWR | O_NOCTTY | O_NONBLOCK);
+    if (fd < 0) return fail("AT port open failed - pass a valid node (e.g. /dev/smd0).");
+    uint8_t buf[512];
+    int drained = 0;
+    while (drained < 64 && read(fd, buf, sizeof(buf)) > 0) drained++;
+    char line[512];
+    int n = snprintf(line, sizeof(line), "%s\r", cmd);
+    if (write(fd, line, (size_t)n) != n) { close(fd); return fail("AT write failed."); }
+    printf("[AT] -> %s\n", cmd);
+    long long deadline = monotonic_ms() + 2500;
+    int any = 0;
+    while (monotonic_ms() < deadline) {
+        struct pollfd p = { .fd = fd, .events = POLLIN };
+        int r;
+        do { r = poll(&p, 1, 200); } while (r < 0 && errno == EINTR);
+        if (r > 0 && (p.revents & POLLIN)) {
+            int nr = (int)read(fd, buf, sizeof(buf));
+            if (nr > 0) { fwrite(buf, 1, (size_t)nr, stdout); any = 1; }
+        } else if (r == 0 && any) {
+            break;
+        }
+    }
+    close(fd);
+    if (!any) return fail("AT response not found on this port.");
+    return 0;
+}
+
 static int execute(int argc, char **argv) {
     const char *cmd = argv[0];
     if (!strcmp(cmd, "probe") && argc <= 3) {
@@ -425,6 +466,7 @@ static int execute(int argc, char **argv) {
             !read_mask(LB_LTE_BANDS, 8, mask));
         printf("BACKUP nr %d\n", !restore_mask("nr-original.bin", 64, mask) || nr_marker_exists());
         printf("BACKUP nr_nsa %d\n", !nsa_backup_possible());
+        printf("FULLSET nr %d\n", nr_full_bits());
         return 0;
     }
     if ((!strcmp(cmd, "lte-band") || !strcmp(cmd, "nr-band")) && argc == 2)
@@ -442,6 +484,21 @@ static int execute(int argc, char **argv) {
         if (exchange(frame, sizeof(frame), LB_ACK_LOOSE, 0, 0, 0)) return 1;
         puts("RESULT accepted");
         return 0;
+    }
+    if (!strcmp(cmd, "at") && argc >= 3) {
+        /* at <node> <command...>: the node is argv[1]; the remaining arguments
+         * are joined with spaces into one AT command string. */
+        char line[480] = {0};
+        int at = 0;
+        for (int i = 2; i < argc; i++) {
+            if (i > 2 && at < 479) line[at++] = ' ';
+            size_t len = strlen(argv[i]);
+            if (at + (int)len >= (int)sizeof(line)) return fail("AT command too long.");
+            memcpy(line + at, argv[i], len);
+            at += (int)len;
+        }
+        line[at] = 0;
+        return at_command(argv[1], line);
     }
     int nr = !strncmp(cmd, "nr-", 3), lte = !strncmp(cmd, "lte-", 4);
     if (!nr && !lte) return fail("Unknown command.");

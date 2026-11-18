@@ -28,8 +28,18 @@ static void reset(void) {
 
 static int fail(const char *message) { (void)message; return 1; }
 static int puts(const char *message) { (void)message; return 0; }
+static int printf(const char *format, ...) { (void)format; return 0; }
 static int read_mask(const char *path, int bytes, uint8_t *mask) {
     (void)path;
+    reads++;
+    if (read_error) return 1;
+    for (int i = 0; i < bytes; i++) mask[i] = (uint8_t)(i + 1);
+    return 0;
+}
+/* nr_nsa_present() probes through read_mask_to, not read_mask. */
+static int read_mask_to(const char *path, int bytes, uint8_t *mask,
+        int mask_cap, int timeout_ms) {
+    (void)path; (void)mask_cap; (void)timeout_ms;
     reads++;
     if (read_error) return 1;
     for (int i = 0; i < bytes; i++) mask[i] = (uint8_t)(i + 1);
@@ -137,9 +147,18 @@ __declspec(dllexport) int test_band_lock_backup(void) {
     CHECK(file_syncs == 1 && dir_syncs == 1 && efs == 1 && restarts == 1);
 
     reset();
-    CHECK(nr_band_command("78", 0) == 0 && writes == 1 && marker == 0 && efs == 1);
+    /* No baseline, NSAccess item answers: main + NSA items both captured and
+     * both written (NSA dual-write landed after the single-item era). */
+    CHECK(nr_band_command("78", 0) == 0 && reads == 3 && writes == 2 && creates == 2
+        && marker == 1 && efs == 2 && restarts == 1);
 
     reset(); stored = 1;
-    CHECK(nr_band_command("78", 0) == 0 && reads == 0 && creates == 0 && efs == 1);
+    /* A stored backup short-circuits the re-capture; NSA still answers. */
+    CHECK(nr_band_command("78", 0) == 0 && reads == 1 && creates == 0 && efs == 2 && restarts == 1);
+
+    reset();
+    /* Dingli full-set unlock: restore rewrites the FULL set to both items and
+     * restarts the modem - it never restores a dirty backup. */
+    CHECK(nr_band_command(0, 1) == 0 && reads == 1 && writes == 0 && creates == 0 && efs == 2 && restarts == 1);
     return 0;
 }

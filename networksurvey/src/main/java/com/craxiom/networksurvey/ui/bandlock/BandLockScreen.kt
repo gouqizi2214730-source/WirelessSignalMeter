@@ -22,6 +22,7 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -91,6 +92,8 @@ internal fun BandLockScreen(rootDiag: RootDiagViewModel, onBack: () -> Unit, mod
     var scs by rememberSaveable { mutableStateOf(30) }
     var pending by remember { mutableStateOf<BandLockCommand?>(null) }
     var confirmation by remember { mutableStateOf("") }
+    var consoleText by rememberSaveable { mutableStateOf("") }
+    val consoleValid = runCatching { BandLockCommand.console(consoleText) }.getOrNull()
     /* Hysteresis for the serving line: keep rendering the last valid record up
      * to 60 s so sparse DIAG serving heartbeats do not flash the row empty
      * every second-tick when the 15 s freshness window expires in between. */
@@ -299,6 +302,20 @@ internal fun BandLockScreen(rootDiag: RootDiagViewModel, onBack: () -> Unit, mod
                 { pending = BandLockCommand.mode(networkMode); confirmation = "$modeLabel · $modeValue" },
                 Modifier.fillMaxWidth(), enabled = enabled,
             ) { Text(modeLabel) }
+            HorizontalDivider()
+            Text(stringResource(R.string.lock_console_title), style = MaterialTheme.typography.titleSmall)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    consoleText, { consoleText = it }, Modifier.weight(1f), enabled = !state.busy,
+                    singleLine = true, isError = consoleText.isNotBlank() && consoleValid == null,
+                    label = { Text(stringResource(R.string.lock_console_placeholder)) },
+                    supportingText = { Text(stringResource(R.string.lock_console_hint)) },
+                )
+                LockIconButton(R.string.lock_console_run, Icons.Rounded.Terminal,
+                    !state.busy && consoleValid != null) {
+                    consoleValid?.let { model.runRaw(consoleText.trim()) }
+                }
+            }
             state.result?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium) }
             HorizontalDivider()
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

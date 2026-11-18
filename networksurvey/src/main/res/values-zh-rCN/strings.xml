@@ -243,6 +243,10 @@
     <string name="lock_execution_log">执行记录</string>
     <string name="lock_clear_log">清空记录</string>
     <string name="lock_log_empty">暂无操作记录</string>
+    <string name="lock_console_title">命令控制台</string>
+    <string name="lock_console_placeholder">原生命令</string>
+    <string name="lock_console_hint">例如：nr-band 1,78 · at /dev/smd0 AT+CGMR</string>
+    <string name="lock_console_run">执行命令</string>
     <string name="lock_confirm">应用网络更改？</string>
     <string name="lock_confirm_restart">将写入基带配置并请求重启基带。重新注册网络期间，通话和数据可能暂时中断。</string>
     <string name="lock_confirm_mode">将修改基带主协议栈的网络制式，通话和数据可能暂时中断。“自动”制式不会清除频段、频点和小区锁定。</string>
