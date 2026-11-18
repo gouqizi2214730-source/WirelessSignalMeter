@@ -22,6 +22,7 @@ public class MapPointRecord {
     private int tac;
     private String netType;
     private String remark;
+    private int simSlot = -1;
     private long timestamp = System.currentTimeMillis();
 
     public long getId() {
@@ -162,6 +163,14 @@ public class MapPointRecord {
 
     public boolean is5G() {
         return NET_5G.equals(this.netType);
+    }
+
+    public int getSimSlot() {
+        return simSlot;
+    }
+
+    public void setSimSlot(int simSlot) {
+        this.simSlot = simSlot;
     }
 
     public String getPlmnDisplay() {

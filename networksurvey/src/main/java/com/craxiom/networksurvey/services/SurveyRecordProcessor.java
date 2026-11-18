@@ -118,6 +118,7 @@ import com.craxiom.networksurvey.ui.activesurvey.TowerDetectionJavaWrapper;
 import com.craxiom.networksurvey.util.CellularBandwidthUtils;
 import com.craxiom.networksurvey.util.CellularUtils;
 import com.craxiom.networksurvey.util.LocationUtils;
+import com.craxiom.networksurvey.util.LteSinrUtils;
 import com.craxiom.networksurvey.util.NsUtils;
 import com.craxiom.networksurvey.util.ParserUtils;
 import com.craxiom.networksurvey.util.PreferenceUtils;
@@ -1761,18 +1762,25 @@ public class SurveyRecordProcessor
             dataBuilder.setSlot(Int32Value.newBuilder().setValue(subscriptionId).build());
         }
 
-        int rssnr = cellSignalStrengthLte.getRssnr();
-        if (cellInfoLte.isRegistered() && signalStrength != null)
+        int rssnr = LteSinrUtils.read(cellSignalStrengthLte.getRssnr(), cellSignalStrengthLte);
+        if (!LteSinrUtils.isValid(rssnr) && cellInfoLte.isRegistered() && signalStrength != null)
         {
             // A SignalStrength sample carries no PCI. Use it only when it agrees with this serving cell.
             final List<CellSignalStrengthLte> strengths = signalStrength.getCellSignalStrengths(CellSignalStrengthLte.class);
             if (strengths.size() == 1)
             {
                 final CellSignalStrengthLte serving = strengths.get(0);
-                if (serving.getRsrp() == rsrp && validLteRssnr(serving.getRssnr())) rssnr = serving.getRssnr();
+                if (serving.getRsrp() == rsrp)
+                {
+                    rssnr = LteSinrUtils.read(serving.getRssnr(), serving);
+                    if (!LteSinrUtils.isValid(rssnr)) rssnr = LteSinrUtils.readLegacy(signalStrength, rsrp);
+                }
+            } else if (strengths.isEmpty())
+            {
+                rssnr = LteSinrUtils.readLegacy(signalStrength, rsrp);
             }
         }
-        if (validLteRssnr(rssnr))
+        if (LteSinrUtils.isValid(rssnr))
         {
             dataBuilder.setSnr(FloatValue.newBuilder().setValue(rssnr).build());
         }
@@ -1785,11 +1793,6 @@ public class SurveyRecordProcessor
         recordBuilder.setData(dataBuilder);
 
         return recordBuilder.build();
-    }
-
-    private static boolean validLteRssnr(int value)
-    {
-        return value >= -20 && value <= 30;
     }
 
     /**
