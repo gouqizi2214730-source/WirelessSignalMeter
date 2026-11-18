@@ -67,4 +67,16 @@ class BandLockCommandTest {
         assertEquals(listOf("probe", "SM-S9370", "SM8750"), cmd.arguments)
         assertTrue(!cmd.restartsModem)
     }
+
+    @Test
+    fun consoleSplitsRawCommandLineAndTreatsProbeAsReadOnly() {
+        assertEquals(listOf("nr-band", "1,78,79"),
+            BandLockCommand.console("  nr-band  1,78,79  ").arguments)
+        assertTrue(BandLockCommand.console("nr-band 78").restartsModem)
+        assertEquals(listOf("at", "/dev/smd0", "AT+CGMR"),
+            BandLockCommand.console("at /dev/smd0 AT+CGMR").arguments)
+        assertTrue(BandLockCommand.console("at /dev/smd0 AT+CGMR").restartsModem)
+        assertTrue(!BandLockCommand.console("probe").restartsModem)
+        assertTrue(runCatching { BandLockCommand.console("   ") }.isFailure)
+    }
 }

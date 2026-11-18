@@ -62,5 +62,15 @@ internal data class BandLockCommand(val arguments: List<String>, val restartsMod
          * per-model profiles can key off the same arguments. */
         fun probe(model: String, soc: String) =
             BandLockCommand(listOf("probe", model, soc), false)
+
+        /** Command console: pass an arbitrary native helper command line
+         * verbatim (e.g. "nr-band 1,78,79" or "at /dev/smd0 AT+CGMR"). */
+        fun console(text: String): BandLockCommand {
+            val tokens = text.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+            require(tokens.isNotEmpty())
+            /* Conservative: any console command may end in a modem restart;
+             * only the read-only probe is known not to. */
+            return BandLockCommand(tokens, restartsModem = tokens.first() != "probe")
+        }
     }
 }

@@ -42,7 +42,7 @@ internal class BandLockViewModel(application: Application) : AndroidViewModel(ap
     fun refresh() = run(BandLockCommand.probe(Build.MODEL, Build.SOC_MODEL))
     fun clearLog() { if (!mutableState.value.busy) mutableState.value = mutableState.value.copy(log = "") }
 
-    fun run(command: BandLockCommand) {
+    fun run(command: BandLockCommand, fromConsole: Boolean = false) {
         if (mutableState.value.busy) return
         val probe = command.arguments.firstOrNull() == "probe"
         if (!probe && mutableState.value.availability != LockAvailability.Ready) return
@@ -68,6 +68,7 @@ internal class BandLockViewModel(application: Application) : AndroidViewModel(ap
                     nrBackup = if (probe && ready) outcome.output.contains("BACKUP nr 1") else
                         current.nrBackup || (accepted && command.arguments.first() == "nr-band"),
                     result = when {
+                        fromConsole -> null
                         probe && ready -> R.string.lock_ready
                         probe -> R.string.lock_unavailable
                         accepted && command.restartsModem -> R.string.lock_restart_sent
@@ -89,6 +90,12 @@ internal class BandLockViewModel(application: Application) : AndroidViewModel(ap
                 mutableState.value = mutableState.value.copy(busy = false)
             }
         }
+    }
+
+    /** Command console entry: run a raw native command line and stream its
+     * output to the log without overwriting the standard result line. */
+    fun runRaw(text: String) {
+        run(BandLockCommand.console(text), fromConsole = true)
     }
 
     private data class Outcome(val exit: Int, val output: String)

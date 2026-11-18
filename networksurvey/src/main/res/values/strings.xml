@@ -298,6 +298,10 @@
     <string name="lock_execution_log">Execution log</string>
     <string name="lock_clear_log">Clear log</string>
     <string name="lock_log_empty">No operations recorded</string>
+    <string name="lock_console_title">Command console</string>
+    <string name="lock_console_placeholder">Native command</string>
+    <string name="lock_console_hint">Example: nr-band 1,78 · at /dev/smd0 AT+CGMR</string>
+    <string name="lock_console_run">Run command</string>
     <string name="lock_confirm">Apply network change?</string>
     <string name="lock_confirm_restart">This updates modem configuration and requests a modem restart. Calls and data may be interrupted while the modem registers again.</string>
     <string name="lock_confirm_mode">This changes the primary modem network mode and may interrupt calls and data. Automatic mode does not remove band, channel or cell locks.</string>
