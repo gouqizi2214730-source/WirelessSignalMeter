@@ -24,36 +24,7 @@
     <string name="request">Request</string>
     <string name="ignore">Continue Without Permissions</string>
 
-    <string name="upload_help_title">Upload Information</string>
     <string name="view_manual">View Manual</string>
-    <!-- Upload Help Dialog -->
-    <string name="upload_help_dismiss">Got it</string>
-    <string name="upload_help_overview">Share collected cellular and Wi-Fi survey data with third-party databases to help improve coverage mapping.</string>
-    <string name="upload_help_how_title">How It Works</string>
-    <string name="upload_help_how_started_label">When Started</string>
-    <string name="upload_help_how_started_desc">Survey records are written to an internal database and uploaded to the selected destinations</string>
-    <string name="upload_help_how_stopped_label">When Stopped</string>
-    <string name="upload_help_how_stopped_desc">No data is written or uploaded</string>
-    <string name="upload_help_data_destination_title">Where Your Data Goes</string>
-    <string name="upload_help_data_opencellid_label">OpenCelliD</string>
-    <string name="upload_help_data_opencellid_desc">A global open-source cell tower database</string>
-    <string name="upload_help_data_beacondb_label">BeaconDB</string>
-    <string name="upload_help_data_beacondb_desc">A crowdsourced geolocation database</string>
-    <string name="upload_help_what_title">What Gets Uploaded</string>
-    <string name="upload_help_what_location_label">Device Location</string>
-    <string name="upload_help_what_location_desc">Latitude, longitude, altitude, accuracy, and speed</string>
-    <string name="upload_help_what_cellular_label">Cellular Info</string>
-    <string name="upload_help_what_cellular_desc">MCC, MNC, TAC/LAC, Cell ID, signal strength, PCI, ARFCN, etc.</string>
-    <string name="upload_help_what_wifi_label">Wi-Fi Info</string>
-    <string name="upload_help_what_wifi_desc">SSID, BSSID, frequency, channel, signal strength, encryption type</string>
-    <string name="upload_help_what_timestamp_label">Timestamp</string>
-    <string name="upload_help_what_timestamp_desc">Date and time of collection</string>
-    <string name="upload_help_when_title">When Records Are Written</string>
-    <string name="upload_help_when_distance_label">Distance Threshold</string>
-    <string name="upload_help_when_distance_desc">A new record is only written if the device has moved at least 35 meters since the last record</string>
-    <string name="upload_help_when_filter_label">Required Info</string>
-    <string name="upload_help_when_filter_desc">Records are skipped if they lack essential fields</string>
-    <string name="upload_help_privacy_note">Data is anonymized and used to improve cellular and Wi-Fi coverage mapping.</string>
 
     <string name="phone_state_help_title">Phone State Survey</string>
     <string name="phone_state_help_dismiss">Got it</string>
@@ -107,31 +78,9 @@
     <string name="file_mqtt_help_file_toggle_desc">Toggle Cellular, Wi-Fi, Bluetooth, GNSS, and/or CDR to choose what gets logged</string>
     <string name="file_mqtt_help_file_format_label">File Format</string>
     <string name="file_mqtt_help_file_format_desc">GeoPackage and/or CSV, depending on your settings</string>
-    <string name="file_mqtt_help_mqtt_title">MQTT Streaming</string>
-    <string name="file_mqtt_help_mqtt_realtime_label">Real-Time</string>
-    <string name="file_mqtt_help_mqtt_realtime_desc">Sends data to a remote server as it is collected</string>
-    <string name="file_mqtt_help_mqtt_broker_label">Setup</string>
-    <string name="file_mqtt_help_mqtt_broker_desc">Configure the broker connection settings before enabling streaming</string>
-    <string name="file_mqtt_help_mqtt_watchlist_label">Wi-Fi Watchlist</string>
-    <string name="file_mqtt_help_mqtt_watchlist_desc">Watchlist match events and your watched networks also stream while connected. Control this with the Stream over MQTT switch in the Watchlist settings</string>
     <string name="file_mqtt_help_key_point_title">Key Point</string>
     <string name="file_mqtt_help_key_independent_label">Independent</string>
     <string name="file_mqtt_help_key_independent_desc">File logging and MQTT streaming work independently - you can use either, both, or neither</string>
-
-    <!-- NS Analytics Help Dialog -->
-    <string name="ns_analytics_help_title">NS Analytics</string>
-    <string name="ns_analytics_help_dismiss">Got it</string>
-    <string name="ns_analytics_help_overview">NS Analytics provides cloud-based storage and analysis of your Network Survey data.</string>
-    <string name="ns_analytics_help_connected_title">When Connected</string>
-    <string name="ns_analytics_help_connected_upload_label">Data Upload</string>
-    <string name="ns_analytics_help_connected_upload_desc">Survey data is uploaded to the cloud automatically</string>
-    <string name="ns_analytics_help_connected_types_label">Survey Types</string>
-    <string name="ns_analytics_help_connected_types_desc">Includes cellular, Wi-Fi, Bluetooth, and GNSS records</string>
-    <string name="ns_analytics_help_connected_control_label">Control</string>
-    <string name="ns_analytics_help_connected_control_desc">Start and stop NS Analytics surveys independently</string>
-    <string name="ns_analytics_help_getting_started_title">Getting Started</string>
-    <string name="ns_analytics_help_getting_started_configure_label">Configure</string>
-    <string name="ns_analytics_help_getting_started_configure_desc">Tap \'Open Details\' to set up your workspace connection and upload settings</string>
 
     <!-- Mission ID -->
     <string name="mission_id_card_title">Mission ID</string>
@@ -155,18 +104,6 @@
     <!-- Copy to clipboard -->
     <string name="location_clip_label">Location</string>
     <string name="location_copied">Location copied</string>
-    <string name="workspace_id_clip_label">Workspace ID</string>
-    <string name="workspace_id_copied">Workspace ID copied</string>
-
-    <!-- MQTT Help Dialog -->
-    <string name="mqtt_help_title">MQTT Connection</string>
-    <string name="mqtt_help_description">Help</string>
-    <string name="mqtt_help_dismiss">Got it</string>
-
-    <!-- gRPC Help Dialog -->
-    <string name="grpc_help_title">gRPC Connection</string>
-    <string name="grpc_help_description">Help</string>
-    <string name="grpc_help_dismiss">Got it</string>
 
     <string name="bluetooth_permissions_rationale_title">Bluetooth Permissions</string>
     <string name="bluetooth_permissions_rationale">The Find Nearby Devices permission is needed to perform a Bluetooth scan for survey. If this permission is denied then Bluetooth survey will not work.</string>
@@ -221,34 +158,13 @@
     <string name="band_label">Band</string>
 
     <!-- Dashboard Constants -->
-    <string name="card_title_upload">OpenCelliD &amp; BeaconDB Upload</string>
     <string name="start_scanning">Start Survey</string>
     <string name="stop_scanning">Stop Survey</string>
     <string name="scanning_inactive">Survey Inactive</string>
     <string name="scanning_active">Survey Active</string>
-    <string name="upload_scanning_description_text">Collect cellular and Wi-Fi data for upload to public databases. Tap ? for details.</string>
-    <string name="upload_queue_title">Records Ready for Upload</string>
-    <string name="cellular_upload_queue_count_initial">Cellular:</string>
-    <string name="cellular_upload_queue_count">Cellular:  %1$d</string>
-    <string name="cellular_upload_queue_count_disabled">Cellular:  Disabled</string>
-    <string name="wifi_upload_queue_count_initial">Wi-Fi:</string>
-    <string name="wifi_upload_queue_count">Wi-Fi:  %1$d</string>
-    <string name="wifi_upload_queue_count_disabled">Wi-Fi:  Disabled</string>
-    <string name="upload_survey_records">Upload Survey Records</string>
-    <string name="upload_progress">Upload Progress</string>
-    <string name="upload_percentage" translatable="false">%1$d%%</string>
-    <string name="upload_result">Upload Result</string>
-    <string name="uploader_canceled">Upload canceled</string>
-    <string name="upload_to_opencellid">Upload to OpenCelliD (Cellular)</string>
-    <string name="anonymously">Anonymously</string>
-    <string name="upload_dialog_message">Uploading your survey records will share location data with third-party services. Contributing to these crowdsourced databases helps improve coverage maps and geolocation accuracy. Your participation is entirely voluntary; the choice to share your data is yours and yours alone.</string>
-    <string name="access_token_warning">You have to enter a valid access token in preferences</string>
-    <string name="upload_to_beacondb">Upload to BeaconDB (Cellular &amp; Wi-Fi)</string>
-    <string name="retry_on_failure">Retry on failure</string>
     <string name="dont_show_again">Don\'t show this again</string>
 
     <string name="card_title_logging_details">Local File Logging Control</string>
-    <string name="card_title_mqtt_details">MQTT Connection</string>
     <string name="cellular_title">Cellular</string>
     <string name="home_signal">Signal</string>
     <string name="serving_signal_strength">Signal strength</string>
@@ -342,12 +258,8 @@
     <string name="cdr_title">CDR</string>
     <string name="phone_state_title">Phone State</string>
     <string name="status_disabled">Off</string>
-    <string name="mqtt_off">MQTT Connection Off</string>
-    <string name="mqtt_connecting">Attempting to Connect</string>
-    <string name="mqtt_connected">Connected to MQTT Broker</string>
     <string name="status_on">On</string>
     <string name="device_status_label">Device Status:</string>
-    <string name="what_is_configured_to_stream">What is configured to stream?</string>
 
     <string name="my_location_icon_description">My Location Icon</string>
     <string name="card_title_cellular_details_initial">Serving Cell Details</string>
@@ -477,24 +389,6 @@
     <string name="phone_state_logging_status_auto">On (via Cellular)</string>
     <string name="phone_state_auto_started_toast">Phone State logging also started (configurable in Settings)</string>
 
-    <string name="grpc_connection_title">gRPC Connection</string>
-    <string name="grpc_connection_description">Here you can connect to a Network Survey server.  Once connected, all future survey results will be streamed to the server.
-        \n\nSteps for Connecting:
-        \n\n1. Enter in the following information:
-        \n     a. The Server IP Address or Hostname
-        \n     b. The Server Port Number (Default: 2621)
-        \n     c. A name that is used to identify this device on the server
-        \n\n2. Click the connect toggle switch</string>
-    <string name="server_host_hint">Server Address</string>
-    <string name="server_port_hint">Port Number</string>
-    <string name="device_name_hint">Device Name</string>
-
-    <string name="status_disconnected">Disconnected</string>
-    <string name="status_connecting">Connecting …</string>
-    <string name="status_connected">Connected</string>
-    <string name="status_disconnecting">Disconnecting …</string>
-
-    <string name="cellular_calculators">Cellular Calculators</string>
     <string name="survey_monitor">Survey Monitor</string>
     <string name="settings">Settings</string>
     <string name="manual">User Manual</string>
@@ -506,17 +400,11 @@
     <string name="nav_section_help_resources">Help &amp; Resources</string>
 
     <string name="network_survey_service_description">The Network Survey Service runs when the app needs to do work in the background such as write to the log file or stream data out over active connection</string>
-    <string name="connection_service_description">The Connection Service handles managing the connection to a remote server to stream Network Survey data</string>
 
     <string name="notification_channel_name">Network Survey</string>
     <string name="logging_notification_text">Writing to the log file(s)</string>
     <string name="and">" and "</string>
-    <string name="mqtt_connection_notification_text">Streaming records to an MQTT Broker</string>
-    <string name="mqtt_reconnecting_notification_text">Reconnecting to MQTT Broker</string>
     <string name="network_survey_notification_title">Network Survey Active</string>
-    <string name="connection_notification_title">Network Survey gRPC Connection</string>
-    <string name="connection_notification_active_text">The Connection is Active</string>
-    <string name="connection_notification_connecting_text">Attempting to Connect</string>
 
     <!-- Common for Wi-Fi and Bluetooth Lists -->
     <string name="scan_status_scanning">Scanning …</string>
@@ -627,52 +515,7 @@
     <string name="device_name">Device Name:</string>
     <string name="airtag">AirTag</string>
 
-    <!-- MQTT Connection UI constants -->
-    <string name="mqtt_connection_title_full">MQTT Broker Connection</string>
-    <string name="stream_cellular_title">Stream Cellular</string>
-    <string name="stream_phone_state_title">Stream Cellular Phone State</string>
-    <string name="stream_wifi_title">Stream Wi-Fi</string>
-    <string name="stream_bluetooth_title">Stream Bluetooth</string>
-    <string name="stream_gnss_title">Stream GNSS</string>
-    <string name="stream_device_status_title">Stream Device Status</string>
-    <string name="mqtt_topic_prefix_title">MQTT Topic Prefix</string>
-
     <!-- App Restriction Constants -->
-    <string name="mqtt_start_on_boot_title">MQTT Start at Boot</string>
-    <string name="mqtt_start_on_boot_description">If true, when the phone boots an attempt will be made to connect to the MDM configured MQTT broker</string>
-    <string name="mqtt_connection_host_title">MQTT Connection Host</string>
-    <string name="mqtt_connection_host_description">The MQTT broker hostname (e.g. mqtt.example.com)</string>
-    <string name="mqtt_connection_port_title">MQTT Connection Port</string>
-    <string name="mqtt_connection_port_description">The port number to use when connecting to the MQTT broker (e.g. 8883)</string>
-    <string name="mqtt_tls_enabled_title">MQTT TLS Enabled</string>
-    <string name="mqtt_tls_enabled_description">True to use SSL/TLS for the MQTT connection, false to use a plaintext connection</string>
-    <string name="mqtt_client_id_title">MQTT Client ID</string>
-    <string name="mqtt_client_id_description">The name this device should use to represent itself to the MQTT broker</string>
-    <string name="mqtt_device_name_title">MQTT Device Name</string>
-    <string name="mqtt_device_name_description">Custom device name for MQTT records (if unset, then Client ID is used; max 100 chars)</string>
-    <string name="mqtt_username_title">MQTT Broker Username</string>
-    <string name="mqtt_username_description">The username to use when authenticating to the MQTT broker</string>
-    <string name="mqtt_password_title">MQTT Broker Password</string>
-    <string name="mqtt_password_description">The password to use when authenticating to the MQTT broker</string>
-    <string name="mqtt_topic_prefix_description">The prefix to use on the standard MQTT topics used by Network Survey. For example, setting the value to "my/custom/topic/" will result in LTE messages being set on "my/custom/topic/lte_message". The default value is empty.</string>
-    <string name="mqtt_qos_title">MQTT QoS</string>
-    <string name="mqtt_qos_mdm_description">Quality of Service level for MQTT messages. Valid values: 0 (at most once), 1 (at least once), 2 (exactly once). Default: 1</string>
-    <string name="cellular_stream_title">Cellular Stream Enabled</string>
-    <string name="cellular_stream_description">True to stream cellular data, false otherwise</string>
-    <string name="wifi_stream_title">Wi-Fi Stream Enabled</string>
-    <string name="wifi_stream_description">True to stream Wi-Fi data, false otherwise</string>
-    <string name="bluetooth_stream_title">Bluetooth Stream Enabled</string>
-    <string name="bluetooth_stream_description">True to stream Bluetooth data, false otherwise</string>
-    <string name="gnss_stream_title">GNSS Stream Enabled</string>
-    <string name="gnss_stream_description">True to stream GNSS data, false otherwise</string>
-    <string name="device_status_stream_title">Device Status Stream Enabled</string>
-    <string name="device_status_stream_description">True to stream Device Status messages over MQTT, false otherwise</string>
-    <string name="watchlist_stream_title">Watchlist Stream Enabled</string>
-    <string name="watchlist_stream_description">True to stream Wi-Fi Watchlist match events and the device\'s watchlist contents (watched SSIDs/BSSIDs and labels) over MQTT while connected, false otherwise. This maps to the Stream over MQTT switch in the Watchlist settings, not to a per-connection stream flag.</string>
-    <string name="watchlist_stream_setting_title">Stream over MQTT</string>
-    <string name="watchlist_stream_setting_summary">When an MQTT server connection is active, watchlist match events and your watched networks (including labels) are sent to the server</string>
-    <string name="phone_state_stream_title">Phone State Stream Enabled</string>
-    <string name="phone_state_stream_description">Enable or disable streaming of phone state events</string>
     <string name="auto_start_cellular_logging_description">True to start cellular logging automatically, false otherwise</string>
     <string name="auto_start_wifi_logging_description">True to start Wi-Fi logging automatically, false otherwise</string>
     <string name="auto_start_bluetooth_logging_description">True to start Bluetooth logging automatically, false otherwise</string>
@@ -749,8 +592,6 @@
     <string name="device_status_scan_interval_title">Device Status Message Interval</string>
     <string name="device_status_scan_interval_description">The rate at which Device Status messages will be generated in seconds.</string>
 
-    <string name="mqtt_connection_config_title">MQTT Connection Config</string>
-
     <string name="location_config_title">Location Config</string>
     <string name="location_provider_title">Location Provider</string>
     <string name="location_provider_description">Specifies what provider to use for getting the device\'s location. The devices location is added to log files and MQTT messages.\n\n
@@ -766,8 +607,6 @@
     <string name="allow_intent_control_description">True to allow other apps to start Network Survey via an Intent</string>
     <string name="allow_intent_control_summary_on">Other apps can start Network Survey</string>
     <string name="allow_intent_control_summary_off">Other apps will be blocked from starting Network Survey</string>
-
-    <string name="map_tile_source_runtime_fallback_toast">MapTiler unavailable; switched to OpenFreeMap</string>
 
     <string name="tower_map_config_title">Tower Map Config</string>
     <string name="tower_map_no_towers_in_area">No towers found in the area</string>
@@ -789,31 +628,6 @@
     <string name="show_zoom_controls_title">Show Zoom Controls</string>
     <string name="show_zoom_controls_summary_on">Zoom in/out buttons are displayed on the map</string>
     <string name="show_zoom_controls_summary_off">Zoom in/out buttons are hidden (use pinch gestures)</string>
-
-    <string name="new_tower_alerts_title">New Tower Alerts</string>
-    <string name="new_tower_alerts_summary_off">Notifications disabled for new cellular towers</string>
-    <string name="new_tower_alerts_summary_on">Receive notifications when connected to a tower that hasn\'t been uploaded to the OpenCelliD database yet (requires upload scanning to be active)</string>
-    <string name="auto_start_community_upload_survey_title">Auto Start Survey on Phone Reboot</string>
-    <string name="auto_start_community_upload_survey_summary_off">Community Survey\'s will only start when manually enabled</string>
-    <string name="auto_start_community_upload_survey_summary_on">Community Survey\'s will be started when the phone is rebooted</string>
-
-    <string name="auto_upload_title">Auto Upload</string>
-    <string name="auto_upload_summary_off">Data will only be uploaded when manually triggered</string>
-    <string name="auto_upload_summary_on">Data will be automatically uploaded after enough records are collected</string>
-    <string name="auto_upload_wifi_only_title">Auto Upload Wi-Fi Only</string>
-    <string name="auto_upload_wifi_only_summary_off">Auto upload will use any available network connection</string>
-    <string name="auto_upload_wifi_only_summary_on">Auto upload will only occur on unmetered (Wi-Fi) connections</string>
-
-    <string name="auto_upload_status_enabled">Auto-upload enabled</string>
-
-    <string name="allow_data_upload">External Data Upload</string>
-    <string name="allow_data_upload_mdm_description">True to allow users to upload survey records to 3rd Party databases such as OpenCelliD and BeaconDB, false to prevent it</string>
-
-    <string name="allow_ns_analytics_title">Allow NS Analytics</string>
-    <string name="allow_ns_analytics_mdm_description">True to allow users to register and upload survey records to NS Analytics, false to prevent it</string>
-
-    <string name="auto_start_mqtt_summary_on">The MQTT connection will be started when the phone is booted (Note that a valid MQTT broker must be configured in the connection UI)</string>
-    <string name="auto_start_mqtt_summary_off">The MQTT connection will only be started manually</string>
 
     <string name="pref_file_location_output_title">Location</string>
     <string name="privacy_policy">Privacy Policy</string>
@@ -958,96 +772,22 @@
 
     <string name="ok">OK</string>
 
-    <string name="scan_button_title">Auto Configure With QR Code</string>
-    <string name="share_mqtt_qr_button_title">Share via QR Code</string>
     <string name="channel">Channel</string>
     <string name="open_tower_map">Open Tower Map</string>
     <string name="sim_switch">Switch SIM Card</string>
-    <string name="mqtt_connection_settings">MQTT Connection Settings</string>
-    <string name="mqtt_connection_not_ready">The App is not ready to make an MQTT connection, try again later</string>
-    <string name="mqtt_connection_info_not_set">Could not try to connect to the MQTT broker because the connection information is not set</string>
     <string name="qr_code">QR Code</string>
     <string name="open_wifi_spectrum">Open Wi-Fi Spectrum View</string>
 
-    <!-- Uploader -->
-    <string name="uploader_notification_channel_name">Uploader</string>
-    <string name="uploader_notification_title">Uploading</string>
-    <string name="uploader_notification_progress_info">Uploaded <ns0:g id="progress_in_percent">%d</ns0:g>%%.</string>
-    <string name="uploader_starting">Starting upload…</string>
-    <string name="uploader_not_started">Not Started</string>
-    <string name="uploader_not_started_description">Did not start the upload</string>
-    <string name="uploader_disabled">Upload disabled</string>
-    <string name="uploader_disabled_description">Upload disabled for this project</string>
-    <string name="uploader_aborted">Upload aborted</string>
-    <string name="uploader_aborted_description">Nothing has been uploaded</string>
-    <string name="uploader_success">Upload successful</string>
-    <string name="uploader_success_description">Upload successful. Thanks for your contribution!</string>
-    <string name="uploader_partially_succeeded">Partially uploaded</string>
-    <string name="uploader_partially_succeeded_description">Partially uploaded means that some data has been successfully sent before the upload was aborted. This may be caused by your request or by an error which has been encountered.</string>
-    <string name="uploader_failure">Upload failed</string>
-    <string name="uploader_failure_description">Upload failed due to unknown reason. Please check if you have the latest version of the app. If you encounter this problem for a long time, please let me know.</string>
-    <string name="uploader_invalid_api_key">Invalid access token</string>
-    <string name="uploader_invalid_api_key_description">User with the access token entered in app preferences cannot be found. Please check if entered access token is correct.</string>
-    <string name="uploader_invalid_input_data">Invalid data</string>
-    <string name="uploader_invalid_input_data_description">Server refused the data send by the app. Please check if you have the latest version of the app. If you encounter this problem for a long time, please let me know.</string>
-    <string name="uploader_no_data">Nothing to upload</string>
-    <string name="uploader_no_data_description">There is no data to upload. Please collect some measurements before uploading.</string>
-    <string name="uploader_delete_failed">Error while deleting measurements</string>
-    <string name="uploader_delete_failed_description">Application encountered an error while deleting measurements from your device. Please restart your device and check again. If you still encounter this problem, please let me know.</string>
-    <string name="uploader_connection_error">Connection error</string>
-    <string name="uploader_connection_error_description">The server could not be reached due to network related error which may be caused by missing, too slow or unstable Internet connection. Please check if you have latest application version and try again. If you encounter this problem for a long time, please let me know.</string>
-    <string name="uploader_server_error">Server error</string>
-    <string name="uploader_server_error_description">The server returned internal error which may mean that it is overloaded, temporarily unavailable or down for maintenance. Please try again later. If you encounter this problem for a long time, please let me know.</string>
-    <string name="uploader_limit_exceeded">Usage limit exceeded</string>
-    <string name="permission_denied">Permission denied</string>
-    <string name="permission_uploader_denied_message">Upload cancelled due to denied internet permission.</string>
-    <string name="unknown_error">Unknown error occurred!</string>
-    <string name="uploader_limit_exceeded_description">The daily usage limit for the app has been exceeded. Please try again tomorrow.</string>
-    <string name="uploader_no_internet_title">Internet unavailable</string>
-    <string name="uploader_no_internet_message">Cannot upload due to no Internet connection.</string>
     <string name="cancel">Cancel</string>
-    <string name="upload">Upload</string>
-    <string name="preferences">Preferences</string>
-    <string name="show_upload_dialog_pref_title">Show Upload Config Dialog</string>
-    <string name="uploader_enqueued">An error occurred, will retry later</string>
-    <string name="upload_disabled_via_mdm">External upload has been disabled via MDM</string>
-    <string name="ns_analytics_disabled_via_mdm">NS Analytics has been disabled by device administrator</string>
-    <string name="upload_saving_toggle_failed">An error occurred when trying to start saving records for upload</string>
-    <string name="upload_saving_start_toast">Started scanning and saving records for upload</string>
-    <string name="upload_saving_stop_toast">Stopped scanning and saving records for upload</string>
-    <string name="upload_saving_no_targets">No upload targets selected. Enable OpenCellID or BeaconDB in upload settings to start the survey.</string>
-    <string name="upload_saving_started_cellular">Started scanning cellular towers for upload</string>
-    <string name="upload_saving_started_cellular_wifi">Started scanning cellular towers and Wi-Fi access points for upload</string>
-
-    <string name="delete_upload_data_confirm_title">Confirm Deletion</string>
-    <string name="delete_upload_data_confirm_message">
-    This action will permanently delete all survey records stored for upload.
-    \n\nAre you sure you want to proceed?
-</string>
-    <string name="delete_upload_data_success">All upload data has been deleted</string>
-    <string name="delete_upload_data_failed">Failed to delete upload data</string>
-    <string name="show_upload_dialog_summary_off">Upload dialog will be skipped and the settings below will be used</string>
-    <string name="show_upload_dialog_summary_on">The config dialog will be shown before each upload</string>
 
     <!-- Survey Monitor Screen -->
     <string name="survey_statistics_header">Survey Statistics</string>
     <string name="records_captured_label">Records Captured</string>
-    <string name="ready_for_upload_label">Ready for Upload</string>
     <string name="help_dialog_title">Understanding Record Counts</string>
+    <string name="help_dialog_total_count">Total number of records captured during the current survey session.</string>
     <string name="help_dialog_both_counts">• <b>Records Captured:</b> Total number of survey records being saved to files or sent to servers. Includes all data regardless of quality.\n\n• <b>Ready for Upload:</b> Records that meet quality standards for uploading to crowd-sourced databases.\n\nFilters applied:\n  - GPS accuracy must be &lt; 100 meters\n  - Device must move &gt; 35 meters between records\n  - Records must have complete tower/network info\n\nWhy the difference? Upload databases need high-quality data for accurate tower/network mapping.</string>
     <string name="help_dialog_upload_only">This shows records ready for upload to crowd-sourced databases like OpenCellID and BeaconDB.\n\nOnly high-quality records are counted:\n  - GPS accuracy &lt; 100 meters\n  - Device moved &gt; 35 meters from last position\n  - Complete tower/network information\n\nRecords are filtered to ensure database quality.</string>
     <string name="help_dialog_got_it">Got it</string>
-
-    <!-- New Tower Alerts Help Dialog -->
-    <string name="new_tower_alerts_help_title">New Tower Alerts</string>
-    <string name="new_tower_alerts_what">What are New Tower Alerts?</string>
-    <string name="new_tower_alerts_what_desc">Get notified when your phone connects to a cellular tower that isn\'t in our community database. This helps identify new tower installations, temporary towers at events, or private cellular networks.</string>
-    <string name="new_tower_alerts_how">How it works</string>
-    <string name="new_tower_alerts_how_desc">Your current tower is compared against Network Survey\'s OpenCelliD database, which is updated every 24 hours with tower locations contributed by users worldwide. When an unknown tower is detected, you\'ll hear a notification sound.</string>
-    <string name="new_tower_alerts_requirements">Requirements</string>
-    <string name="new_tower_alerts_requirements_desc">• Upload scanning must be active\n• Alerts are enabled</string>
-    <string name="new_tower_alerts_benefits">Why use this feature?</string>
-    <string name="new_tower_alerts_benefits_desc">• Discover newly installed cell towers\n• Identify temporary or mobile towers\n• Help improve cellular coverage maps\n• Track network changes in your area</string>
 
     <!-- Battery Optimization -->
     <string name="battery_optimization_title">Important: Disable Battery Optimization</string>
@@ -1063,24 +803,7 @@
 
     <!-- Streaming Queue Management -->
     <string name="streaming_queue_limit_title">Streaming Queue Limit</string>
-    <string name="streaming_queue_limit_description">Maximum number of pending messages to queue when streaming to MQTT or gRPC. When the queue is full, scanning will pause until messages are sent. Set to 0 to disable (unbounded queue). Recommended: 20,000 if network is unreliable.</string>
     <string name="streaming_queue_limit_mdm_description">Maximum pending messages before pausing scanning. Set to 0 to disable (unbounded queue). Valid range: 0-100000. Use this to prevent out-of-memory crashes when network connectivity is poor.</string>
-
-    <!-- Queue Backpressure UI -->
-    <string name="queue_paused_title">Surveys Paused</string>
-    <string name="queue_paused_subtitle">Upload Delayed</string>
-    <string name="queue_paused_description">Surveys are paused because MQTT data streaming is backing up. Surveys will resume automatically when data transmission catches up. If this persists, check your network connection.</string>
-    <string name="queue_paused_mdm_description">This setting is managed by your administrator. To change the queue limit, enable MDM Override in Settings.</string>
-    <string name="queue_paused_notification">Surveys paused - Network interrupted</string>
-    <string name="queue_paused_adjust_limit">Adjust Limit</string>
-    <string name="queue_paused_disable_limit">Disable Limit</string>
-    <string name="queue_paused_view_settings">View Settings</string>
-
-    <!-- MQTT Drop Mode UI -->
-    <string name="mqtt_drop_mode_title">MQTT Messages Dropping</string>
-    <string name="mqtt_drop_mode_subtitle">File Logging Continues</string>
-    <string name="mqtt_drop_mode_description">MQTT data streaming is backing up, so MQTT messages are being dropped. File logging and other outputs continue normally. MQTT will resume when connectivity improves.</string>
-    <string name="mqtt_drop_mode_mdm_description">This setting is managed by your administrator. To change the queue limit, enable MDM Override in Settings.</string>
 
     <!-- Queue Limit Warning Dialogs -->
     <string name="disable_queue_limit_title">Disable Queue Limit?</string>
@@ -1165,101 +888,6 @@
         <item quantity="one">%1$d of %2$d used</item>
         <item quantity="other">%1$d of %2$d used</item>
     </plurals>
-
-    <!-- NS Analytics -->
-    <string name="ns_analytics">NS Analytics</string>
-    <string name="ns_analytics_description">Manage NS Analytics connection and data uploads</string>
-    <string name="ns_analytics_survey_stopped">Survey Stopped</string>
-    <string name="ns_analytics_not_registered">Please register device with NS Analytics first</string>
-    <string name="ns_analytics_survey_started">NS Analytics survey started</string>
-    <string name="ns_analytics_survey_already_running">NS Analytics survey is already running</string>
-    <string name="ns_analytics_survey_already_stopped">NS Analytics survey is already stopped</string>
-    <string name="ns_analytics_survey_toggle_failed">Failed to toggle NS Analytics survey</string>
-    <string name="ns_analytics_survey_no_protocols_enabled">Must enable at least one protocol for the NS Analytics Survey</string>
-
-    <!-- NS Analytics Onboarding -->
-    <string name="ns_analytics_tagline">Cloud-based visualization and analysis for your Network Survey data</string>
-    <string name="ns_analytics_setup_guide_title">How to Get Started</string>
-    <string name="ns_analytics_step_1_title">Create Account</string>
-    <string name="ns_analytics_step_1_desc">Visit NS Analytics to create your free account (recommended on desktop)</string>
-    <string name="ns_analytics_step_2_title">Create Workspace</string>
-    <string name="ns_analytics_step_2_desc">Set up a workspace for your project (on your computer)</string>
-    <string name="ns_analytics_step_3_title">Generate QR Code</string>
-    <string name="ns_analytics_step_3_desc">Generate a device QR code from your workspace</string>
-    <string name="ns_analytics_step_4_title">Scan &amp; Connect</string>
-    <string name="ns_analytics_step_4_desc">Return here and scan the QR code to start uploading</string>
-
-    <string name="ns_analytics_setup_tip_title">Setup Tip</string>
-    <string name="ns_analytics_setup_tip_message">For the easiest setup, we recommend using a desktop or laptop computer to create your account and generate the QR code. Then return here to scan the code with this device.</string>
-
-    <string name="ns_analytics_get_started">Get Started</string>
-    <string name="ns_analytics_already_have_qr">Already Have a QR Code? Scan Now</string>
-    <string name="ns_analytics_learn_more">Learn more about NS Analytics</string>
-    <string name="ns_analytics_qr_user_manual">QR Code User Manual</string>
-
-    <string name="ns_analytics_what_happens_next_title">What Happens Next</string>
-    <string name="ns_analytics_what_happens_next_desc">Once connected, your survey data will automatically upload to your workspace when you have an internet connection. You can view and analyze it on the NS Analytics dashboard.</string>
-
-    <string name="unregister_device">Unregister Device</string>
-    <string name="unregister_device_title">Unregister Device?</string>
-    <string name="unregister_device_message">This device will stop uploading data to the %1$s workspace.\n\nYour queued data will be preserved and can be uploaded if you re-register.\n\nYou can re-register anytime by scanning a new QR code.</string>
-    <string name="unregister">Unregister</string>
-    <string name="device_deregistered_title">Device Unregistered</string>
-    <string name="device_deregistered_from_web">This device was unregistered from the web dashboard%1$s on %2$s.</string>
-    <string name="device_deregistered_from_web_no_details">This device was unregistered from the web dashboard.</string>
-    <string name="device_deregistered_by"> by %1$s</string>
-    <string name="device_deregistered_generic">This device has been unregistered from %1$s.</string>
-    <string name="scan_qr_to_reregister">Scan a new QR code to re-register and continue uploading.</string>
-    <string name="register_again">Register Again</string>
-
-    <!-- NS Analytics Deep Link - Already Registered -->
-    <string name="ns_analytics_qr_detected_title">NS Analytics QR Code</string>
-    <string name="ns_analytics_already_registered_message">You are currently registered to the \"%1$s\" workspace.</string>
-    <string name="ns_analytics_new_workspace_detected">New workspace detected: %1$s</string>
-    <string name="ns_analytics_unregister_first_hint">To register with a different workspace, first unregister from your current workspace using the \"Unregister Device\" button below, then scan the QR code again.</string>
-
-    <!-- NS Analytics Upload Status -->
-    <string name="ns_analytics_upload_status_no_records">No records to upload</string>
-    <string name="ns_analytics_upload_status_no_network">No network connection</string>
-    <string name="ns_analytics_upload_status_mdm_blocked">NS Analytics uploads are disabled by your device\'s management policy. Contact your administrator to enable them.</string>
-    <string name="ns_analytics_upload_status_already_running">Upload already in progress</string>
-    <string name="ns_analytics_upload_status_uploading">Uploading…</string>
-    <string name="ns_analytics_upload_status_ready">Ready to upload</string>
-    <string name="ns_analytics_upload_status_not_registered">Not registered</string>
-    <string name="ns_analytics_upload_status_complete">Upload complete</string>
-    <string name="ns_analytics_upload_status_failed">Upload failed</string>
-    <string name="ns_analytics_upload_status_failed_with_reason">Upload failed: %1$s</string>
-    <string name="ns_analytics_upload_status_waiting_retry">Waiting to retry…</string>
-    <string name="ns_analytics_upload_status_retry_attempt">Retry attempt %1$d…</string>
-    <string name="ns_analytics_upload_status_quota_exceeded">Failed: Quota exceeded</string>
-    <string name="ns_analytics_upload_status_device_unregistered">Device unregistered</string>
-    <string name="ns_analytics_upload_status_config_error">Configuration error</string>
-    <string name="ns_analytics_upload_status_registration_invalid">Registration expired</string>
-    <string name="ns_analytics_upload_status_viewer_cannot_upload">Upload not permitted</string>
-    <string name="ns_analytics_upload_status_session_expired">Session expired</string>
-    <plurals name="ns_analytics_upload_result_records">
-        <item quantity="one">%1$d record uploaded</item>
-        <item quantity="other">%1$d records uploaded</item>
-    </plurals>
-    <string name="ns_analytics_upload_button_upload_now">Upload Now</string>
-    <string name="ns_analytics_upload_button_uploading">Uploading…</string>
-    <string name="ns_analytics_upload_button_no_records">No Records</string>
-    <string name="ns_analytics_upload_button_unavailable">Not Available</string>
-    <string name="ns_analytics_upload_button_resume">Upload now to resume</string>
-    <string name="ns_analytics_upload_resumed">Uploads resumed</string>
-    <string name="ns_analytics_open_dashboard">Open NS Analytics</string>
-
-    <!-- Quota paused banner and notification -->
-    <string name="ns_analytics_upload_paused_banner_title">Uploads paused: quota reached</string>
-    <string name="ns_analytics_upload_paused_banner_body">Automatic uploads are paused because your workspace reached its record limit. Free up space or upgrade, then tap Upload now to resume.</string>
-    <string name="ns_analytics_quota_usage">Current usage: %1$s / %2$s records</string>
-    <string name="ns_analytics_manage_subscription">Manage subscription</string>
-    <string name="ns_analytics_paused_notification_title">NS Analytics uploads paused</string>
-    <string name="ns_analytics_paused_notification_text">Workspace record quota reached. Tap to review and resume.</string>
-
-    <!-- QR Code Error Messages -->
-    <string name="qr_code_data_too_large_title">QR Code Error</string>
-    <string name="qr_code_data_too_large_message">The MQTT connection settings are too large to fit in a QR code. Try shortening the host address, username, password, or topic prefix fields.</string>
 
     <!-- OUI manufacturer lookup -->
     <string name="network_lookups_category">Network lookups</string>

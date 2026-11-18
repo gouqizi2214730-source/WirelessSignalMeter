@@ -15,36 +15,7 @@
     <string name="cdr_optional_permissions_rationale">除了在另一个对话框中列出的必需权限之外，CDR 日志记录还有一个可选权限。 \n\n1. <b>读取电话号码</b>：此权限用于获取本设备的电话号码，以便将其写入 CDR 日志文件。您可以拒绝此权限，CDR 日志记录功能仍可正常运行，只是不会记录您的电话号码。</string>
     <string name="request">请求</string>
     <string name="ignore">无权限继续</string>
-    <string name="upload_help_title">上传信息</string>
     <string name="view_manual">查看手册</string>
-    <!-- 上传帮助对话框 -->
-    <string name="upload_help_dismiss">知道了</string>
-    <string name="upload_help_overview">将采集到的蜂窝网络和 Wi-Fi 探测数据共享给第三方数据库，以帮助改善覆盖地图。</string>
-    <string name="upload_help_how_title">工作原理</string>
-    <string name="upload_help_how_started_label">启动时</string>
-    <string name="upload_help_how_started_desc">探测记录会被写入内部数据库，并上传至选定的目的地</string>
-    <string name="upload_help_how_stopped_label">停止时</string>
-    <string name="upload_help_how_stopped_desc">不会写入或上传任何数据</string>
-    <string name="upload_help_data_destination_title">您的数据去向</string>
-    <string name="upload_help_data_opencellid_label">OpenCelliD</string>
-    <string name="upload_help_data_opencellid_desc">全球开源基站数据库</string>
-    <string name="upload_help_data_beacondb_label">BeaconDB</string>
-    <string name="upload_help_data_beacondb_desc">众包地理定位数据库</string>
-    <string name="upload_help_what_title">上传的内容</string>
-    <string name="upload_help_what_location_label">设备位置</string>
-    <string name="upload_help_what_location_desc">纬度、经度、海拔、精度和速度</string>
-    <string name="upload_help_what_cellular_label">蜂窝网络信息</string>
-    <string name="upload_help_what_cellular_desc">MCC、MNC、TAC/LAC、基站 ID、信号强度、PCI、ARFCN 等</string>
-    <string name="upload_help_what_wifi_label">Wi-Fi 信息</string>
-    <string name="upload_help_what_wifi_desc">SSID、BSSID、频率、信道、信号强度、加密类型</string>
-    <string name="upload_help_what_timestamp_label">时间戳</string>
-    <string name="upload_help_what_timestamp_desc">采集的日期和时间</string>
-    <string name="upload_help_when_title">记录的写入时机</string>
-    <string name="upload_help_when_distance_label">距离阈值</string>
-    <string name="upload_help_when_distance_desc">仅当设备自上次记录以来移动了至少 35 米时，才会写入新记录</string>
-    <string name="upload_help_when_filter_label">必要信息</string>
-    <string name="upload_help_when_filter_desc">如果记录缺少关键字段，则会跳过</string>
-    <string name="upload_help_privacy_note">数据经过匿名化处理，用于改善蜂窝网络和 Wi-Fi 覆盖地图。</string>
     <string name="phone_state_help_title">手机状态探测</string>
     <string name="phone_state_help_dismiss">知道了</string>
     <string name="phone_state_help_overview">监控设备连接蜂窝网络的方式变化，并将每次变化记录为一个探测事件。</string>
@@ -94,28 +65,9 @@
     <string name="file_mqtt_help_file_toggle_desc">开关蜂窝网络、Wi-Fi、蓝牙、GNSS 和/或 CDR，以选择要记录的内容</string>
     <string name="file_mqtt_help_file_format_label">文件格式</string>
     <string name="file_mqtt_help_file_format_desc">GeoPackage 和/或 CSV，取决于您的设置</string>
-    <string name="file_mqtt_help_mqtt_title">MQTT 流媒体</string>
-    <string name="file_mqtt_help_mqtt_realtime_label">实时</string>
-    <string name="file_mqtt_help_mqtt_realtime_desc">在采集数据的同时将其发送到远程服务器</string>
-    <string name="file_mqtt_help_mqtt_broker_label">设置</string>
-    <string name="file_mqtt_help_mqtt_broker_desc">在启用流媒体之前配置代理连接设置</string>
     <string name="file_mqtt_help_key_point_title">要点</string>
     <string name="file_mqtt_help_key_independent_label">独立运行</string>
     <string name="file_mqtt_help_key_independent_desc">文件日志记录和 MQTT 流媒体相互独立 — 您可以使用其中任一、两者都使用，或都不使用</string>
-    <!-- NS Analytics 帮助对话框 -->
-	<string name="ns_analytics_help_title">NS Analytics 分析</string>
-    <string name="ns_analytics_help_dismiss">知道了</string>
-    <string name="ns_analytics_help_overview">NS Analytics 提供网络探测数据的云端存储和分析功能。</string>
-    <string name="ns_analytics_help_connected_title">已连接时</string>
-    <string name="ns_analytics_help_connected_upload_label">数据上传</string>
-    <string name="ns_analytics_help_connected_upload_desc">探测数据会自动上传到云端</string>
-    <string name="ns_analytics_help_connected_types_label">探测类型</string>
-    <string name="ns_analytics_help_connected_types_desc">包括蜂窝网络、Wi-Fi、蓝牙和 GNSS 记录</string>
-    <string name="ns_analytics_help_connected_control_label">控制</string>
-    <string name="ns_analytics_help_connected_control_desc">独立启动和停止 NS Analytics 探测</string>
-    <string name="ns_analytics_help_getting_started_title">开始使用</string>
-    <string name="ns_analytics_help_getting_started_configure_label">配置</string>
-    <string name="ns_analytics_help_getting_started_configure_desc">点击“打开详情”以设置您的工作区连接和上传设置</string>
     <!-- 任务 ID -->
 	<string name="mission_id_card_title">任务 ID</string>
     <string name="mission_id_caption_active">本次探测的 ID</string>
@@ -133,14 +85,6 @@
     <string name="mission_id_help_why">同一次探测中的记录都共享同一个任务 ID。无论是在 NS Analytics 中，还是在您导出的 CSV 和 GeoPackage 文件中，都通过这个 ID 来对本次探测的数据进行分组和筛选。</string>
     <string name="mission_id_help_how_title">使用方法</string>
     <string name="mission_id_help_how">复制此处显示的任务 ID，并在 NS Analytics 中使用它来查找和筛选本次探测的数据。</string>
-    <!-- MQTT 帮助对话框 -->
-	<string name="mqtt_help_title">MQTT 连接</string>
-    <string name="mqtt_help_description">帮助</string>
-    <string name="mqtt_help_dismiss">知道了</string>
-    <!-- gRPC 帮助对话框 -->
-	<string name="grpc_help_title">gRPC 连接</string>
-    <string name="grpc_help_description">帮助</string>
-    <string name="grpc_help_dismiss">知道了</string>
     <string name="bluetooth_permissions_rationale_title">蓝牙权限</string>
     <string name="bluetooth_permissions_rationale">执行蓝牙扫描以进行探测需要“查找附近设备”权限。如果拒绝此权限，蓝牙探测将无法工作。</string>
     <string name="background_location_permission_rationale_title">后台位置权限</string>
@@ -167,32 +111,12 @@
     <string name="frequency_label">Frequency</string>
     <string name="band_label">Band</string>
     <!-- 仪表盘常量 -->
-    <string name="card_title_upload">OpenCelliD &amp; BeaconDB 上传</string>
     <string name="start_scanning">开始探测</string>
     <string name="stop_scanning">停止探测</string>
     <string name="scanning_inactive">探测未激活</string>
     <string name="scanning_active">探测已激活</string>
-    <string name="upload_scanning_description_text">采集蜂窝网络和 Wi-Fi 数据以上传至公共数据库。点击“ ？”查看详情。</string>
-    <string name="upload_queue_title">待上传记录</string>
-    <string name="cellular_upload_queue_count_initial">蜂窝网络：</string>
-    <string name="cellular_upload_queue_count">蜂窝网络：  %1$d</string>
-    <string name="cellular_upload_queue_count_disabled">蜂窝网络：已禁用</string>
-    <string name="wifi_upload_queue_count_initial">Wi-Fi:</string>
-    <string name="wifi_upload_queue_count">Wi-Fi:  %1$d</string>
-    <string name="wifi_upload_queue_count_disabled">Wi-Fi:  已禁用</string>
-    <string name="upload_survey_records">上传探测记录</string>
-    <string name="upload_progress">上传进度</string>
-    <string name="upload_result">上传结果</string>
-    <string name="uploader_canceled">上传已取消</string>
-    <string name="upload_to_opencellid">上传到 OpenCelliD （蜂窝网络）</string>
-    <string name="anonymously">匿名</string>
-    <string name="upload_dialog_message">上传您的探测记录将会与第三方服务共享位置数据。向这些众包数据库贡献数据有助于改善覆盖地图和地理定位精度。您的参与完全出于自愿；是否共享数据的选择权完全在您手中。</string>
-    <string name="access_token_warning">您必须在首选项中输入有效的访问令牌。</string>
-    <string name="upload_to_beacondb">上传到  BeaconDB （蜂窝网络 &amp; Wi-Fi）</string>
-    <string name="retry_on_failure">失败时重试</string>
     <string name="dont_show_again">失败时重试</string>
     <string name="card_title_logging_details">本地文件日志记录控制</string>
-    <string name="card_title_mqtt_details">MQTT 连接</string>
     <string name="cellular_title">蜂窝网络</string>
     <string name="home_signal">信号</string>
     <string name="sim_switch">切换 SIM 卡</string>
@@ -287,12 +211,8 @@
     <string name="cdr_title">CDR</string>
     <string name="phone_state_title">手机状态</string>
     <string name="status_disabled">关闭</string>
-    <string name="mqtt_off">MQTT 连接已关闭</string>
-    <string name="mqtt_connecting">正在尝试连接</string>
-    <string name="mqtt_connected">已连接到 MQTT 代理</string>
     <string name="status_on">开启</string>
     <string name="device_status_label">设备状态：</string>
-    <string name="what_is_configured_to_stream">已配置为流式传输的内容？</string>
     <string name="my_location_icon_description">我的位置图标</string>
     <string name="card_title_cellular_details_initial">服务小区详情</string>
     <string name="card_title_cellular_details">%1$s 服务小区详情</string>
@@ -378,22 +298,6 @@
     <string name="phone_state_logging_toggle_failed">切换手机状态日志记录失败</string>
     <string name="phone_state_logging_status_auto">开启（通过蜂窝网络）</string>
     <string name="phone_state_auto_started_toast">手机状态日志记录也已启动（可在设置中配置）</string>
-    <string name="grpc_connection_title">gRPC 连接</string>
-    <string name="grpc_connection_description">您可以在此处连接到 Network Survey 服务器。一旦连接成功，所有后续的探测结果都将流式传输到服务器。
-        \n\n连接步骤：
-        \n\n1. 输入以下信息：
-        \n     a. 服务器 IP 地址或主机名
-        \n     b. 服务器端口号（默认：2621）
-        \n     c. 用于在服务器上标识此设备的名称
-        \n\n2. 点击连接开关</string>
-    <string name="server_host_hint">服务器地址</string>
-    <string name="server_port_hint">端口</string>
-    <string name="device_name_hint">设备名称</string>
-    <string name="status_disconnected">已断开</string>
-    <string name="status_connecting">正在连接…</string>
-    <string name="status_connected">已连接</string>
-    <string name="status_disconnecting">正在断开…</string>
-    <string name="cellular_calculators">蜂窝网络计算器</string>
     <string name="survey_monitor">探测监视器</string>
     <string name="settings">设置</string>
     <string name="manual">用户手册</string>
@@ -403,16 +307,10 @@
     <string name="nav_section_tools">参考工具</string>
     <string name="nav_section_help_resources">帮助与资源</string>
     <string name="network_survey_service_description">当应用需要在后台执行工作时（例如写入日志文件或通过活动连接流式传输数据），Network Survey 服务会运行</string>
-    <string name="connection_service_description">连接服务负责管理与远程服务器的连接，以流式传输 Network Survey 数据</string>
     <string name="notification_channel_name">网络探测</string>
     <string name="logging_notification_text">正在写入日志文件</string>
     <string name="and">和</string>
-    <string name="mqtt_connection_notification_text">正在将记录流式传输到 MQTT 代理</string>
-    <string name="mqtt_reconnecting_notification_text">正在重新连接到 MQTT 代理</string>
     <string name="network_survey_notification_title">网络探测已激活</string>
-    <string name="connection_notification_title">网络探测 gRPC 连接</string>
-    <string name="connection_notification_active_text">连接已激活</string>
-    <string name="connection_notification_connecting_text">正在尝试连接</string>
     <!-- Wi-Fi 和蓝牙列表通用 -->
 	<string name="scan_status_scanning">正在扫描…</string>
     <string name="scan_status_paused">界面已暂停</string>
@@ -489,47 +387,7 @@
     <string name="content_description_pause_bluetooth_scan_ui_updates">暂停蓝牙扫描界面更新</string>
     <string name="device_name">设备名称：</string>
     <string name="airtag">AirTag</string>
-    <!-- MQTT 连接界面常量 -->
-	<string name="mqtt_connection_title_full">MQTT 代理连接</string>
-    <string name="stream_cellular_title">流式传输蜂窝网络</string>
-    <string name="stream_phone_state_title">流式传输蜂窝网络手机状态</string>
-    <string name="stream_wifi_title">流式传输 Wi-Fi</string>
-    <string name="stream_bluetooth_title">流式传输蓝牙</string>
-    <string name="stream_gnss_title">流式传输 GNSS</string>
-    <string name="stream_device_status_title">流式传输设备状态</string>
-    <string name="mqtt_topic_prefix_title">MQTT 主题前缀</string>
     <!-- 应用限制常量 -->
-	<string name="mqtt_start_on_boot_title">MQTT 开机启动</string>
-    <string name="mqtt_start_on_boot_description">如果为 true，手机开机时将尝试连接 MDM 配置的 MQTT 代理</string>
-    <string name="mqtt_connection_host_title">MQTT 连接主机</string>
-    <string name="mqtt_connection_host_description">MQTT 代理主机名（例如 mqtt.example.com）</string>
-    <string name="mqtt_connection_port_title">MQTT 连接端口</string>
-    <string name="mqtt_connection_port_description">连接 MQTT 代理时使用的端口号（例如 8883）</string>
-    <string name="mqtt_tls_enabled_title">启用 MQTT TLS</string>
-    <string name="mqtt_tls_enabled_description">True 表示为 MQTT 连接使用 SSL/TLS，false 表示为明文连接</string>
-    <string name="mqtt_client_id_title">MQTT 客户端 ID</string>
-    <string name="mqtt_client_id_description">此设备向 MQTT 代理标识自身时应使用的名称</string>
-    <string name="mqtt_device_name_title">MQTT 设备名称</string>
-    <string name="mqtt_device_name_description">用于 MQTT 记录的自定义设备名称（如果未设置，则使用客户端 ID；最长 100 个字符）</string>
-    <string name="mqtt_username_title">MQTT 代理用户名</string>
-    <string name="mqtt_username_description">向 MQTT 代理进行身份验证时使用的用户名</string>
-    <string name="mqtt_password_title">MQTT 代理密码</string>
-    <string name="mqtt_password_description">向 MQTT 代理进行身份验证时使用的密码</string>
-    <string name="mqtt_topic_prefix_description">用于 Network Survey 所用标准 MQTT 主题的前缀。例如，将值设置为“my/custom/topic/”会导致 LTE 消息发布到“my/custom/topic/lte_message”。默认值为空。</string>
-    <string name="mqtt_qos_title">MQTT QoS</string>
-    <string name="mqtt_qos_mdm_description">MQTT 消息的服务质量等级。有效值：0（最多一次）、1（至少一次）、2（恰好一次）。默认值：1</string>
-    <string name="cellular_stream_title">启用蜂窝网络流式传输</string>
-    <string name="cellular_stream_description">True 表示流式传输蜂窝数据，否则为 false</string>
-    <string name="wifi_stream_title">启用 Wi-Fi 流式传输</string>
-    <string name="wifi_stream_description">True 表示流式传输 Wi-Fi 数据，否则为 false</string>
-    <string name="bluetooth_stream_title">启用蓝牙流式传输</string>
-    <string name="bluetooth_stream_description">True 表示流式传输蓝牙数据，否则为 false</string>
-    <string name="gnss_stream_title">启用 GNSS 流式传输</string>
-    <string name="gnss_stream_description">True 表示流式传输 GNSS 数据，否则为 false</string>
-    <string name="device_status_stream_title">启用设备状态流式传输</string>
-    <string name="device_status_stream_description">True 表示通过 MQTT 流式传输设备状态消息，否则为 false</string>
-    <string name="phone_state_stream_title">启用手机状态流式传输</string>
-    <string name="phone_state_stream_description">启用或禁用手机状态事件的流式传输</string>
     <string name="auto_start_cellular_logging_description">True 表示自动启动蜂窝网络日志记录，否则为 false</string>
     <string name="auto_start_wifi_logging_description">True 表示自动启动 Wi-Fi 日志记录，否则为 false</string>
     <string name="auto_start_bluetooth_logging_description">True 表示自动启动蓝牙日志记录，否则为 false</string>
@@ -587,7 +445,6 @@
     <string name="gnss_scan_interval_description">扫描 GNSS 卫星的速率（单位：秒）。较小的数值会降低电池续航。</string>
     <string name="device_status_scan_interval_title">设备状态消息间隔</string>
     <string name="device_status_scan_interval_description">生成设备状态消息的速率（单位：秒）。</string>
-    <string name="mqtt_connection_config_title">MQTT 连接配置</string>
     <string name="location_config_title">位置配置</string>
     <string name="location_provider_title">位置提供程序</string>
     <string name="location_provider_description">指定用于获取设备位置的位置提供程序。设备位置会被添加到日志文件和 MQTT 消息中。\n\n
@@ -602,7 +459,6 @@
     <string name="allow_intent_control_description">True 表示允许其他应用通过 Intent 启动 Network Survey</string>
     <string name="allow_intent_control_summary_on">其他应用可以启动 Network Survey</string>
     <string name="allow_intent_control_summary_off">其他应用将被阻止启动 Network Survey</string>
-    <string name="map_tile_source_runtime_fallback_toast">MapTiler 不可用，已切换到 OpenFreeMap</string>
     <string name="tower_map_config_title">基站地图配置</string>
     <string name="tower_map_no_towers_in_area">该区域未发现基站</string>
     <string name="tower_map_no_serving_cell_tower">未找到服务小区基站</string>
@@ -620,25 +476,6 @@
     <string name="show_zoom_controls_title">显示缩放控件</string>
     <string name="show_zoom_controls_summary_on">地图上显示放大/缩小按钮</string>
     <string name="show_zoom_controls_summary_off">隐藏放大/缩小按钮（使用捏合手势）</string>
-    <string name="new_tower_alerts_title">新基站提醒</string>
-    <string name="new_tower_alerts_summary_off">新蜂窝基站的通知已禁用</string>
-    <string name="new_tower_alerts_summary_on">当连接到尚未上传到 OpenCelliD 数据库的基站时接收通知（需要上传扫描处于活动状态）</string>
-    <string name="auto_start_community_upload_survey_title">手机重启时自动开始探测</string>
-    <string name="auto_start_community_upload_survey_summary_off">社区探测仅在手动启用时启动</string>
-    <string name="auto_start_community_upload_survey_summary_on">手机重启时将自动开始社区探测</string>
-    <string name="auto_upload_title">自动上传</string>
-    <string name="auto_upload_summary_off">仅在手动触发时上传数据</string>
-    <string name="auto_upload_summary_on">收集到足够记录后将自动上传数据</string>
-    <string name="auto_upload_wifi_only_title">仅限 Wi-Fi 自动上传</string>
-    <string name="auto_upload_wifi_only_summary_off">自动上传将使用任何可用网络连接</string>
-    <string name="auto_upload_wifi_only_summary_on">仅在不计流量（Wi-Fi）连接上自动上传</string>
-    <string name="auto_upload_status_enabled">自动上传已启用</string>
-    <string name="allow_data_upload">外部数据上传</string>
-    <string name="allow_data_upload_mdm_description">True 表示允许用户将探测记录上传到第三方数据库（如 OpenCelliD 和 BeaconDB），false 表示禁止</string>
-    <string name="allow_ns_analytics_title">允许使用 NS Analytics</string>
-    <string name="allow_ns_analytics_mdm_description">True 表示允许用户注册并将探测记录上传到 NS Analytics，false 表示禁止</string>
-    <string name="auto_start_mqtt_summary_on">手机开机时将启动 MQTT 连接（注意：必须在连接界面配置有效的 MQTT 代理）</string>
-    <string name="auto_start_mqtt_summary_off">MQTT 连接仅会手动启动</string>
     <string name="pref_file_location_output_title">位置</string>
     <string name="privacy_policy">隐私政策</string>
     <string name="privacy_policy_preference_summary">点击此处查看隐私政策</string>
@@ -760,91 +597,19 @@
     <string name="gnss_measurement_status_ready">正在成功跟踪 GNSS 测量值</string>
     <string name="gnss_status_unknown">未知状态回调</string>
     <string name="ok">确定</string>
-    <string name="scan_button_title">通过二维码自动配置</string>
-    <string name="share_mqtt_qr_button_title">通过二维码分享</string>
     <string name="channel">信道</string>
     <string name="open_tower_map">打开基站地图</string>
-    <string name="mqtt_connection_settings">MQTT 连接设置</string>
-    <string name="mqtt_connection_not_ready">应用尚未准备好建立 MQTT 连接，请稍后重试</string>
-    <string name="mqtt_connection_info_not_set">无法尝试连接 MQTT 代理，因为连接信息未设置</string>
     <string name="qr_code">二维码</string>
     <string name="open_wifi_spectrum">打开 Wi-Fi 频谱视图</string>
-    <!-- 上传器 -->
-<string name="uploader_notification_channel_name">上传器</string>
-    <string name="uploader_notification_title">正在上传</string>
-    <string name="uploader_notification_progress_info">已上传 <ns0:g id="progress_in_percent">%d</ns0:g>%%。</string>
-    <string name="uploader_starting">开始上传…</string>
-    <string name="uploader_not_started">未开始</string>
-    <string name="uploader_not_started_description">未开始上传</string>
-    <string name="uploader_disabled">上传已禁用</string>
-    <string name="uploader_disabled_description">此项目的上传已禁用</string>
-    <string name="uploader_aborted">上传已中止</string>
-    <string name="uploader_aborted_description">未上传任何内容</string>
-    <string name="uploader_success">上传成功</string>
-    <string name="uploader_success_description">上传成功。感谢您的贡献！</string>
-    <string name="uploader_partially_succeeded">部分上传</string>
-    <string name="uploader_partially_succeeded_description">部分上传意味着在上传中止之前已成功发送部分数据。这可能由您的请求或遇到的错误导致。</string>
-    <string name="uploader_failure">上传失败</string>
-    <string name="uploader_failure_description">由于未知原因上传失败。请检查您是否使用的是最新版本的应用。如果长时间遇到此问题，请告知我们。</string>
-    <string name="uploader_invalid_api_key">无效的访问令牌</string>
-    <string name="uploader_invalid_api_key_description">无法找到在应用偏好设置中输入的访问令牌对应的用户。请检查输入的访问令牌是否正确。</string>
-    <string name="uploader_invalid_input_data">无效数据</string>
-    <string name="uploader_invalid_input_data_description">服务器拒绝了应用发送的数据。请检查您是否使用的是最新版本的应用。如果长时间遇到此问题，请告知我们。</string>
-    <string name="uploader_no_data">无数据可上传</string>
-    <string name="uploader_no_data_description">没有可上传的数据。请在上传前先采集一些测量数据。</string>
-    <string name="uploader_delete_failed">删除测量数据时出错</string>
-    <string name="uploader_delete_failed_description">应用在从您的设备删除测量数据时遇到错误。请重启设备后重试。如果您仍然遇到此问题，请告知我们。</string>
-    <string name="uploader_connection_error">连接错误</string>
-    <string name="uploader_connection_error_description">由于网络相关错误（可能由网络连接缺失、过慢或不稳定引起），无法连接到服务器。请检查您是否使用的是最新版本的应用并重试。如果长时间遇到此问题，请告知我们。</string>
-    <string name="uploader_server_error">服务器错误</string>
-    <string name="uploader_server_error_description">服务器返回内部错误，可能意味着服务器过载、暂时不可用或正在维护。请稍后重试。如果长时间遇到此问题，请告知我们。</string>
-    <string name="uploader_limit_exceeded">超出使用限制</string>
-    <string name="permission_denied">权限被拒绝</string>
-    <string name="permission_uploader_denied_message">由于互联网权限被拒绝，上传已取消。</string>
-    <string name="unknown_error">发生未知错误！</string>
-    <string name="uploader_limit_exceeded_description">已超出应用每日使用限制。请明天再试。</string>
-    <string name="uploader_no_internet_title">互联网不可用</string>
-    <string name="uploader_no_internet_message">由于没有互联网连接，无法上传。</string>
     <string name="cancel">取消</string>
-    <string name="upload">上传</string>
-    <string name="preferences">偏好设置</string>
-    <string name="show_upload_dialog_pref_title">显示上传配置对话框</string>
-    <string name="uploader_enqueued">发生错误，稍后将重试</string>
-    <string name="upload_disabled_via_mdm">外部上传已通过 MDM 禁用</string>
-    <string name="ns_analytics_disabled_via_mdm">NS Analytics 已被设备管理员禁用</string>
-    <string name="upload_saving_toggle_failed">尝试开始保存记录以供上传时发生错误</string>
-    <string name="upload_saving_start_toast">已开始扫描并保存记录以供上传</string>
-    <string name="upload_saving_stop_toast">已停止扫描并保存记录以供上传</string>
-    <string name="upload_saving_no_targets">未选择上传目标。请在上传设置中启用 OpenCelliD 或 BeaconDB 以开始探测。</string>
-    <string name="upload_saving_started_cellular">已开始扫描蜂窝基站以供上传</string>
-    <string name="upload_saving_started_cellular_wifi">已开始扫描蜂窝基站和 Wi-Fi 接入点以供上传</string>
-    <string name="delete_upload_data_confirm_title">确认删除</string>
-    <string name="delete_upload_data_confirm_message">
-此操作将永久删除所有存储以供上传的探测记录。
-\n\n您确定要继续吗？
-</string>
-    <string name="delete_upload_data_success">所有上传数据已删除</string>
-    <string name="delete_upload_data_failed">删除上传数据失败</string>
-    <string name="show_upload_dialog_summary_off">将跳过上传对话框，使用以下设置</string>
-    <string name="show_upload_dialog_summary_on">每次上传前将显示配置对话框</string>
     <!-- 探测监视器界面 -->
 <string name="survey_statistics_header">探测统计</string>
     <string name="records_captured_label">已捕获记录</string>
-    <string name="ready_for_upload_label">待上传记录</string>
     <string name="help_dialog_title">了解记录计数</string>
+    <string name="help_dialog_total_count">本次测量任务已采集的记录总数。</string>
     <string name="help_dialog_both_counts">• <b>已捕获记录：</b>正在保存到文件或发送到服务器的探测记录总数。包含所有数据，无论质量如何。\n\n• <b>待上传记录：</b>符合上传至众包数据库质量标准的数据。\n\n应用的筛选条件：\n  - GPS 精度 &lt; 100 米\n  - 设备在两次记录间移动距离 &gt; 35 米\n  - 记录必须包含完整的基站/网络信息\n\n为何存在差异？上传数据库需要高质量数据以确保基站/网络地图的准确性。</string>
     <string name="help_dialog_upload_only">这显示已准备好上传到 OpenCelliD 和 BeaconDB 等众包数据库的记录。\n\n仅统计高质量记录：\n  - GPS 精度 &lt; 100 米\n  - 设备自上次位置后移动距离 &gt; 35 米\n  - 完整的基站/网络信息\n\n记录经过筛选以保证数据库质量。</string>
     <string name="help_dialog_got_it">知道了</string>
-    <!-- 新基站提醒帮助对话框 -->
-<string name="new_tower_alerts_help_title">新基站提醒</string>
-    <string name="new_tower_alerts_what">什么是新基站提醒？</string>
-    <string name="new_tower_alerts_what_desc">当您的手机连接到一个不在我们社区数据库中的蜂窝基站时，您会收到通知。这有助于发现新安装的基站、活动中的临时基站或专用蜂窝网络。</string>
-    <string name="new_tower_alerts_how">工作原理</string>
-    <string name="new_tower_alerts_how_desc">将您当前的基站与 Network Survey 的 OpenCelliD 数据库进行比对，该数据库每 24 小时更新一次，包含全球用户贡献的基站位置。当检测到未知基站时，您会听到通知提示音。</string>
-    <string name="new_tower_alerts_requirements">要求</string>
-    <string name="new_tower_alerts_requirements_desc">• 上传扫描必须处于活动状态\n• 提醒功能已启用</string>
-    <string name="new_tower_alerts_benefits">为什么使用此功能？</string>
-    <string name="new_tower_alerts_benefits_desc">• 发现新安装的蜂窝基站\n• 识别临时或移动基站\n• 帮助改善蜂窝网络覆盖地图\n• 追踪您所在区域的网络变化</string>
     <!-- 电池优化 -->
 <string name="battery_optimization_title">重要提示：禁用电池优化</string>
     <string name="battery_optimization_message">Android 的电池优化可能会在数据采集过程中停止 Network Survey，导致您丢失重要的探测数据。这一点在屏幕关闭时尤其重要。</string>
@@ -858,22 +623,7 @@
     <string name="battery_optimization_settings_title">电池优化</string>
     <!-- 流队列管理 -->
 <string name="streaming_queue_limit_title">流队列限制</string>
-    <string name="streaming_queue_limit_description">当向 MQTT 或 gRPC 流式传输时，待发送消息的最大排队数量。当队列满时，扫描将暂停直到消息发送完成。设置为 0 以禁用（无限制队列）。建议：如果网络不可靠，设置为 20,000。</string>
     <string name="streaming_queue_limit_mdm_description">在暂停扫描前最大的待处理消息数。设置为 0 以禁用（无限制队列）。有效范围：0-100000。用于在网络连接较差时防止内存不足崩溃。</string>
-    <!-- 队列反压界面 -->
-<string name="queue_paused_title">探测已暂停</string>
-    <string name="queue_paused_subtitle">上传延迟</string>
-    <string name="queue_paused_description">探测已暂停，因为 MQTT 数据流传输出现积压。当数据传输恢复正常后，探测将自动恢复。如果此情况持续存在，请检查您的网络连接。</string>
-    <string name="queue_paused_mdm_description">此设置由管理员管理。要更改队列限制，请在设置中启用 MDM 覆盖。</string>
-    <string name="queue_paused_notification">探测已暂停 - 网络中断</string>
-    <string name="queue_paused_adjust_limit">调整限制</string>
-    <string name="queue_paused_disable_limit">禁用限制</string>
-    <string name="queue_paused_view_settings">查看设置</string>
-    <!-- MQTT 丢弃模式界面 -->
-<string name="mqtt_drop_mode_title">MQTT 消息丢弃</string>
-    <string name="mqtt_drop_mode_subtitle">文件日志记录继续</string>
-    <string name="mqtt_drop_mode_description">MQTT 数据流传输出现积压，正在丢弃 MQTT 消息。文件日志记录和其他输出正常运行。当连接改善后，MQTT 将恢复传输。</string>
-    <string name="mqtt_drop_mode_mdm_description">此设置由管理员管理。要更改队列限制，请在设置中启用 MDM 覆盖。</string>
     <!-- 队列限制警告对话框 -->
 <string name="disable_queue_limit_title">禁用队列限制？</string>
     <string name="disable_queue_limit_message">当网络慢或不可用时，禁用队列限制将允许无限数量的消息排队。如果连接问题持续存在，这可能导致应用因内存耗尽而崩溃。\n\n您确定要禁用限制吗？</string>
@@ -930,90 +680,6 @@
     <string name="mcc_mnc_format">MCC-MNC：%1$s-%2$s</string>
     <string name="selected">已选中</string>
     <string name="navigate_back">返回</string>
-    <!-- NS Analytics -->
-<string name="ns_analytics">NS Analytics</string>
-    <string name="ns_analytics_description">管理 NS Analytics 连接和数据上传</string>
-    <string name="ns_analytics_survey_stopped">探测已停止</string>
-    <string name="ns_analytics_not_registered">请先在 NS Analytics 中注册设备</string>
-    <string name="ns_analytics_survey_started">NS Analytics 探测已开始</string>
-    <string name="ns_analytics_survey_already_running">NS Analytics 探测已在运行中</string>
-    <string name="ns_analytics_survey_already_stopped">NS Analytics 探测已停止</string>
-    <string name="ns_analytics_survey_toggle_failed">切换 NS Analytics 探测失败</string>
-    <string name="ns_analytics_survey_no_protocols_enabled">必须为 NS Analytics 探测启用至少一种协议</string>
-    <!-- NS Analytics 入门 -->
-<string name="ns_analytics_tagline">网络探测数据的云端可视化和分析</string>
-    <string name="ns_analytics_setup_guide_title">如何开始</string>
-    <string name="ns_analytics_step_1_title">创建账户</string>
-    <string name="ns_analytics_step_1_desc">访问 NS Analytics 创建免费账户（推荐在桌面端操作）</string>
-    <string name="ns_analytics_step_2_title">创建工作区</string>
-    <string name="ns_analytics_step_2_desc">为您的项目设置一个工作区（在您的电脑上）</string>
-    <string name="ns_analytics_step_3_title">生成二维码</string>
-    <string name="ns_analytics_step_3_desc">从您的工作区生成设备二维码</string>
-    <string name="ns_analytics_step_4_title">扫描并连接</string>
-    <string name="ns_analytics_step_4_desc">返回此处扫描二维码以开始上传</string>
-    <string name="ns_analytics_setup_tip_title">设置提示</string>
-    <string name="ns_analytics_setup_tip_message">为了最简便的设置，我们建议使用台式机或笔记本电脑来创建账户和生成二维码。然后返回此处使用此设备扫描二维码。</string>
-    <string name="ns_analytics_get_started">开始使用</string>
-    <string name="ns_analytics_already_have_qr">已有二维码？立即扫描</string>
-    <string name="ns_analytics_learn_more">详细了解 NS Analytics</string>
-    <string name="ns_analytics_qr_user_manual">二维码用户手册</string>
-    <string name="ns_analytics_what_happens_next_title">接下来会发生什么</string>
-    <string name="ns_analytics_what_happens_next_desc">连接后，当您有互联网连接时，您的探测数据将自动上传到您的工作区。您可以在 NS Analytics 仪表盘上查看和分析数据。</string>
-    <string name="unregister_device">注销设备</string>
-    <string name="unregister_device_title">注销设备？</string>
-    <string name="unregister_device_message">此设备将停止向 %1$s 工作区上传数据。\n\n队列中的数据将被保留，如果您重新注册，可以继续上传。\n\n您可以随时通过扫描新的二维码重新注册。</string>
-    <string name="unregister">注销</string>
-    <string name="device_deregistered_title">设备已注销</string>
-    <string name="device_deregistered_from_web">此设备于 %2$s 从网页仪表板%1$s注销。</string>
-    <string name="device_deregistered_from_web_no_details">此设备已从网页仪表板注销。</string>
-    <string name="device_deregistered_by"> 由 %1$s</string>
-    <string name="device_deregistered_generic">此设备已从 %1$s 注销。</string>
-    <string name="scan_qr_to_reregister">扫描新二维码以重新注册并继续上传。</string>
-    <string name="register_again">重新注册</string>
-    <!-- NS Analytics 深度链接 - 已注册 -->
-<string name="ns_analytics_qr_detected_title">NS Analytics 二维码</string>
-    <string name="ns_analytics_already_registered_message">您当前已注册到“%1$s”工作区。</string>
-    <string name="ns_analytics_new_workspace_detected">检测到新工作区：%1$s</string>
-    <string name="ns_analytics_unregister_first_hint">要注册到不同的工作区，请先使用下方的“注销设备”按钮从当前工作区注销，然后再次扫描二维码。</string>
-    <!-- NS Analytics 上传状态 -->
-<string name="ns_analytics_upload_status_no_records">没有要上传的记录</string>
-    <string name="ns_analytics_upload_status_no_network">没有网络连接</string>
-    <string name="ns_analytics_upload_status_mdm_blocked">上传被策略阻止</string>
-    <string name="ns_analytics_upload_status_already_running">上传已在进行中</string>
-    <string name="ns_analytics_upload_status_uploading">正在上传…</string>
-    <string name="ns_analytics_upload_status_ready">已准备好上传</string>
-    <string name="ns_analytics_upload_status_not_registered">未注册</string>
-    <string name="ns_analytics_upload_status_complete">上传完成</string>
-    <string name="ns_analytics_upload_status_failed">上传失败</string>
-    <string name="ns_analytics_upload_status_failed_with_reason">上传失败：%1$s</string>
-    <string name="ns_analytics_upload_status_waiting_retry">等待重试…</string>
-    <string name="ns_analytics_upload_status_retry_attempt">重试第 %1$d 次…</string>
-    <string name="ns_analytics_upload_status_quota_exceeded">失败：超出配额</string>
-    <string name="ns_analytics_upload_status_device_unregistered">设备已注销</string>
-    <string name="ns_analytics_upload_status_config_error">配置错误</string>
-    <string name="ns_analytics_upload_status_registration_invalid">注册已过期</string>
-    <string name="ns_analytics_upload_status_viewer_cannot_upload">不允许上传</string>
-    <string name="ns_analytics_upload_status_session_expired">会话已过期</string>
-    <plurals name="ns_analytics_upload_result_records">
-        <item quantity="other">已上传 %1$d 条记录</item>
-    </plurals>
-    <string name="ns_analytics_upload_button_upload_now">立即上传</string>
-    <string name="ns_analytics_upload_button_uploading">正在上传…</string>
-    <string name="ns_analytics_upload_button_no_records">无记录</string>
-    <string name="ns_analytics_upload_button_unavailable">不可用</string>
-    <string name="ns_analytics_upload_button_resume">立即上传以恢复</string>
-    <string name="ns_analytics_upload_resumed">上传已恢复</string>
-    <string name="ns_analytics_open_dashboard">打开 NS Analytics</string>
-    <!-- 配额暂停横幅和通知 -->
-<string name="ns_analytics_upload_paused_banner_title">上传已暂停：达到配额</string>
-    <string name="ns_analytics_upload_paused_banner_body">自动上传已暂停，因为您的工作区已达到记录限制。请释放空间或升级，然后点击“立即上传”恢复。</string>
-    <string name="ns_analytics_quota_usage">当前使用量：%1$s / %2$s 条记录</string>
-    <string name="ns_analytics_manage_subscription">管理订阅</string>
-    <string name="ns_analytics_paused_notification_title">NS Analytics 上传已暂停</string>
-    <string name="ns_analytics_paused_notification_text">工作区记录配额已达上限。点击查看并恢复。</string>
-    <!-- 二维码错误消息 -->
-<string name="qr_code_data_too_large_title">二维码错误</string>
-    <string name="qr_code_data_too_large_message">MQTT 连接设置太大，无法放入二维码。请尝试缩短主机地址、用户名、密码或主题前缀字段。</string>
     <!-- OUI 制造商查询 -->
 <string name="network_lookups_category">网络查询</string>
     <string name="settings_oui_title">制造商查询</string>

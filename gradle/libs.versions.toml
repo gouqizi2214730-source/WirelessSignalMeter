@@ -20,18 +20,14 @@ kotlin = "2.4.10"
 # KSP2 versions independently of Kotlin. 2.3.10+ is required for Kotlin 2.4.x
 # (older KSP cannot handle Kotlin 2.4's default module names containing ':').
 ksp = "2.3.10"
-googleServices = "4.5.0"
-firebaseCrashlyticsGradle = "3.0.7"
 licenseReport = "3.1.4"
 
 # Library version groups (shared across multiple library entries)
 hilt = "2.60.1"
 room = "2.8.4"
-grpc = "1.83.1"
 navigation = "2.9.8"
 networkSurveyMessaging = "2.6.0"
 composeBom = "2026.08.00"
-firebaseBom = "34.17.0"
 
 # Single-library versions
 androidxAppcompat = "1.8.0"
@@ -45,7 +41,6 @@ activityCompose = "1.13.0"
 drawerlayout = "1.2.0"
 flexbox = "3.0.0"
 coroutines = "1.11.0"
-mqtt = "1.3.0"
 protobufJavaUtil = "4.35.1"
 geopackage = "6.7.5"
 commonsCsv = "1.14.1"
@@ -116,12 +111,6 @@ compose-material-icons-extended = { module = "androidx.compose.material:material
 androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose" }
 androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose" }
 
-# gRPC
-grpc-okhttp = { module = "io.grpc:grpc-okhttp", version.ref = "grpc" }
-grpc-android = { module = "io.grpc:grpc-android", version.ref = "grpc" }
-grpc-stub = { module = "io.grpc:grpc-stub", version.ref = "grpc" }
-grpc-protobuf = { module = "io.grpc:grpc-protobuf", version.ref = "grpc" }
-
 # Networking / serialization
 retrofit = { module = "com.squareup.retrofit2:retrofit", version.ref = "retrofit" }
 retrofit-converter-gson = { module = "com.squareup.retrofit2:converter-gson", version.ref = "retrofit" }
@@ -129,7 +118,6 @@ protobuf-java-util = { module = "com.google.protobuf:protobuf-java-util", versio
 snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
 
 # Craxiom / survey messaging
-mqtt-library = { module = "com.craxiom:mqtt-library", version.ref = "mqtt" }
 network-survey-messaging = { module = "com.craxiom:network-survey-messaging", version.ref = "networkSurveyMessaging" }
 
 
@@ -143,18 +131,6 @@ commons-csv = { module = "org.apache.commons:commons-csv", version.ref = "common
 vico-compose-m3 = { module = "com.patrykandpatrick.vico:compose-m3", version.ref = "vico" }
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 
-# Firebase (regular flavor only)
-firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
-firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
-firebase-crashlytics = { module = "com.google.firebase:firebase-crashlytics" }
-
-# Firebase-related Gradle plugins, exposed as [libraries] (not [plugins]) so the
-# root build.gradle can add them to the buildscript classpath only when
-# google-services.json is present. This keeps F-Droid / IzzyOnDroid builds
-# (which build the CDR flavor without google-services.json) free of any
-# Firebase artifacts on the build classpath.
-google-services-gradle-plugin = { module = "com.google.gms:google-services", version.ref = "googleServices" }
-firebase-crashlytics-gradle-plugin = { module = "com.google.firebase:firebase-crashlytics-gradle", version.ref = "firebaseCrashlyticsGradle" }
 
 # Test dependencies
 junit = { module = "junit:junit", version.ref = "junit" }
@@ -177,13 +153,6 @@ androidx-navigation = [
     "androidx-navigation-fragment-ktx",
     "androidx-navigation-ui-ktx",
     "androidx-navigation-compose",
-]
-
-# gRPC family (excluding grpc-protobuf, which has a custom transitive exclusion).
-grpc = [
-    "grpc-okhttp",
-    "grpc-android",
-    "grpc-stub",
 ]
 
 # Compose libraries whose versions are managed by the Compose BOM. The BOM

@@ -2,6 +2,7 @@ package com.craxiom.networksurvey.fragments;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.text.TextUtils;
 import android.util.SparseArray;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -20,7 +21,6 @@ import com.craxiom.networksurvey.data.BluetoothCompanyNameProvider;
 import com.craxiom.networksurvey.data.BluetoothCompanyNameResolver;
 import com.craxiom.networksurvey.fragments.model.BluetoothViewModel;
 import com.craxiom.networksurvey.util.ColorUtils;
-import com.google.common.base.Strings;
 import com.google.protobuf.ProtocolStringList;
 
 import timber.log.Timber;
@@ -118,7 +118,7 @@ public class BluetoothRecyclerViewAdapter extends RecyclerView.Adapter<Bluetooth
         final String companyId = data.getCompanyId();
         String companyName = companyNameResolver.resolveCompanyName(serviceUuidsList, companyId);
 
-        if (!Strings.isNullOrEmpty(companyName))
+        if (!TextUtils.isEmpty(companyName))
         {
             holder.companyName.setText(companyName);
         } else
@@ -139,7 +139,7 @@ public class BluetoothRecyclerViewAdapter extends RecyclerView.Adapter<Bluetooth
 
         // Update separator visibility logic
         // Company separator shows if company name exists and either AirTag or device name follows
-        if (!Strings.isNullOrEmpty(companyName) && (isAirTag || !otaDeviceName.isEmpty()))
+        if (!TextUtils.isEmpty(companyName) && (isAirTag || !otaDeviceName.isEmpty()))
         {
             holder.companySeparator.setVisibility(View.VISIBLE);
         } else

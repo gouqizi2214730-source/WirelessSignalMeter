@@ -2,8 +2,6 @@ package com.craxiom.networksurvey.constants;
 
 import android.telephony.CellInfo;
 
-import com.craxiom.mqttlibrary.MqttConstants;
-
 /**
  * Some constants used in the Network Survey App.
  *
@@ -15,18 +13,7 @@ public class NetworkSurveyConstants
     {
     }
 
-    public static final int DEFAULT_GRPC_PORT = 2621;
-
-    public static final boolean DEFAULT_MQTT_CELLULAR_STREAM_SETTING = true;
-    public static final boolean DEFAULT_MQTT_PHONE_STATE_STREAM_SETTING = true;
-    public static final boolean DEFAULT_MQTT_WIFI_STREAM_SETTING = true;
-    public static final boolean DEFAULT_MQTT_BLUETOOTH_STREAM_SETTING = false;
-    public static final boolean DEFAULT_MQTT_GNSS_STREAM_SETTING = false;
-    public static final boolean DEFAULT_MQTT_DEVICE_STATUS_STREAM_SETTING = true;
-    public static final boolean DEFAULT_MQTT_WATCHLIST_STREAM_SETTING = true;
-
     public static final String NOTIFICATION_CHANNEL_ID = "network_survey_notification";
-    public static final int GRPC_CONNECTION_NOTIFICATION_ID = 3;
     public static final int LOGGING_NOTIFICATION_ID = 1;
 
     public static final String WAKE_LOCK_TAG = "NetworkSurvey:WakeLock";
@@ -103,7 +90,6 @@ public class NetworkSurveyConstants
     public static final String EXTRA_BLUETOOTH_FILE_LOGGING = "bluetooth_file_logging";
     public static final String EXTRA_GNSS_FILE_LOGGING = "gnss_file_logging";
     public static final String EXTRA_CDR_FILE_LOGGING = "cdr_file_logging";
-    public static final String EXTRA_MQTT_CONFIG_JSON = "mqtt_config_json";
 
     public static final int DEFAULT_CELLULAR_SCAN_INTERVAL_SECONDS = 5;
     public static final int DEFAULT_WIFI_SCAN_INTERVAL_SECONDS = 15;
@@ -122,10 +108,6 @@ public class NetworkSurveyConstants
 
     public static final boolean DEFAULT_INCLUDE_NEIGHBOR_CELLS = true;
 
-    public static final boolean DEFAULT_UPLOAD_TO_OPENCELLID = true;
-    public static final boolean DEFAULT_UPLOAD_TO_BEACONDB = true;
-    public static final boolean DEFAULT_UPLOAD_RETRY_ENABLED = true;
-
     public static final String DEFAULT_COVERAGE_CIRCLE_COLOR = "default";
 
     public static final int LOCATION_PROVIDER_FUSED = 0;
@@ -134,12 +116,7 @@ public class NetworkSurveyConstants
     public static final int LOCATION_PROVIDER_ALL = 3;
     public static final int DEFAULT_LOCATION_PROVIDER = LOCATION_PROVIDER_ALL;
 
-    public static final String PROPERTY_MDM_OVERRIDE_KEY = MqttConstants.PROPERTY_MQTT_MDM_OVERRIDE;
-
-    // MDM Only Preferences
-    public static final String MDM_PROPERTY_ALLOW_EXTERNAL_DATA_UPLOAD = "allow_external_data_upload";
-    public static final String MDM_PROPERTY_ALLOW_NS_ANALYTICS = "allow_ns_analytics";
-    public static final String PROPERTY_MDM_MQTT_DEVICE_NAME = "mqtt_device_name";
+    public static final String PROPERTY_MDM_OVERRIDE_KEY = "mqtt_mdm_override";
 
     // Preferences
     public static final String PROPERTY_AUTO_START_CELLULAR_LOGGING = "auto_start_logging";
@@ -150,7 +127,6 @@ public class NetworkSurveyConstants
     public static final String PROPERTY_AUTO_START_PHONE_STATE_LOGGING = "auto_start_phone_state_logging";
     public static final String PROPERTY_AUTO_INCLUDE_PHONE_STATE_WITH_CELLULAR = "auto_include_phone_state_with_cellular";
     public static final String PROPERTY_INCLUDE_NEIGHBOR_CELLS = "include_neighbor_cells";
-    public static final String PROPERTY_AUTO_START_COMMUNITY_UPLOAD_SURVEY_AT_BOOT = "auto_start_community_upload_survey_at_boot";
     public static final String PROPERTY_CELLULAR_SCAN_INTERVAL_SECONDS = "cellular_scan_interval_seconds";
     public static final String PROPERTY_WIFI_SCAN_INTERVAL_SECONDS = "wifi_scan_interval_seconds";
     public static final String PROPERTY_BLUETOOTH_SCAN_INTERVAL_SECONDS = "bluetooth_scan_interval_seconds";
@@ -177,10 +153,9 @@ public class NetworkSurveyConstants
     public static final String PROPERTY_WATCHLIST_HISTORY_RETENTION_DAYS = "watchlist_history_retention_days";
     // Intent extra used to deep-link from a watchlist notification to the history screen.
     public static final String EXTRA_NAVIGATE_TO_WATCHLIST_HISTORY = "navigate_to_watchlist_history";
-    // App Link used to populate the watchlist from a shared URL. The host is the same already-verified
-    // networksurvey.app domain used by the NS Analytics registration link (NsAnalyticsConstants), so no
-    // additional Digital Asset Links verification is needed. The single "d" query parameter carries a
-    // base64url-encoded JSON payload of the networks to add.
+    // App Link used to populate the watchlist from a shared URL. The host is the already-verified
+    // networksurvey.app domain, so no additional Digital Asset Links verification is needed. The
+    // single "d" query parameter carries a base64url-encoded JSON payload of the networks to add.
     public static final String WATCHLIST_DEEP_LINK_PATH = "/app/watchlist";
     public static final String WATCHLIST_DEEP_LINK_PARAM_DATA = "d";
 
@@ -200,55 +175,11 @@ public class NetworkSurveyConstants
     public static final String PROPERTY_MAP_SHOW_ZOOM_CONTROLS = "map_show_zoom_controls";
     public static final String PROPERTY_MANAGE_PROVIDER_COLOR_OVERRIDES = "manage_provider_color_overrides";
 
-    // The following key is used in the app_restrictions.xml file and in the app's shared preferences
-    public static final String PROPERTY_MQTT_START_ON_BOOT = "mqtt_start_on_boot";
-
-    public static final String PROPERTY_SHOW_CONFIG_UPLOAD_DIALOG = "show_configuration_upload_dialog";
-    public static final String PROPERTY_UPLOAD_TO_OPENCELLID = "upload_to_opencellid";
-    public static final String PROPERTY_ANONYMOUS_OPENCELLID_UPLOAD = "anonymous_opencellid_upload";
-    public static final String PROPERTY_UPLOAD_TO_BEACONDB = "upload_to_beacondb";
-    public static final String PROPERTY_UPLOAD_RETRY_ENABLED = "upload_retry_enabled";
-    public static final String PROPERTY_OCID_API_KEY = "ocid_api_key";
-    public static final String UPLOAD_PREFERENCES_GROUP = "upload_preferences_group";
-
-    // Auto Upload preferences
-    public static final String PROPERTY_AUTO_UPLOAD_ENABLED = "auto_upload_enabled";
-    public static final String PROPERTY_AUTO_UPLOAD_WIFI_ONLY = "auto_upload_wifi_only";
-    public static final int AUTO_UPLOAD_RECORD_THRESHOLD = 500;
-    public static final long AUTO_UPLOAD_COOLDOWN_MS = 15 * 60 * 1000L;
-    public static final int AUTO_UPLOAD_MAX_CONSECUTIVE_FAILURES = 3;
-    public static final String COMMUNITY_UPLOAD_UNIQUE_WORK_NAME = "community_upload_work";
-    public static final String PROPERTY_NS_ANALYTICS_CONNECTION = "ns_analytics_connection_pref";
-    public static final String PROPERTY_DELETE_ALL_DATA_IN_UPLOAD_DATABASE = "delete_all_data_in_upload_database";
-
-    public static final String PROPERTY_MQTT_CELLULAR_STREAM_ENABLED = "cellular_stream_enabled";
-    public static final String PROPERTY_MQTT_WIFI_STREAM_ENABLED = "wifi_stream_enabled";
-    public static final String PROPERTY_MQTT_BLUETOOTH_STREAM_ENABLED = "bluetooth_stream_enabled";
-    public static final String PROPERTY_MQTT_GNSS_STREAM_ENABLED = "gnss_stream_enabled";
-    public static final String PROPERTY_MQTT_DEVICE_STATUS_STREAM_ENABLED = "device_status_stream_enabled";
-    public static final String PROPERTY_MQTT_PHONE_STATE_STREAM_ENABLED = "phone_state_stream_enabled";
-    public static final String PROPERTY_MQTT_WATCHLIST_STREAM_ENABLED = "watchlist_stream_enabled";
-
-    public static final String PROPERTY_GRPC_CELLULAR_STREAM_ENABLED = "grpc_cellular_stream_enabled";
-    public static final String PROPERTY_GRPC_PHONE_STATE_STREAM_ENABLED = "grpc_phone_state_stream_enabled";
-    public static final String PROPERTY_GRPC_WIFI_STREAM_ENABLED = "grpc_wifi_stream_enabled";
-    public static final String PROPERTY_GRPC_BLUETOOTH_STREAM_ENABLED = "grpc_bluetooth_stream_enabled";
-    public static final String PROPERTY_GRPC_GNSS_STREAM_ENABLED = "grpc_gnss_stream_enabled";
-    public static final String PROPERTY_GRPC_DEVICE_STATUS_STREAM_ENABLED = "grpc_device_status_stream_enabled";
-
-    // Stored Preferences not exposed via the Settings UI
-    public static final String PROPERTY_NETWORK_SURVEY_CONNECTION_HOST = "connection_host";
-    public static final String PROPERTY_NETWORK_SURVEY_CONNECTION_PORT = "connection_port";
-    public static final String PROPERTY_NETWORK_SURVEY_DEVICE_NAME = "device_name";
-
     public static final String PROPERTY_WIFI_NETWORKS_SORT_ORDER = "wifi_networks_sort_order";
     public static final String PROPERTY_WIFI_GROUP_BY_SSID = "wifi_group_by_ssid";
     public static final String PROPERTY_BLUETOOTH_DEVICES_SORT_ORDER = "bluetooth_devices_sort_order";
     public static final String PROPERTY_KEY_DENIED_BACKGROUND_LOCATION_PERMISSION = "denied_background_location_permission";
 
-    public static final String PROPERTY_LAST_SELECTED_TOWER_SOURCE = "last_selected_tower_source";
-    public static final String PROPERTY_SELECTED_MAP_TILE_SOURCE = "selected_map_tile_source";
-    public static final String PROPERTY_SHOW_BEACONDB_COVERAGE = "show_beacondb_coverage";
     public static final String PROPERTY_SHOW_TOWERS_LAYER = "show_towers_layer";
     public static final String PROPERTY_MAP_SHOW_ONLY_SERVING_CELL = "map_show_only_serving_cell";
     /**
@@ -258,11 +189,8 @@ public class NetworkSurveyConstants
      * screen the user is viewing.
      */
     public static final String PROPERTY_MAP_MAX_TOWER_AGE_MONTHS = "map_max_tower_age_months";
-    public static final String PROPERTY_NEW_TOWER_ALERTS_ENABLED = "new_tower_alerts_enabled";
 
     // Survey Monitor specific map preferences
-    public static final String PROPERTY_SURVEY_MAP_TILE_SOURCE = "survey_map_tile_source";
-    public static final String PROPERTY_SURVEY_SHOW_BEACONDB_COVERAGE = "survey_show_beacondb_coverage";
     public static final String PROPERTY_SURVEY_SHOW_TOWERS_LAYER = "survey_show_towers_layer";
     public static final String PROPERTY_SURVEY_MAP_SHOW_ONLY_SERVING_CELL = "survey_map_show_only_serving_cell";
     public static final String PROPERTY_SURVEY_MAP_KEEP_SCREEN_ON = "survey_map_keep_screen_on";

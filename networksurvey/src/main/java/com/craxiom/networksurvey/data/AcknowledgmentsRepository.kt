@@ -62,28 +62,6 @@ class AcknowledgmentsRepository {
             )
             add(
                 LibraryAcknowledgment(
-                    name = "gRPC",
-                    author = "Google",
-                    description = "High performance RPC framework",
-                    sourceUrl = "https://github.com/grpc/grpc-java",
-                    licenseName = "Apache License 2.0",
-                    licenseUrl = "https://www.apache.org/licenses/LICENSE-2.0",
-                    category = LibraryCategory.CORE_LIBRARIES
-                )
-            )
-            add(
-                LibraryAcknowledgment(
-                    name = "MQTT Library",
-                    author = "Craxiom",
-                    description = "MQTT client library for IoT messaging",
-                    sourceUrl = "https://github.com/craxiom/android-mqtt",
-                    licenseName = "Apache License 2.0",
-                    licenseUrl = "https://www.apache.org/licenses/LICENSE-2.0",
-                    category = LibraryCategory.CORE_LIBRARIES
-                )
-            )
-            add(
-                LibraryAcknowledgment(
                     name = "Network Survey Messaging",
                     author = "Craxiom",
                     description = "Protobuf messaging library for wireless survey data",

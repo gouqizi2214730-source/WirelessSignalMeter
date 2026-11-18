@@ -9,9 +9,6 @@ public class LteRecordEntity extends BaseRecordEntity
     @PrimaryKey(autoGenerate = true)
     public long id;
 
-    public boolean ocidUploaded = false;
-    public boolean beaconDbUploaded = false;
-
     public int groupNumber;
 
     // LTE-specific fields with nullable support

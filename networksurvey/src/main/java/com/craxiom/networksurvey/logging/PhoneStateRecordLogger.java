@@ -15,6 +15,7 @@ import static com.craxiom.networksurvey.constants.csv.PhoneStateCsvConstants.NON
 import static com.craxiom.networksurvey.constants.csv.PhoneStateCsvConstants.SLOT;
 
 import android.os.Looper;
+import android.text.TextUtils;
 
 import com.craxiom.messaging.NetworkRegistrationInfo;
 import com.craxiom.messaging.PhoneState;
@@ -29,7 +30,6 @@ import com.craxiom.networksurvey.services.NetworkSurveyService;
 import com.craxiom.networksurvey.util.NsUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.base.Strings;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
 
@@ -162,7 +162,7 @@ public class PhoneStateRecordLogger extends SurveyRecordLogger implements IPhone
     {
         String simState = new ObjectMapper().writeValueAsString(data.getSimState());
 
-        if (!Strings.isNullOrEmpty(simState))
+        if (!TextUtils.isEmpty(simState))
         {
             simState = simState.replace("\"", "");
         }

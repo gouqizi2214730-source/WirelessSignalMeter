@@ -34,8 +34,6 @@ public class BatteryPauseStateTest
         assertThat(state.wasBluetoothLoggingEnabled()).isFalse();
         assertThat(state.wasGnssLoggingEnabled()).isFalse();
         assertThat(state.wasCdrLoggingEnabled()).isFalse();
-        assertThat(state.wasMqttConnectionActive()).isFalse();
-        assertThat(state.wasGrpcConnectionActive()).isFalse();
         assertThat(state.wasDeviceStatusActive()).isFalse();
         assertThat(state.hasActiveOperations()).isFalse();
     }
@@ -76,13 +74,6 @@ public class BatteryPauseStateTest
         
         state.setWasCdrLoggingEnabled(true);
         assertThat(state.wasCdrLoggingEnabled()).isTrue();
-        
-        // Test connection states
-        state.setWasMqttConnectionActive(true);
-        assertThat(state.wasMqttConnectionActive()).isTrue();
-        
-        state.setWasGrpcConnectionActive(true);
-        assertThat(state.wasGrpcConnectionActive()).isTrue();
         
         state.setWasDeviceStatusActive(true);
         assertThat(state.wasDeviceStatusActive()).isTrue();
@@ -135,14 +126,6 @@ public class BatteryPauseStateTest
         assertThat(state.hasActiveOperations()).isTrue();
         state.clear();
         
-        state.setWasMqttConnectionActive(true);
-        assertThat(state.hasActiveOperations()).isTrue();
-        state.clear();
-        
-        state.setWasGrpcConnectionActive(true);
-        assertThat(state.hasActiveOperations()).isTrue();
-        state.clear();
-        
         state.setWasDeviceStatusActive(true);
         assertThat(state.hasActiveOperations()).isTrue();
     }
@@ -163,8 +146,6 @@ public class BatteryPauseStateTest
         state.setWasBluetoothLoggingEnabled(true);
         state.setWasGnssLoggingEnabled(true);
         state.setWasCdrLoggingEnabled(true);
-        state.setWasMqttConnectionActive(true);
-        state.setWasGrpcConnectionActive(true);
         state.setWasDeviceStatusActive(true);
         
         assertThat(state.hasActiveOperations()).isTrue();
@@ -183,8 +164,6 @@ public class BatteryPauseStateTest
         assertThat(state.wasBluetoothLoggingEnabled()).isFalse();
         assertThat(state.wasGnssLoggingEnabled()).isFalse();
         assertThat(state.wasCdrLoggingEnabled()).isFalse();
-        assertThat(state.wasMqttConnectionActive()).isFalse();
-        assertThat(state.wasGrpcConnectionActive()).isFalse();
         assertThat(state.wasDeviceStatusActive()).isFalse();
         assertThat(state.hasActiveOperations()).isFalse();
     }
@@ -197,7 +176,6 @@ public class BatteryPauseStateTest
         // Set some states
         originalState.setWasCellularScanningActive(true);
         originalState.setWasWifiLoggingEnabled(true);
-        originalState.setWasMqttConnectionActive(true);
         originalState.setWasDeviceStatusActive(true);
         
         // Serialize to JSON
@@ -208,7 +186,6 @@ public class BatteryPauseStateTest
         JSONObject jsonObject = new JSONObject(json);
         assertThat(jsonObject.getBoolean("cellular_scanning")).isTrue();
         assertThat(jsonObject.getBoolean("wifi_logging")).isTrue();
-        assertThat(jsonObject.getBoolean("mqtt_connection")).isTrue();
         assertThat(jsonObject.getBoolean("device_status")).isTrue();
         assertThat(jsonObject.getBoolean("bluetooth_scanning")).isFalse();
         assertThat(jsonObject.getBoolean("gnss_logging")).isFalse();
@@ -221,8 +198,7 @@ public class BatteryPauseStateTest
         String json = "{\"cellular_scanning\":true,\"wifi_scanning\":false,\"bluetooth_scanning\":true," +
                       "\"gnss_scanning\":false,\"cdr_scanning\":true,\"cellular_logging\":false," +
                       "\"wifi_logging\":true,\"bluetooth_logging\":false,\"gnss_logging\":true," +
-                      "\"cdr_logging\":false,\"mqtt_connection\":true,\"grpc_connection\":false," +
-                      "\"device_status\":true}";
+                      "\"cdr_logging\":false,\"device_status\":true}";
         
         BatteryPauseState state = BatteryPauseState.fromJson(json);
         
@@ -237,8 +213,6 @@ public class BatteryPauseStateTest
         assertThat(state.wasBluetoothLoggingEnabled()).isFalse();
         assertThat(state.wasGnssLoggingEnabled()).isTrue();
         assertThat(state.wasCdrLoggingEnabled()).isFalse();
-        assertThat(state.wasMqttConnectionActive()).isTrue();
-        assertThat(state.wasGrpcConnectionActive()).isFalse();
         assertThat(state.wasDeviceStatusActive()).isTrue();
         assertThat(state.hasActiveOperations()).isTrue();
     }
@@ -259,8 +233,6 @@ public class BatteryPauseStateTest
         originalState.setWasBluetoothLoggingEnabled(false);
         originalState.setWasGnssLoggingEnabled(false);
         originalState.setWasCdrLoggingEnabled(true);
-        originalState.setWasMqttConnectionActive(true);
-        originalState.setWasGrpcConnectionActive(false);
         originalState.setWasDeviceStatusActive(true);
         
         // Serialize and deserialize
@@ -278,8 +250,6 @@ public class BatteryPauseStateTest
         assertThat(deserializedState.wasBluetoothLoggingEnabled()).isEqualTo(originalState.wasBluetoothLoggingEnabled());
         assertThat(deserializedState.wasGnssLoggingEnabled()).isEqualTo(originalState.wasGnssLoggingEnabled());
         assertThat(deserializedState.wasCdrLoggingEnabled()).isEqualTo(originalState.wasCdrLoggingEnabled());
-        assertThat(deserializedState.wasMqttConnectionActive()).isEqualTo(originalState.wasMqttConnectionActive());
-        assertThat(deserializedState.wasGrpcConnectionActive()).isEqualTo(originalState.wasGrpcConnectionActive());
         assertThat(deserializedState.wasDeviceStatusActive()).isEqualTo(originalState.wasDeviceStatusActive());
     }
 
@@ -327,8 +297,6 @@ public class BatteryPauseStateTest
         assertThat(state.wasBluetoothLoggingEnabled()).isFalse();
         assertThat(state.wasGnssLoggingEnabled()).isFalse();
         assertThat(state.wasCdrLoggingEnabled()).isFalse();
-        assertThat(state.wasMqttConnectionActive()).isFalse();
-        assertThat(state.wasGrpcConnectionActive()).isFalse();
         assertThat(state.wasDeviceStatusActive()).isFalse();
     }
     
@@ -341,7 +309,6 @@ public class BatteryPauseStateTest
         originalState.setWasCellularScanningActive(true);
         originalState.setWasWifiScanningActive(false);
         originalState.setWasBluetoothLoggingEnabled(true);
-        originalState.setWasMqttConnectionActive(true);
         originalState.setWasDeviceStatusActive(false);
         
         // Write to parcel
@@ -365,8 +332,6 @@ public class BatteryPauseStateTest
         assertThat(recreatedState.wasBluetoothLoggingEnabled()).isEqualTo(originalState.wasBluetoothLoggingEnabled());
         assertThat(recreatedState.wasGnssLoggingEnabled()).isEqualTo(originalState.wasGnssLoggingEnabled());
         assertThat(recreatedState.wasCdrLoggingEnabled()).isEqualTo(originalState.wasCdrLoggingEnabled());
-        assertThat(recreatedState.wasMqttConnectionActive()).isEqualTo(originalState.wasMqttConnectionActive());
-        assertThat(recreatedState.wasGrpcConnectionActive()).isEqualTo(originalState.wasGrpcConnectionActive());
         assertThat(recreatedState.wasDeviceStatusActive()).isEqualTo(originalState.wasDeviceStatusActive());
         
         // Clean up

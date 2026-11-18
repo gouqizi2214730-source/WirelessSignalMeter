@@ -4,7 +4,6 @@ import android.content.Intent
 import android.net.Uri
 import android.util.Base64
 import com.craxiom.networksurvey.constants.NetworkSurveyConstants
-import com.craxiom.networksurvey.constants.NsAnalyticsConstants
 import com.craxiom.networksurvey.model.WatchlistImportEntry
 import com.craxiom.networksurvey.model.WatchlistImportSet
 import com.google.gson.Gson
@@ -23,9 +22,7 @@ import timber.log.Timber
  *       "entries": [ { "label": "HQ", "ssid": "HQ-Guest" }, { "bssid": "a4:..:1c" } ] }
  *
  * The link is treated as coming from a semi-trusted sender, so every field is bounded and sanitized
- * here before it can reach the UI or the database. This mirrors the hardening already established by
- * [NsAnalyticsDeepLinkHandler]: a sealed Success/Error/NotApplicable result, strict all-or-nothing
- * parsing, and rejection (never truncation) of anything over a cap.
+ * here before it can reach the UI or the database.
  */
 object WatchlistDeepLinkHandler {
 
@@ -80,9 +77,12 @@ object WatchlistDeepLinkHandler {
         @SerializedName("entries") val entries: List<WatchlistImportEntry?>?
     )
 
+    /** Host serving the watchlist import deep link. */
+    private const val DEEP_LINK_HOST = "networksurvey.app"
+
     /** True when [uri] targets the watchlist import host and path. */
     fun isWatchlistImportUri(uri: Uri): Boolean {
-        return uri.host == NsAnalyticsConstants.NS_ANALYTICS_DEEP_LINK_HOST &&
+        return uri.host == DEEP_LINK_HOST &&
                 uri.path?.startsWith(NetworkSurveyConstants.WATCHLIST_DEEP_LINK_PATH) == true
     }
 

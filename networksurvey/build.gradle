@@ -7,13 +7,6 @@ plugins {
     alias(libs.plugins.dependency.license.report)
 }
 
-// Exclude google-services and crashlytics if the json file is missing and for debug builds
-if (file("google-services.json").exists() && !gradle.startParameter.taskNames.any { it.contains("Debug") || it.contains("test") }) {
-    logger.quiet("Using the google-services.json file")
-    apply plugin: "com.google.gms.google-services"
-    apply plugin: "com.google.firebase.crashlytics"
-}
-
 import com.github.jk1.license.filter.LicenseBundleNormalizer
 import com.github.jk1.license.render.SimpleHtmlReportRenderer
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -50,7 +43,6 @@ android {
     defaultConfig {
         buildConfigField "String", "MESSAGING_API_VERSION", "\"${libs.versions.networkSurveyMessaging.get()}\""
         buildConfigField 'String', "NS_API_KEY", "\"${nsApiKey}\""
-        buildConfigField 'String', "OCID_API_KEY", "\"${ocidApiKey}\""
         applicationId "com.wireless.signalmeter.new"
         minSdkVersion 33
         targetSdkVersion 37
@@ -234,12 +226,7 @@ dependencies {
     implementation(libs.flexbox)
     implementation(libs.kotlinx.coroutines.android)
 
-    implementation(libs.mqtt.library)
     implementation(libs.protobuf.java.util)
-    implementation(libs.bundles.grpc)
-    implementation(libs.grpc.protobuf) {
-        exclude group: 'com.google.api.grpc', module: 'proto-google-common-protos'
-    }
 
     implementation(libs.network.survey.messaging) {
         exclude group: 'com.google.api.grpc', module: 'proto-google-common-protos'

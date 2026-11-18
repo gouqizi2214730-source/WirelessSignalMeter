@@ -17,25 +17,18 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
-import androidx.navigation.navDeepLink
 import com.craxiom.messaging.BluetoothRecordData
 import com.craxiom.networksurvey.R
 import com.craxiom.networksurvey.data.api.PlmnRecord
 import com.craxiom.networksurvey.databinding.ContainerBluetoothDetailsFragmentBinding
-import com.craxiom.networksurvey.databinding.ContainerGrpcFragmentBinding
-import com.craxiom.networksurvey.databinding.ContainerMqttFragmentBinding
-import com.craxiom.networksurvey.databinding.ContainerMqttQrCodeShareFragmentBinding
 import com.craxiom.networksurvey.databinding.ContainerSettingsFragmentBinding
 import com.craxiom.networksurvey.databinding.ContainerTowerMapSettingsFragmentBinding
-import com.craxiom.networksurvey.databinding.ContainerUploadSettingsFragmentBinding
 import com.craxiom.networksurvey.databinding.ContainerWifiDetailsFragmentBinding
 import com.craxiom.networksurvey.databinding.ContainerWifiSpectrumFragmentBinding
 import com.craxiom.networksurvey.fragments.BLUETOOTH_DATA_KEY
 import com.craxiom.networksurvey.fragments.BluetoothDetailsFragment
-import com.craxiom.networksurvey.fragments.MqttFragment
 import com.craxiom.networksurvey.fragments.WifiDetailsFragment
 import com.craxiom.networksurvey.fragments.WifiSpectrumFragment
-import com.craxiom.networksurvey.fragments.model.MqttConnectionSettings
 import com.craxiom.networksurvey.model.WifiNetwork
 import com.craxiom.networksurvey.ui.acknowledgments.AcknowledgmentsScreen
 import com.craxiom.networksurvey.ui.activesurvey.SurveyMonitorScreen
@@ -47,13 +40,9 @@ import com.craxiom.networksurvey.ui.cellular.model.ServingCellInfo
 import com.craxiom.networksurvey.ui.cellular.towermap.ProviderColorOverrideScreen
 import com.craxiom.networksurvey.ui.cellular.towermap.ProviderColorOverrideViewModel
 import com.craxiom.networksurvey.ui.engparam.EngineeringParamsScreen
-import com.craxiom.networksurvey.ui.grpc.GrpcHelpDialog
 import com.craxiom.networksurvey.ui.speedtest.SpeedTestScreen
 import com.craxiom.networksurvey.ui.main.appbar.AppBarAction
 import com.craxiom.networksurvey.ui.main.appbar.TitleBar
-import com.craxiom.networksurvey.ui.mqtt.MqttHelpDialog
-import com.craxiom.networksurvey.ui.nsanalytics.NsAnalyticsConnectionScreen
-import com.craxiom.networksurvey.ui.nsanalytics.NsAnalyticsConnectionViewModel
 import com.craxiom.networksurvey.ui.oui.OuiLookupScreen
 import com.craxiom.networksurvey.ui.plmn.PlmnDetailsScreen
 import com.craxiom.networksurvey.ui.plmn.PlmnLookupScreen
@@ -84,43 +73,6 @@ fun NavGraphBuilder.mainGraph(
                 mainNavController = mainNavController,
                 sharedViewModel = sharedViewModel,
                 rootDiag = rootDiag,
-            )
-        }
-
-        composable(
-            NavDrawerOption.NsAnalyticsConnection.name,
-            deepLinks = listOf(
-                navDeepLink {
-                    uriPattern = "https://networksurvey.app/app/register"
-                }
-            )
-        ) {
-            val viewModel: NsAnalyticsConnectionViewModel = viewModel()
-            NsAnalyticsConnectionScreen(
-                viewModel = viewModel,
-                onNavigateUp = { mainNavController.navigateUp() }
-            )
-        }
-
-        composable(
-            NavDrawerOption.ServerConnection.name,
-            deepLinks = listOf(navDeepLink {
-                uriPattern = "http://craxiom.com/grpc_server_connection"
-            })
-        ) {
-            GrpcFragmentInCompose(mainNavController)
-        }
-
-        composable(NavDrawerOption.MqttBrokerConnection.name)
-        {
-            val mqttConnectionSettings =
-                mainNavController.previousBackStackEntry?.savedStateHandle?.get<MqttConnectionSettings>(
-                    MqttConnectionSettings.KEY
-                )
-
-            MqttFragmentInCompose(
-                mqttConnectionSettings = mqttConnectionSettings,
-                mainNavController = mainNavController
             )
         }
 
@@ -184,10 +136,6 @@ fun NavGraphBuilder.mainGraph(
         }
 
         // --------- Deeper navigation (beyond the nav drawer) --------- //
-
-        composable(NavOption.UploadSettings.name) {
-            CommunityUploadSettingsFragmentInCompose(mainNavController)
-        }
 
         composable(NavOption.TowerMapSettings.name) {
             TowerMapSettingsFragmentInCompose(mainNavController)
@@ -260,10 +208,6 @@ fun NavGraphBuilder.mainGraph(
             )
         }
 
-        composable(NavOption.QrCodeShare.name) {
-            QrCodeShareInCompose(mainNavController)
-        }
-
         composable(NavOption.TowerMap.name) {
             val subscriptionId = mainNavController.previousBackStackEntry?.savedStateHandle
                 ?.get<Int>(ServingCellInfo.SUBSCRIPTION_KEY)
@@ -322,9 +266,6 @@ fun NavGraphBuilder.mainGraph(
 
 enum class NavDrawerOption {
     None,
-    NsAnalyticsConnection,
-    ServerConnection,
-    MqttBrokerConnection,
     CellularCalculators,
     OuiLookup,
     PlmnLookup,
@@ -342,9 +283,7 @@ enum class NavDrawerOption {
 }
 
 enum class NavOption {
-    UploadSettings,
     TowerMapSettings,
-    QrCodeShare,
     TowerMap,
     RoadCoverage,
     BandLock,
@@ -361,76 +300,6 @@ enum class NavOption {
     WatchlistHistory,
     WatchlistHistoryDetail,
     ColorPalette
-}
-
-@Composable
-fun GrpcFragmentInCompose(mainNavController: NavHostController) {
-    var showHelpDialog by remember { mutableStateOf(false) }
-
-    if (showHelpDialog) {
-        GrpcHelpDialog(onDismissRequest = { showHelpDialog = false })
-    }
-
-    Scaffold(
-        topBar = {
-            TitleBar(
-                title = "gRPC 连接",
-                onBackClick = { mainNavController.navigateUp() },
-                appBarActions = listOf(
-                    AppBarAction(
-                        icon = R.drawable.ic_help,
-                        description = R.string.grpc_help_description,
-                        onClick = { showHelpDialog = true }
-                    )
-                )
-            )
-        },
-        popupHost = { },
-    ) { innerPadding ->
-        AndroidViewBinding(
-            ContainerGrpcFragmentBinding::inflate,
-            modifier = Modifier.padding(innerPadding)
-        ) {
-        }
-    }
-}
-
-@Suppress("AssignedValueIsNeverRead")
-@Composable
-fun MqttFragmentInCompose(
-    mqttConnectionSettings: MqttConnectionSettings?,
-    mainNavController: NavHostController
-) {
-    var showHelpDialog by remember { mutableStateOf(false) }
-
-    if (showHelpDialog) {
-        MqttHelpDialog(onDismissRequest = { showHelpDialog = false })
-    }
-
-    Scaffold(
-        topBar = {
-            TitleBar(
-                title = "MQTT 代理",
-                onBackClick = { mainNavController.navigateUp() },
-                appBarActions = listOf(
-                    AppBarAction(
-                        icon = R.drawable.ic_help,
-                        description = R.string.mqtt_help_description,
-                        onClick = { showHelpDialog = true }
-                    )
-                )
-            )
-        },
-        popupHost = { },
-    ) { innerPadding ->
-        AndroidViewBinding(
-            ContainerMqttFragmentBinding::inflate,
-            modifier = Modifier.padding(innerPadding)
-        ) {
-            val fragment: MqttFragment? = mqttFragmentContainerView.getFragment()
-            fragment?.setMqttConnectionSettings(mqttConnectionSettings)
-        }
-    }
 }
 
 @Composable
@@ -475,20 +344,6 @@ fun ColorPaletteInCompose(mainNavController: NavHostController) {
 }
 
 @Composable
-fun CommunityUploadSettingsFragmentInCompose(mainNavController: NavHostController) {
-    Scaffold(
-        topBar = { TitleBar("社区上传设置") { mainNavController.navigateUp() } },
-        popupHost = { },
-    ) { innerPadding ->
-        AndroidViewBinding(
-            ContainerUploadSettingsFragmentBinding::inflate,
-            modifier = Modifier.padding(paddingValues = innerPadding)
-        ) {
-        }
-    }
-}
-
-@Composable
 fun TowerMapSettingsFragmentInCompose(mainNavController: NavHostController) {
     Scaffold(
         topBar = { TitleBar("塔图设置") { mainNavController.navigateUp() } },
@@ -496,21 +351,6 @@ fun TowerMapSettingsFragmentInCompose(mainNavController: NavHostController) {
     ) { innerPadding ->
         AndroidViewBinding(
             ContainerTowerMapSettingsFragmentBinding::inflate,
-            modifier = Modifier.padding(paddingValues = innerPadding)
-        ) {
-        }
-    }
-}
-
-@Composable
-fun QrCodeShareInCompose(mainNavController: NavHostController) {
-    Scaffold(
-        // TODO When navigating back the current settings are lost if they have not been saved, fix this
-        topBar = { TitleBar("二维码分享") { mainNavController.navigateUp() } },
-        popupHost = { },
-    ) { innerPadding ->
-        AndroidViewBinding(
-            ContainerMqttQrCodeShareFragmentBinding::inflate,
             modifier = Modifier.padding(paddingValues = innerPadding)
         ) {
         }

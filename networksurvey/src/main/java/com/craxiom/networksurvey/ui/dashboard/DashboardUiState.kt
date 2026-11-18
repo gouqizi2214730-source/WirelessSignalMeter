@@ -1,7 +1,5 @@
 package com.craxiom.networksurvey.ui.dashboard
 
-import com.craxiom.mqttlibrary.connection.ConnectionState
-import com.craxiom.networksurvey.model.SurveyTypes
 import com.craxiom.networksurvey.util.LocationStatusHelper.LocationState
 
 /**
@@ -12,16 +10,6 @@ data class BatteryUiState(
     val isPaused: Boolean = false,
     val batteryLevel: Int = -1,
     val batteryThreshold: Int = 0,
-)
-
-/**
- * UI state for the queue backpressure/MQTT drop card.
- */
-data class QueueUiState(
-    val visible: Boolean = false,
-    val isPaused: Boolean = false,
-    val isDropping: Boolean = false,
-    val isUnderMdmControl: Boolean = false,
 )
 
 /**
@@ -47,68 +35,6 @@ data class LoggingUiState(
     val bluetoothEnabled: Boolean = false,
     val gnssEnabled: Boolean = false,
     val cdrEnabled: Boolean = false,
-)
-
-/**
- * UI state for the MQTT status card.
- */
-data class MqttUiState(
-    val connectionState: ConnectionState = ConnectionState.DISCONNECTED,
-    val cellularStreamEnabled: Boolean = false,
-    val phoneStateStreamEnabled: Boolean = false,
-    val wifiStreamEnabled: Boolean = false,
-    val bluetoothStreamEnabled: Boolean = false,
-    val gnssStreamEnabled: Boolean = false,
-    val deviceStatusStreamEnabled: Boolean = false,
-    val isMqttToggleHiddenByMdm: Boolean = false,
-)
-
-/**
- * UI state for the community upload card.
- */
-data class UploadUiState(
-    val visible: Boolean = true,
-    val scanningActive: Boolean = false,
-    val cellularQueueCount: Int = -1,
-    val wifiQueueCount: Int = -1,
-    val uploadButtonEnabled: Boolean = false,
-    val autoUploadEnabled: Boolean = false,
-    val activeSurveys: Set<SurveyTypes> = emptySet(),
-    val uploadProgress: UploadProgressState = UploadProgressState.Hidden,
-)
-
-/**
- * Represents upload progress states.
- */
-sealed class UploadProgressState {
-    data object Hidden : UploadProgressState()
-    data class InProgress(
-        val progress: Int = 0,
-        val maxProgress: Int = 100,
-        val statusMessage: String = "",
-    ) : UploadProgressState()
-
-    data class Finished(
-        val cancelled: Boolean = false,
-        val ocidResult: String = "",
-        val beaconDbResult: String = "",
-        val ocidResultMessage: String = "",
-        val beaconDbResultMessage: String = "",
-    ) : UploadProgressState()
-}
-
-/**
- * UI state for the NS Analytics card.
- */
-data class NsAnalyticsUiState(
-    val visible: Boolean = false,
-    val isSurveyActive: Boolean = false,
-    val surveyStartTime: Long = 0L,
-    val cellularCount: Int = 0,
-    val wifiCount: Int = 0,
-    val bluetoothCount: Int = 0,
-    val gnssCount: Int = 0,
-    val phoneStateCount: Int = 0,
 )
 
 /**
@@ -139,6 +65,4 @@ sealed class DashboardEvent {
     data object ShowBatteryOptimizationDialog : DashboardEvent()
     data object ShowBluetoothPermissionRationale : DashboardEvent()
     data class ShowCdrPermissionRationale(val isRequired: Boolean) : DashboardEvent()
-    data object ShowUploadDialog : DashboardEvent()
-    data object ShowDisableQueueLimitDialog : DashboardEvent()
 }

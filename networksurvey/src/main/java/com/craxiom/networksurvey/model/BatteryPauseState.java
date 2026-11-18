@@ -29,10 +29,6 @@ public class BatteryPauseState implements Parcelable
     private boolean wasGnssLoggingEnabled;
     private boolean wasCdrLoggingEnabled;
 
-    // Connection states
-    private boolean wasMqttConnectionActive;
-    private boolean wasGrpcConnectionActive;
-
     // Device status state
     private boolean wasDeviceStatusActive;
 
@@ -47,8 +43,6 @@ public class BatteryPauseState implements Parcelable
     private static final String KEY_BLUETOOTH_LOGGING = "bluetooth_logging";
     private static final String KEY_GNSS_LOGGING = "gnss_logging";
     private static final String KEY_CDR_LOGGING = "cdr_logging";
-    private static final String KEY_MQTT_CONNECTION = "mqtt_connection";
-    private static final String KEY_GRPC_CONNECTION = "grpc_connection";
     private static final String KEY_DEVICE_STATUS = "device_status";
 
     /**
@@ -74,8 +68,6 @@ public class BatteryPauseState implements Parcelable
         wasBluetoothLoggingEnabled = in.readByte() != 0;
         wasGnssLoggingEnabled = in.readByte() != 0;
         wasCdrLoggingEnabled = in.readByte() != 0;
-        wasMqttConnectionActive = in.readByte() != 0;
-        wasGrpcConnectionActive = in.readByte() != 0;
         wasDeviceStatusActive = in.readByte() != 0;
     }
 
@@ -92,8 +84,6 @@ public class BatteryPauseState implements Parcelable
         dest.writeByte((byte) (wasBluetoothLoggingEnabled ? 1 : 0));
         dest.writeByte((byte) (wasGnssLoggingEnabled ? 1 : 0));
         dest.writeByte((byte) (wasCdrLoggingEnabled ? 1 : 0));
-        dest.writeByte((byte) (wasMqttConnectionActive ? 1 : 0));
-        dest.writeByte((byte) (wasGrpcConnectionActive ? 1 : 0));
         dest.writeByte((byte) (wasDeviceStatusActive ? 1 : 0));
     }
 
@@ -138,9 +128,8 @@ public class BatteryPauseState implements Parcelable
             json.put(KEY_BLUETOOTH_LOGGING, wasBluetoothLoggingEnabled);
             json.put(KEY_GNSS_LOGGING, wasGnssLoggingEnabled);
             json.put(KEY_CDR_LOGGING, wasCdrLoggingEnabled);
-            json.put(KEY_MQTT_CONNECTION, wasMqttConnectionActive);
-            json.put(KEY_GRPC_CONNECTION, wasGrpcConnectionActive);
             json.put(KEY_DEVICE_STATUS, wasDeviceStatusActive);
+
             return json.toString();
         } catch (JSONException e)
         {
@@ -177,8 +166,6 @@ public class BatteryPauseState implements Parcelable
             state.wasBluetoothLoggingEnabled = json.optBoolean(KEY_BLUETOOTH_LOGGING, false);
             state.wasGnssLoggingEnabled = json.optBoolean(KEY_GNSS_LOGGING, false);
             state.wasCdrLoggingEnabled = json.optBoolean(KEY_CDR_LOGGING, false);
-            state.wasMqttConnectionActive = json.optBoolean(KEY_MQTT_CONNECTION, false);
-            state.wasGrpcConnectionActive = json.optBoolean(KEY_GRPC_CONNECTION, false);
             state.wasDeviceStatusActive = json.optBoolean(KEY_DEVICE_STATUS, false);
 
             return state;
@@ -199,8 +186,7 @@ public class BatteryPauseState implements Parcelable
         return wasCellularScanningActive || wasWifiScanningActive || wasBluetoothScanningActive ||
                 wasGnssScanningActive || wasCdrScanningActive || wasCellularLoggingEnabled ||
                 wasWifiLoggingEnabled || wasBluetoothLoggingEnabled || wasGnssLoggingEnabled ||
-                wasCdrLoggingEnabled || wasMqttConnectionActive || wasGrpcConnectionActive ||
-                wasDeviceStatusActive;
+                wasCdrLoggingEnabled || wasDeviceStatusActive;
     }
 
     /**
@@ -218,8 +204,6 @@ public class BatteryPauseState implements Parcelable
         wasBluetoothLoggingEnabled = false;
         wasGnssLoggingEnabled = false;
         wasCdrLoggingEnabled = false;
-        wasMqttConnectionActive = false;
-        wasGrpcConnectionActive = false;
         wasDeviceStatusActive = false;
     }
 
@@ -322,26 +306,6 @@ public class BatteryPauseState implements Parcelable
     public void setWasCdrLoggingEnabled(boolean wasCdrLoggingEnabled)
     {
         this.wasCdrLoggingEnabled = wasCdrLoggingEnabled;
-    }
-
-    public boolean wasMqttConnectionActive()
-    {
-        return wasMqttConnectionActive;
-    }
-
-    public void setWasMqttConnectionActive(boolean wasMqttConnectionActive)
-    {
-        this.wasMqttConnectionActive = wasMqttConnectionActive;
-    }
-
-    public boolean wasGrpcConnectionActive()
-    {
-        return wasGrpcConnectionActive;
-    }
-
-    public void setWasGrpcConnectionActive(boolean wasGrpcConnectionActive)
-    {
-        this.wasGrpcConnectionActive = wasGrpcConnectionActive;
     }
 
     public boolean wasDeviceStatusActive()

@@ -45,8 +45,6 @@ import com.craxiom.networksurvey.ui.component.statustag.StatusTag
 fun MainHeroStatusCard(
     loggingState: LoggingUiState,
     locationState: LocationUiState,
-    mqttState: MqttUiState,
-    nsAnalyticsState: NsAnalyticsUiState,
     onCellularClick: () -> Unit,
     onWifiClick: () -> Unit,
     onBluetoothClick: () -> Unit,
@@ -188,7 +186,7 @@ fun MainHeroStatusCard(
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "${nsAnalyticsState.cellularCount} 条记录",
+                        text = "蜂窝测量模组",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -224,7 +222,7 @@ fun MainHeroStatusCard(
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "${nsAnalyticsState.wifiCount} 个 AP",
+                        text = "Wi-Fi 热点扫描",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -265,7 +263,7 @@ fun MainHeroStatusCard(
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "${nsAnalyticsState.bluetoothCount} 个设备",
+                        text = "蓝牙设备扫描",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -301,7 +299,7 @@ fun MainHeroStatusCard(
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "${nsAnalyticsState.gnssCount} 颗在用",
+                        text = if (hasGpsFix) "GNSS 已定位" else "GNSS 搜星中",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

@@ -1,6 +1,7 @@
 package com.craxiom.networksurvey.logging;
 
 import android.os.Looper;
+import android.text.TextUtils;
 
 import com.craxiom.messaging.CdmaRecord;
 import com.craxiom.messaging.CdmaRecordData;
@@ -31,7 +32,6 @@ import com.craxiom.networksurvey.gpstest.util.MathUtils;
 import com.craxiom.networksurvey.listeners.ICellularSurveyRecordListener;
 import com.craxiom.networksurvey.services.NetworkSurveyService;
 import com.craxiom.networksurvey.util.NsUtils;
-import com.google.common.base.Strings;
 
 import java.sql.SQLException;
 import java.util.LinkedList;
@@ -798,7 +798,7 @@ public class CellularSurveyRecordLogger extends SurveyRecordLogger implements IC
                         }
 
                         final String provider = data.getProvider();
-                        if (!Strings.isNullOrEmpty(provider))
+                        if (!TextUtils.isEmpty(provider))
                         {
                             row.setValue(NrMessageConstants.PROVIDER_COLUMN, provider);
                         }

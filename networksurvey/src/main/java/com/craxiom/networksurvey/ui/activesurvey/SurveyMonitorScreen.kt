@@ -1,6 +1,5 @@
 package com.craxiom.networksurvey.ui.activesurvey
 
-import android.content.SharedPreferences
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
@@ -40,8 +39,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
-import com.craxiom.networksurvey.ui.component.material.ExpressiveSwitch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -68,12 +65,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.core.content.edit
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.preference.PreferenceManager
 import com.craxiom.networksurvey.R
-import com.craxiom.networksurvey.constants.NetworkSurveyConstants
 import com.craxiom.networksurvey.ui.activesurvey.model.ActiveSurveyState
 import com.craxiom.networksurvey.ui.cellular.baidumap.BaiduTowerMapScreen
 import com.craxiom.networksurvey.ui.cellular.model.ServingCellInfo
@@ -91,59 +85,13 @@ fun SurveyMonitorScreen(
 ) {
     val surveyState by viewModel.surveyState.collectAsStateWithLifecycle()
     val servingCellInfo by viewModel.servingCellInfo.collectAsStateWithLifecycle()
-    val isNewTowerDetected by viewModel.isNewTowerDetected.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
-
-    // New tower alert states - load from SharedPreferences
-    val prefs = remember { PreferenceManager.getDefaultSharedPreferences(context) }
-    var isNewTowerAlertsEnabled by remember {
-        mutableStateOf(
-            prefs.getBoolean(
-                NetworkSurveyConstants.PROPERTY_NEW_TOWER_ALERTS_ENABLED,
-                false
-            )
-        )
-    }
-
-    // Observe preference changes to keep UI in sync with global preference
-    DisposableEffect(Unit) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == NetworkSurveyConstants.PROPERTY_NEW_TOWER_ALERTS_ENABLED) {
-                isNewTowerAlertsEnabled = prefs.getBoolean(key, false)
-            }
-        }
-        prefs.registerOnSharedPreferenceChangeListener(listener)
-        onDispose {
-            prefs.unregisterOnSharedPreferenceChangeListener(listener)
-        }
-    }
 
     var selectedTab by remember { mutableIntStateOf(0) }
 
     // Handle service connection
     ServiceConnectionHandler(viewModel)
-
-    // Initialize TowerDetectionManager with context
-    LaunchedEffect(Unit) {
-        viewModel.initializeTowerDetectionManager(context)
-    }
-
-    // Check for new towers for UI visual feedback only (NEW badge)
-    // Notifications are handled by NetworkSurveyService
-    LaunchedEffect(servingCellInfo, surveyState.isUploadActive) {
-        // Only check for UI feedback when upload scanning is active
-        val shouldCheckForNewTowers = surveyState.isUploadActive
-
-        viewModel.checkServingCellForNewTower(
-            servingCellInfo = servingCellInfo,
-            isNewTowerAlertsEnabled = shouldCheckForNewTowers,
-            onNewTowerDetected = {
-                // UI feedback is handled by the isNewTowerDetected state
-                // Notifications are now handled by the service
-            }
-        )
-    }
 
     // Keep screen always on when viewing Survey Monitor
     val view = LocalView.current
@@ -194,17 +142,6 @@ fun SurveyMonitorScreen(
                     SurveyStatusTab(
                         surveyState = surveyState,
                         servingCellInfo = servingCellInfo,
-                        isNewTowerAlertsEnabled = isNewTowerAlertsEnabled,
-                        onNewTowerAlertsToggle = { enabled ->
-                            // Update the preference (UI will update via the listener)
-                            prefs.edit {
-                                putBoolean(
-                                    NetworkSurveyConstants.PROPERTY_NEW_TOWER_ALERTS_ENABLED,
-                                    enabled
-                                )
-                            }
-                        },
-                        isNewTowerDetected = isNewTowerDetected,
                         modifier = Modifier.fillMaxSize()
                     )
                 }
@@ -253,14 +190,8 @@ private fun ActiveSurveyTopBar(
 private fun SurveyStatusTab(
     surveyState: ActiveSurveyState,
     servingCellInfo: ServingCellInfo?,
-    isNewTowerAlertsEnabled: Boolean,
-    onNewTowerAlertsToggle: (Boolean) -> Unit,
-    isNewTowerDetected: Boolean,
     modifier: Modifier = Modifier
 ) {
-    // State for New Tower Alerts help dialog
-    var showNewTowerAlertsHelpDialog by remember { mutableStateOf(false) }
-
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -281,8 +212,7 @@ private fun SurveyStatusTab(
                 modifier = Modifier.padding(bottom = 16.dp)
             ) {
                 CompactSurveyStatusIndicator(
-                    isActive = surveyState.isAnyActive,
-                    isNewTowerDetected = isNewTowerDetected
+                    isActive = surveyState.isAnyActive
                 )
 
                 Text(
@@ -311,7 +241,7 @@ private fun SurveyStatusTab(
         // Spacer to push bottom content down
         Spacer(modifier = Modifier.weight(1f))
 
-        // Bottom Section - Serving Cell and Alerts (only show when survey is active)
+        // Bottom Section - Serving Cell (only show when survey is active)
         if (surveyState.isAnyActive) {
             Column(
                 modifier = Modifier
@@ -322,173 +252,10 @@ private fun SurveyStatusTab(
                 // Serving Cell Card with enhanced styling
                 ServingCellCard(
                     servingCellInfo = servingCellInfo,
-                    isNewTowerDetected = isNewTowerDetected,
                     modifier = Modifier
                 )
-
-                // New Tower Alerts integrated with bottom section
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    colors = CardDefaults.defaultColors(
-                        color = MaterialTheme.colorScheme.surfaceContainerLow
-                    ),
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_cell_tower),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp),
-                                    tint = if (isNewTowerAlertsEnabled && surveyState.isUploadActive) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    }
-                                )
-                                Text(
-                                    text = "新基站提醒",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.Medium,
-                                    color = if (surveyState.isUploadActive) {
-                                        MaterialTheme.colorScheme.onSurface
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    }
-                                )
-                                IconButton(
-                                    onClick = { showNewTowerAlertsHelpDialog = true },
-                                    modifier = Modifier.size(24.dp)
-                                ) {
-                                    Icon(
-                                        painter = painterResource(id = R.drawable.ic_info),
-                                        contentDescription = "Help",
-                                        modifier = Modifier.size(16.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            if (!surveyState.isUploadActive) {
-                                Text(
-                                    text = "需要开启上传扫描",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                    modifier = Modifier.padding(top = 4.dp, start = 28.dp)
-                                )
-                            } else if (isNewTowerAlertsEnabled) {
-                                Text(
-                                    text = "检测到新基站时发出提醒",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(top = 4.dp, start = 28.dp)
-                                )
-                            }
-                        }
-                        ExpressiveSwitch(
-                            checked = isNewTowerAlertsEnabled,
-                            onCheckedChange = onNewTowerAlertsToggle,
-                            enabled = surveyState.isUploadActive,
-                            modifier = Modifier.padding(start = 8.dp)
-                        )
-                    }
-                }
             }
         }
-    }
-
-    // New Tower Alerts Help Dialog
-    if (showNewTowerAlertsHelpDialog) {
-        AlertDialog(
-            onDismissRequest = { showNewTowerAlertsHelpDialog = false },
-            title = {
-                Text(
-                    text = stringResource(R.string.new_tower_alerts_help_title),
-                    style = MaterialTheme.typography.headlineSmall
-                )
-            },
-            text = {
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // What are New Tower Alerts?
-                    Column {
-                        Text(
-                            text = stringResource(R.string.new_tower_alerts_what),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = stringResource(R.string.new_tower_alerts_what_desc),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-
-                    // How it works
-                    Column {
-                        Text(
-                            text = stringResource(R.string.new_tower_alerts_how),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = stringResource(R.string.new_tower_alerts_how_desc),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-
-                    // Requirements
-                    Column {
-                        Text(
-                            text = stringResource(R.string.new_tower_alerts_requirements),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = stringResource(R.string.new_tower_alerts_requirements_desc),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-
-                    // Benefits
-                    Column {
-                        Text(
-                            text = stringResource(R.string.new_tower_alerts_benefits),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = stringResource(R.string.new_tower_alerts_benefits_desc),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showNewTowerAlertsHelpDialog = false }) {
-                    Text(stringResource(R.string.help_dialog_got_it))
-                }
-            }
-        )
     }
 }
 
@@ -513,118 +280,9 @@ private data class Particle(
     val velocity: Float
 )
 
-@Composable
-private fun SurveyStatusIndicator(
-    isActive: Boolean,
-    modifier: Modifier = Modifier
-) {
-    // Particle system state
-    val particles = remember {
-        List(12) {  // Reduced from 20 to 12 for better performance
-            Particle(
-                initialY = (0..100).random() / 100f,
-                x = (10..90).random() / 100f,  // Wider distribution
-                size = (4..8).random() / 100f,
-                velocity = (12..24).random() / 100f  // 8x faster than original
-            )
-        }
-    }
-
-    // Animation time state - this drives the animation
-    var animationTime by remember { mutableFloatStateOf(0f) }
-    var fallTime by remember { mutableFloatStateOf(0f) }
-
-    // Animate based on active state
-    LaunchedEffect(isActive) {
-        if (isActive) {
-            // Reset fall time when becoming active
-            fallTime = 0f
-            // Continue from current animation time
-            while (isActive) {
-                animationTime += 0.033f // ~30 FPS (33ms per frame) for better performance
-                kotlinx.coroutines.delay(33)
-            }
-        } else {
-            // When stopped, animate particles falling
-            repeat(50) {  // Reduced iterations since we have longer delays
-                fallTime += 0.033f
-                kotlinx.coroutines.delay(33)
-            }
-        }
-    }
-
-    // Colors
-    val primaryColor = MaterialTheme.colorScheme.primary
-    val errorColor = MaterialTheme.colorScheme.error
-
-    Box(
-        modifier = modifier
-            .size(width = 180.dp, height = 240.dp),
-        contentAlignment = Alignment.BottomCenter
-    ) {
-
-        // Canvas for particles
-        Canvas(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            val width = size.width
-            val height = size.height
-
-            particles.forEach { particle ->
-                val xPos = width * particle.x
-                val particleSize = width * particle.size
-
-                // Calculate Y position based on animation state
-                val yPos = if (isActive) {
-                    // Moving upward: calculate position based on time and velocity
-                    val distance = animationTime * particle.velocity
-                    val currentY = (particle.initialY - distance) % 1f
-                    val wrappedY = if (currentY < 0) currentY + 1f else currentY
-                    height * wrappedY
-                } else {
-                    // Falling down: particles settle at bottom
-                    val fallY = particle.initialY + (fallTime * particle.velocity * 4)
-                    height * minOf(fallY, 0.95f)
-                }
-
-                // Draw particle with simplified trail effect
-                if (isActive && yPos < height * 0.9f) {
-                    // Simplified trail - only 2 circles instead of 5
-                    drawCircle(
-                        color = primaryColor.copy(alpha = 0.1f),
-                        radius = particleSize / 2,
-                        center = Offset(xPos, yPos + particleSize)
-                    )
-                    drawCircle(
-                        color = primaryColor.copy(alpha = 0.05f),
-                        radius = particleSize / 2,
-                        center = Offset(xPos, yPos + (2 * particleSize))
-                    )
-                }
-
-                // Main particle
-                val normalizedY = yPos / height
-                drawCircle(
-                    color = if (isActive) {
-                        primaryColor.copy(alpha = 1f - normalizedY)
-                    } else {
-                        errorColor.copy(alpha = 0.3f)
-                    },
-                    radius = particleSize / 2,
-                    center = Offset(xPos, yPos)
-                )
-
-                // Glow effect removed for better performance
-            }
-        }
-
-    }
-}
-
-
 /**
  * A full width row that shows the current Mission ID with a copy button. The Mission ID identifies
- * the survey session and is what the user uses to find this survey's data in NS Analytics.
+ * the survey session and is what the user uses to find this survey's data.
  */
 @Composable
 private fun MissionIdRow(
@@ -699,9 +357,6 @@ private fun SurveyStatistics(
 
     // Get total records from session with animation
     val totalRecords = viewModel.getSurveySessionRecordCount()
-    val uploadRecords = viewModel.getSurveySessionUploadRecordCount()
-    val isUploadActive = surveyState.isUploadActive
-    val hasNonUploadSurvey = surveyState.hasNonUploadSurvey
     val activeSurveyTypes = surveyState.activeSurveyTypes
 
     // Animated values for smooth transitions
@@ -709,11 +364,6 @@ private fun SurveyStatistics(
         targetValue = totalRecords,
         animationSpec = tween(300),
         label = "total_records"
-    )
-    val animatedUploadRecords by animateIntAsState(
-        targetValue = uploadRecords,
-        animationSpec = tween(300),
-        label = "upload_records"
     )
 
     // State for help dialogs
@@ -755,12 +405,14 @@ private fun SurveyStatistics(
             MissionIdRow(missionId = surveyState.missionId)
         }
 
-        // Statistics Cards Grid
-        // Show different layouts based on active survey types
-        if (hasNonUploadSurvey && isUploadActive) {
-            // Both survey types active - show only Time Elapsed card
+        // Statistics Cards Grid - show Time Elapsed and Records side by side
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Elapsed Time Card
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.weight(1f),
                 colors = CardDefaults.defaultColors(
                     color = MaterialTheme.colorScheme.surfaceContainer
                 )
@@ -794,223 +446,32 @@ private fun SurveyStatistics(
                     }
                 }
             }
-        } else {
-            // Single survey type active - show Time Elapsed and Records side by side
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Elapsed Time Card
-                Card(
-                    modifier = Modifier.weight(1f),
-                    colors = CardDefaults.defaultColors(
-                        color = MaterialTheme.colorScheme.surfaceContainer
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "已用时长",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        AnimatedContent(
-                            targetState = formatElapsedTime(elapsedSeconds),
-                            transitionSpec = {
-                                fadeIn(animationSpec = tween(300)) togetherWith
-                                        fadeOut(animationSpec = tween(300))
-                            },
-                            label = "elapsed_time"
-                        ) { time ->
-                            Text(
-                                text = time,
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
 
-                // Records Card (show either total or upload based on survey type)
-                if (hasNonUploadSurvey || isUploadActive) {
-                    Card(
-                        modifier = Modifier.weight(1f),
-                        colors = CardDefaults.defaultColors(
-                            color = if (isUploadActive && !hasNonUploadSurvey) {
-                                MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
-                            } else {
-                                MaterialTheme.colorScheme.surfaceContainer
-                            }
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            // Removed icon to match Time Elapsed card height
-                            Text(
-                                text = if (isUploadActive && !hasNonUploadSurvey) {
-                                    stringResource(R.string.ready_for_upload_label)
-                                } else {
-                                    stringResource(R.string.records_captured_label)
-                                },
-                                style = MaterialTheme.typography.labelLarge,
-                                color = if (isUploadActive && !hasNonUploadSurvey) {
-                                    MaterialTheme.colorScheme.onTertiaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                }
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = String.format(
-                                    "%,d",
-                                    if (isUploadActive && !hasNonUploadSurvey) {
-                                        animatedUploadRecords
-                                    } else {
-                                        animatedTotalRecords
-                                    }
-                                ),
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isUploadActive && !hasNonUploadSurvey) {
-                                    MaterialTheme.colorScheme.tertiary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Show both counters if both survey types are active
-        if (hasNonUploadSurvey && isUploadActive) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Regular Records Mini Card
-                Card(
-                    modifier = Modifier.weight(1f),
-                    colors = CardDefaults.defaultColors(
-                        color = MaterialTheme.colorScheme.surfaceContainerLow
-                    ),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_schema),
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Column {
-                            Text(
-                                text = "已记录",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = String.format("%,d", animatedTotalRecords),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
-
-                // Upload Records Mini Card
-                Card(
-                    modifier = Modifier.weight(1f),
-                    colors = CardDefaults.defaultColors(
-                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.2f)
-                    ),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_upload_24),
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.tertiary
-                        )
-                        Column {
-                            Text(
-                                text = "待上传",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer
-                            )
-                            Text(
-                                text = String.format("%,d", animatedUploadRecords),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.tertiary
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // NS Analytics Status Card - show only when NS Analytics is active
-        if (surveyState.isNsAnalyticsActive && surveyState.nsAnalyticsInfo != null) {
+            // Records Card
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp),
+                modifier = Modifier.weight(1f),
                 colors = CardDefaults.defaultColors(
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
-                ),
+                    color = MaterialTheme.colorScheme.surfaceContainer
+                )
             ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_cloud_connection),
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.primary
+                    Text(
+                        text = stringResource(R.string.records_captured_label),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "NS Analytics",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Text(
-                            text = if (surveyState.nsAnalyticsInfo.isRegistered) {
-                                "队列待传: ${
-                                    String.format(
-                                        "%,d",
-                                        surveyState.nsAnalyticsInfo.queuedRecords
-                                    )
-                                }"
-                            } else {
-                                "未注册"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = String.format("%,d", animatedTotalRecords),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
             }
         }
@@ -1034,17 +495,10 @@ private fun SurveyStatistics(
                 Text(text = stringResource(R.string.help_dialog_title))
             },
             text = {
-                val helpText = if (hasNonUploadSurvey && isUploadActive) {
-                    // Both counts are shown
-                    stringResource(R.string.help_dialog_both_counts)
-                } else {
-                    // Only upload count is shown
-                    stringResource(R.string.help_dialog_upload_only)
-                }
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState())
                 ) {
-                    Text(text = helpText)
+                    Text(text = stringResource(R.string.help_dialog_total_count))
                 }
             },
             confirmButton = {
@@ -1066,7 +520,6 @@ private fun formatElapsedTime(seconds: Int): String {
 @Composable
 private fun CompactSurveyStatusIndicator(
     isActive: Boolean,
-    isNewTowerDetected: Boolean,
     modifier: Modifier = Modifier
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "status")
@@ -1093,12 +546,12 @@ private fun CompactSurveyStatusIndicator(
         label = "ripple"
     )
 
-    // Color animation for new tower detected
+    // Color animation
     val indicatorColor by animateColorAsState(
-        targetValue = when {
-            isNewTowerDetected -> MaterialTheme.colorScheme.tertiary
-            isActive -> MaterialTheme.colorScheme.primary
-            else -> MaterialTheme.colorScheme.error
+        targetValue = if (isActive) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.error
         },
         animationSpec = tween(600, easing = androidx.compose.animation.core.FastOutSlowInEasing),
         label = "color"
@@ -1166,41 +619,14 @@ private fun CompactSurveyStatusIndicator(
 @Composable
 private fun ServingCellCard(
     servingCellInfo: ServingCellInfo?,
-    isNewTowerDetected: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val borderColor by animateColorAsState(
-        targetValue = if (isNewTowerDetected) {
-            MaterialTheme.colorScheme.tertiary
-        } else {
-            Color.Transparent
-        },
-        animationSpec = tween(600),
-        label = "border"
-    )
-
-    val containerColor by animateColorAsState(
-        targetValue = if (isNewTowerDetected) {
-            MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.15f)
-        } else {
-            MaterialTheme.colorScheme.surfaceContainerHigh
-        },
-        animationSpec = tween(600),
-        label = "container"
-    )
-
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .then(
-                if (isNewTowerDetected) {
-                    Modifier.border(width = 2.dp, color = borderColor, shape = RoundedCornerShape(16.dp)
-                    )
-                } else Modifier
-            ),
+            .padding(horizontal = 16.dp),
         colors = CardDefaults.defaultColors(
-            color = containerColor
+            color = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     ) {
         Column(
@@ -1215,11 +641,7 @@ private fun ServingCellCard(
                     painter = painterResource(id = R.drawable.ic_cell_tower),
                     contentDescription = null,
                     modifier = Modifier.size(24.dp),
-                    tint = if (isNewTowerDetected) {
-                        MaterialTheme.colorScheme.tertiary
-                    } else {
-                        MaterialTheme.colorScheme.primary
-                    }
+                    tint = MaterialTheme.colorScheme.primary
                 )
                 Text(
                     text = "主服务小区",
@@ -1227,76 +649,6 @@ private fun ServingCellCard(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(start = 8.dp)
                 )
-                if (isNewTowerDetected) {
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    // Animated NEW badge with pulse effect
-                    val infiniteTransition = rememberInfiniteTransition(label = "new_badge")
-                    val scale by infiniteTransition.animateFloat(
-                        initialValue = 1f,
-                        targetValue = 1.1f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(
-                                2000,
-                                easing = androidx.compose.animation.core.EaseInOutCubic
-                            ),
-                            repeatMode = RepeatMode.Reverse
-                        ),
-                        label = "new_badge_scale"
-                    )
-                    val glowAlpha by infiniteTransition.animateFloat(
-                        initialValue = 0.3f,
-                        targetValue = 0.7f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(2000),
-                            repeatMode = RepeatMode.Reverse
-                        ),
-                        label = "new_badge_glow"
-                    )
-
-                    Box(contentAlignment = Alignment.Center) {
-                        // Glow effect
-                        Card(
-                            modifier = Modifier
-                                .graphicsLayer(
-                                    scaleX = scale * 1.2f,
-                                    scaleY = scale * 1.2f,
-                                    alpha = glowAlpha * 0.5f
-                                ),
-                            colors = CardDefaults.defaultColors(
-                                color = MaterialTheme.colorScheme.tertiary
-                            ),
-                        ) {
-                            Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                                Text(
-                                    text = "NEW",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.Transparent
-                                )
-                            }
-                        }
-
-                        // Main badge
-                        Card(
-                            modifier = Modifier.graphicsLayer(
-                                scaleX = scale,
-                                scaleY = scale
-                            ),
-                            colors = CardDefaults.defaultColors(
-                                color = MaterialTheme.colorScheme.tertiary
-                            ),
-                        ) {
-                            Text(
-                                text = "NEW",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onTertiary,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-                }
             }
 
             if (servingCellInfo?.servingCell != null) {

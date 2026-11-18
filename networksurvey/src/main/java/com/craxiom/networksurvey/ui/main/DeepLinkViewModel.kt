@@ -18,14 +18,6 @@ class DeepLinkViewModel : ViewModel() {
     val navigationDestination: StateFlow<String?> = _navigationDestination.asStateFlow()
 
     /**
-     * Trigger navigation to the NS Analytics screen.
-     * Called by the Activity when a valid NS Analytics deep link is received.
-     */
-    fun navigateToNsAnalytics() {
-        _navigationDestination.value = NavDrawerOption.NsAnalyticsConnection.name
-    }
-
-    /**
      * Trigger navigation to the Watchlist history screen.
      * Called by the Activity when a watchlist notification is tapped.
      */

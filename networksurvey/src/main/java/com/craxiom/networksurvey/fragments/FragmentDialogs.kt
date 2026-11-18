@@ -4,7 +4,6 @@ package com.craxiom.networksurvey.fragments
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
@@ -26,8 +25,6 @@ import java.util.function.IntConsumer
 private const val TAG_BLUETOOTH_PERMISSION = "BluetoothPermissionRationale"
 private const val TAG_BLUETOOTH_SORT = "BluetoothSort"
 private const val TAG_CELLULAR_INFO = "CellularInfo"
-private const val TAG_QR_TOO_LARGE = "QrCodeTooLarge"
-private const val TAG_DELETE_UPLOAD_DATA = "DeleteUploadData"
 private const val TAG_LOCATION_SERVICES_DISABLED = "LocationServicesDisabled"
 
 /**
@@ -98,39 +95,3 @@ fun showCellularInfo(fragmentManager: FragmentManager, title: String, message: C
     }
 }
 
-/**
- * Shows the non-cancelable error dialog when MQTT connection settings are too large for a QR code.
- * The provided action runs when the user acknowledges the dialog (it navigates back to the
- * connection screen).
- */
-fun showQrCodeTooLargeError(fragmentManager: FragmentManager, onAcknowledge: Runnable) {
-    ComposeDialogFragment.show(fragmentManager, TAG_QR_TOO_LARGE) { dismiss ->
-        NsMessageDialog(
-            title = stringResource(R.string.qr_code_data_too_large_title),
-            message = stringResource(R.string.qr_code_data_too_large_message),
-            onDismiss = {
-                onAcknowledge.run()
-                dismiss()
-            },
-            icon = Icons.Outlined.Warning,
-            iconTint = MaterialTheme.colorScheme.error,
-            cancelable = false,
-        )
-    }
-}
-
-/**
- * Shows the destructive confirmation dialog before deleting the record of uploaded survey data.
- */
-fun showDeleteUploadDataConfirmation(fragmentManager: FragmentManager, onDelete: Runnable) {
-    ComposeDialogFragment.show(fragmentManager, TAG_DELETE_UPLOAD_DATA) { dismiss ->
-        NsConfirmationDialog(
-            title = stringResource(R.string.delete_upload_data_confirm_title),
-            message = stringResource(R.string.delete_upload_data_confirm_message),
-            confirmText = stringResource(android.R.string.ok),
-            onConfirm = { onDelete.run() },
-            onDismiss = dismiss,
-            destructive = true,
-        )
-    }
-}

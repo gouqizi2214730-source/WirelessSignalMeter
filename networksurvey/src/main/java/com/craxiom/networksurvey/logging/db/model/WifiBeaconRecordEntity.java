@@ -9,8 +9,6 @@ public class WifiBeaconRecordEntity extends BaseRecordEntity
     @PrimaryKey(autoGenerate = true)
     public long id;
 
-    public boolean beaconDbUploaded = false;
-
     public String sourceAddress;
     public String destinationAddress;
     public String bssid;
