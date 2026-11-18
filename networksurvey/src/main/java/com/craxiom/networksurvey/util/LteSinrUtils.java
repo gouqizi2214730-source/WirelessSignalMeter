@@ -6,7 +6,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Reads LTE SINR in dB without replacing a valid CellInfo measurement with a signal snapshot.
+ * Compatibility reads for LTE SINR when the subscription's public API has no measurement.
  * Vendor accessors are optional: missing or restricted methods leave the measurement unavailable.
  */
 public final class LteSinrUtils
@@ -18,10 +18,9 @@ public final class LteSinrUtils
     private static final Pattern LTE_VALUE = Pattern.compile(
             "(?:^|[\\s{,;:])(?:m?rssnr|m?cellSinr|m?sinr|m?snr)\\s*=\\s*([+-]?\\d+)(?=$|[\\s},;])",
             Pattern.CASE_INSENSITIVE);
+    // Android ICU requires the literal closing brace to be escaped.
     private static final Pattern LTE_BLOCK = Pattern.compile(
-            "\\bmLte\\s*=\\s*CellSignalStrengthLte\\s*:\\s*(.*?)(?=[\\s,;]+m(?:Cdma|Gsm|Wcdma|Tdscdma|Nr)\\s*=|[\\s,;]+primary\\s*=|}\\s*$|$)");
-    private static final long MAX_SNAPSHOT_AGE_MS = 10_000;
-    private static final long MAX_SAMPLE_GAP_MS = 5_000;
+            "\\bmLte\\s*=\\s*CellSignalStrengthLte\\s*:\\s*(.*?)(?=[\\s,;]+m(?:Cdma|Gsm|Wcdma|Tdscdma|Nr)\\s*=|[\\s,;]+primary\\s*=|\\}\\s*$|$)");
 
     private LteSinrUtils()
     {
@@ -30,6 +29,15 @@ public final class LteSinrUtils
     public static boolean isValid(int sinr)
     {
         return sinr >= -20 && sinr <= 30;
+    }
+
+    /**
+     * Match Network Survey's public RSSNR missing-value check; do not guess a unit conversion.
+     * The narrower isValid range is reserved for optional vendor/reflection/text reads.
+     */
+    public static boolean isReported(int sinr)
+    {
+        return sinr != Integer.MIN_VALUE && sinr != UNAVAILABLE;
     }
 
     public static int read(int rssnr, Object lteSignalStrength)
@@ -50,25 +58,7 @@ public final class LteSinrUtils
     }
 
     /**
-     * A snapshot has no PCI. Borrow it only for a single LTE primary sampled nearby in time.
-     * RSRP is deliberately not an identity check: separate modem indications can differ by a dB.
-     */
-    public static boolean canUseSnapshot(boolean primaryServing, int eligibleLteCells,
-                                         long cellTimestampMs, long signalTimestampMs, long nowMs)
-    {
-        return primaryServing && eligibleLteCells == 1
-                && isRecent(cellTimestampMs, nowMs) && isRecent(signalTimestampMs, nowMs)
-                && Math.abs(cellTimestampMs - signalTimestampMs) <= MAX_SAMPLE_GAP_MS;
-    }
-
-    private static boolean isRecent(long timestampMs, long nowMs)
-    {
-        return timestampMs > 0 && timestampMs <= nowMs
-                && nowMs - timestampMs <= MAX_SNAPSHOT_AGE_MS;
-    }
-
-    /**
-     * The caller must enforce canUseSnapshot and reject snapshots containing multiple LTE samples.
+     * Call only for the same subscription's registered LTE primary when its public read is missing.
      * Modern nested LTE values are in dB. Old flat mLteRssnr fields can be in tenths, so skip them.
      */
     public static int readSnapshot(Object signalStrength)

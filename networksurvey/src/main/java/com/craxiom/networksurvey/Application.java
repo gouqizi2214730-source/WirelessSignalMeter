@@ -81,6 +81,9 @@ public class Application extends android.app.Application
         if (BuildConfig.DEBUG) Timber.plant(new Timber.DebugTree());
 
         mApp = this;
+        // Capture failures in preference migration and other startup work as well.
+        AppLogger.init(this);
+        AppLogger.i("App", "启动 v" + BuildConfig.VERSION_NAME + " device=" + Build.MANUFACTURER + " " + Build.MODEL + " API=" + Build.VERSION.SDK_INT);
         mPrefs = PreferenceManager.getDefaultSharedPreferences(this);
 
         CredentialSecureStorage.INSTANCE.migrateFromPlainTextIfNeeded(this);
@@ -116,22 +119,10 @@ public class Application extends android.app.Application
             @Override public void onActivityDestroyed(@NonNull Activity activity) {}
         });
 
-        // 应用日志埋点：崩溃接管 + 日志落盘 filesDir/logs/app.log（供「上传日志」上报）
-        try
-        {
-            AppLogger.INSTANCE.init(this);
-            AppLogger.INSTANCE.i("App", "启动 v" + BuildConfig.VERSION_NAME + " device=" + Build.MANUFACTURER + " " + Build.MODEL + " API=" + Build.VERSION.SDK_INT);
-        }
-        catch (Throwable t)
-        {
-            Timber.w(t, "AppLogger 初始化失败");
-        }
-
         // 注册更新下载完成广播（自动安装新版本）
         UpdateDownloader.INSTANCE.register(this);
 
-        // 百度地图 SDK + 腾讯瓦片代理放到后台线程初始化，避免阻塞主线程导致启动卡顿
-        // 百度 SDK 的 initialize 内部会加载 native 库，可能耗时 200-500ms
+        // Map SDK initialization is owned by BaiduMapView, before constructing a map.
         new Thread(() -> {
             try
             {
@@ -141,18 +132,7 @@ public class Application extends android.app.Application
             {
                 Timber.w(t, "TencentTileProxy 启动失败");
             }
-
-            try
-            {
-                com.baidu.mapapi.SDKInitializer.initialize(getApplicationContext());
-                com.baidu.mapapi.SDKInitializer.setAgreePrivacy(getApplicationContext(), true);
-                com.baidu.mapapi.SDKInitializer.setCoordType(com.baidu.mapapi.CoordType.BD09LL);
-            }
-            catch (Throwable t)
-            {
-                Timber.w(t, "百度地图 SDK 初始化失败");
-            }
-        }, "MapSdkInit").start();
+        }, "TileProxyInit").start();
     }
 
     @Override

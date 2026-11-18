@@ -12,6 +12,8 @@ import com.craxiom.networksurvey.R
 import com.craxiom.networksurvey.fragments.model.CellularViewModel
 import com.craxiom.networksurvey.model.CellularProtocol
 import com.craxiom.networksurvey.ui.cellular.CellularChartViewModel
+import com.craxiom.networksurvey.util.AndroidLteSinrReader
+import com.craxiom.networksurvey.util.LteSinrUtils
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineStart
@@ -202,6 +204,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
         val runs = collectorRuns.map { JSONObject(it.toString()) }
         val signalMode = lastSignalMode
         val androidNrBandwidth = lastAndroidNrBandwidth
+        val androidLteSinr = AndroidLteSinrReader.snapshot()
         val neighborTables = neighborTableDiagnostics(snapshot.records)
         val invalidLines = invalidLineCount
         withContext(Dispatchers.IO) {
@@ -223,6 +226,8 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 .put("invalid_json_lines", invalidLines)
                 .put("measurement_samples_included", includeMeasurementSamples)
                 .put("neighbor_probe_samples", probeSamples.size)
+                .put("android_lte_sinr_samples", androidLteSinr.size)
+                .put("android_lte_sinr_policy", AndroidLteSinrReader.POLICY)
             val output = app.contentResolver.openOutputStream(uri, "wt") ?: throw IOException("No output stream")
             output.bufferedWriter(Charsets.UTF_8).use { writer ->
                 writer.appendLine(header.toString())
@@ -230,6 +235,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 for (entry in runs) writer.appendLine(redactDiagnostic(entry).toString())
                 signalMode?.let { writer.appendLine(it.toString()) }
                 androidNrBandwidth?.let { writer.appendLine(it.toString()) }
+                for (entry in androidLteSinr) writer.appendLine(entry.toDiagnosticJson().toString())
                 for (entry in neighborTables) writer.appendLine(entry.toString())
                 for (entry in layouts) writer.appendLine(redactDiagnostic(entry).toString())
                 for (entry in snapshot.records) writer.appendLine(redactDiagnostic(entry.data).toString())
@@ -959,6 +965,29 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
             "ims_call", "ims_reg", "ims_session", "ims_reg_log", "ims_state", "cell_change",
         )
     }
+}
+
+private fun AndroidLteSinrReader.Sample.toDiagnosticJson() = JSONObject().apply {
+    fun sinr(value: Int): Any = if (LteSinrUtils.isReported(value)) value else JSONObject.NULL
+    put("type", "android_lte_sinr")
+    put("t", timeMs())
+    put("elapsed_ms", elapsedMs())
+    put("subscription_id", subscriptionId())
+    put("registered", registered())
+    put("connection_status", connectionStatus())
+    put("eligible_lte_cells", eligibleCells())
+    put("cell_timestamp_ms", cellTimestampMs())
+    put("cell_age_ms", elapsedMs() - cellTimestampMs())
+    put("cell_rssnr_raw", cellRssnr())
+    put("cell_sinr_db", sinr(cellSinr()))
+    put("snapshot_timestamp_ms", snapshotTimestampMs() ?: JSONObject.NULL)
+    put("snapshot_age_ms", snapshotTimestampMs()?.let { elapsedMs() - it } ?: JSONObject.NULL)
+    put("snapshot_rssnr_raw", JSONArray(snapshotRssnr()))
+    put("snapshot_sinr_db", JSONArray(snapshotSinr().map(::sinr)))
+    put("snapshot_decision", snapshotDecision())
+    put("snapshot_error", snapshotError() ?: JSONObject.NULL)
+    put("selected_sinr_db", sinr(selectedSinr()))
+    put("selected_source", selectedSource())
 }
 
 private val excludedDiagnosticKeys = setOf(

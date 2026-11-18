@@ -269,10 +269,10 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 
-    // 百度地图 SDK（7.6.4 分体包：BaiduMapSDK_Map + base + common）
-    implementation files('libs/BaiduMapSDK_Map-7.6.4.aar')
-    implementation files('libs/base-7.6.4.aar')
-    implementation files('libs/common-1.0.36.jar')
+    // Keep the vendor modules together; all arm64 libraries must support 16 KB pages.
+    implementation files('libs/BaiduMapSDK_Map-7.6.7.aar')
+    implementation files('libs/base-7.6.7.aar')
+    implementation files('libs/common-1.0.42.aar')
 
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.gson)

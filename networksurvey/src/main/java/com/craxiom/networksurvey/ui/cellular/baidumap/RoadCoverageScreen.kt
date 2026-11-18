@@ -30,7 +30,6 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -44,10 +43,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.baidu.mapapi.map.Dot
 import com.baidu.mapapi.map.DotOptions
 import com.baidu.mapapi.map.MapStatusUpdateFactory
@@ -314,14 +309,11 @@ private fun RoadMap(track: RoadTrack, index: Int, focus: Int, sinr: Boolean, mod
     var view by remember { mutableStateOf<TextureMapView?>(null) }
     var ready by remember { mutableStateOf(false) }
     var dot by remember { mutableStateOf<Dot?>(null) }
-    val owner = LocalLifecycleOwner.current
-    AndroidView(
-        factory = { context ->
-            TextureMapView(context).also { created ->
-                created.showZoomControls(false)
-                created.map.setOnMapLoadedCallback { if (view === created) ready = true }
-                view = created
-            }
+    BaiduMapView(
+        onCreate = { created ->
+            view = created
+            created.showZoomControls(false)
+            created.map.setOnMapLoadedCallback { if (view === created) ready = true }
         },
         onRelease = { released ->
             if (view === released) {
@@ -329,19 +321,9 @@ private fun RoadMap(track: RoadTrack, index: Int, focus: Int, sinr: Boolean, mod
                 ready = false
                 view = null
             }
-            released.onDestroy()
         },
         modifier = modifier,
     )
-    DisposableEffect(view, owner) {
-        val current = view
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) current?.onResume()
-            if (event == Lifecycle.Event.ON_PAUSE) current?.onPause()
-        }
-        owner.lifecycle.addObserver(observer)
-        onDispose { owner.lifecycle.removeObserver(observer) }
-    }
     LaunchedEffect(view, ready, track, sinr) {
         val map = view?.map ?: return@LaunchedEffect
         if (!ready) return@LaunchedEffect

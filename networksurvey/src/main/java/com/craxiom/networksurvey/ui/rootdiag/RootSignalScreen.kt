@@ -279,7 +279,7 @@ private fun LteRecordData.withDiag(diag: JSONObject?) = JSONObject(diag?.toStrin
     if (hasRsrp()) fill("rsrp", rsrp.value)
     if (hasRsrq()) fill("rsrq", rsrq.value)
     if (hasSignalStrength()) fill("rssi", signalStrength.value)
-    if (hasSnr() && snr.value in -20f..30f && number("sinr") == null) {
+    if (hasSnr() && snr.value.isFinite() && number("sinr") == null) {
         put("sinr", snr.value)
         put("sinr_src", "Android RSSNR")
     }

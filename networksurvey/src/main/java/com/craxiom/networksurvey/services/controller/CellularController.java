@@ -46,6 +46,8 @@ import com.craxiom.networksurvey.model.LogTypeState;
 import com.craxiom.networksurvey.model.NetworkTechnologyInfo;
 import com.craxiom.networksurvey.services.NetworkSurveyService;
 import com.craxiom.networksurvey.services.SurveyRecordProcessor;
+import com.craxiom.networksurvey.util.AppLogger;
+import com.craxiom.networksurvey.util.AndroidLteSinrReader;
 import com.craxiom.networksurvey.util.CalculationUtils;
 import com.craxiom.networksurvey.util.NsUtils;
 import com.craxiom.networksurvey.util.OperatorUtil;
@@ -77,6 +79,7 @@ public class CellularController extends AController
 
     private final AtomicBoolean cellularScanningActive = new AtomicBoolean(false);
     private final AtomicBoolean airplaneModeActive = new AtomicBoolean(false);
+    private final AtomicBoolean signalStrengthReadFailed = new AtomicBoolean(false);
 
     private final AtomicBoolean cellularLoggingEnabled = new AtomicBoolean(false);
 
@@ -658,6 +661,7 @@ public class CellularController extends AController
             {
                 // Clear the lists because this could be a re-initialization if the SIM state changes
                 unregisterScanCallbacks();
+                AndroidLteSinrReader.clear();
                 activeSubscriptionInfoList.clear();
                 telephonyManagerList.clear();
                 cellInfoCallbackMap.clear();
@@ -750,6 +754,7 @@ public class CellularController extends AController
                             TelephonyManager telephonyManager = wrapper.getTelephonyManager();
                             if (surveyService == null) return;
 
+                            AppLogger.recordCellularScan(subscriptionId, cellInfo);
                             String networkOperatorName = telephonyManager.getNetworkOperatorName();
                             SignalStrength signalStrength = getSignalStrengthForScan(wrapper);
 
@@ -785,11 +790,39 @@ public class CellularController extends AController
     @Nullable
     private SignalStrength getSignalStrengthForScan(TelephonyManagerWrapper wrapper)
     {
-        SignalStrength snapshot = TelephonyCallbackFactory.getSignalStrength(
-                displayInfoCallbackMap.get(wrapper.getSubscriptionId()));
-        if (snapshot != null) return snapshot;
-        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
-                ? wrapper.getTelephonyManager().getSignalStrength() : null;
+        SignalStrength snapshot = null;
+        Throwable failure = null;
+        try
+        {
+            // Network Survey reads the current subscription directly for each CellInfo update.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+            {
+                snapshot = wrapper.getTelephonyManager().getSignalStrength();
+            }
+        } catch (RuntimeException | LinkageError e)
+        {
+            failure = e;
+        }
+        if (snapshot == null)
+        {
+            try
+            {
+                snapshot = TelephonyCallbackFactory.getSignalStrength(
+                        displayInfoCallbackMap.get(wrapper.getSubscriptionId()));
+            } catch (RuntimeException | LinkageError e)
+            {
+                if (failure == null) failure = e;
+            }
+        }
+        if (failure == null)
+        {
+            signalStrengthReadFailed.set(false);
+        } else if (!signalStrengthReadFailed.getAndSet(true))
+        {
+            AppLogger.w("CellularScan", "Optional SignalStrength read failed; sub="
+                    + wrapper.getSubscriptionId() + ", cached=" + (snapshot != null), failure);
+        }
+        return snapshot;
     }
 
     private void registerScanCallbacks()

@@ -86,16 +86,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.baidu.mapapi.map.BaiduMap
 import com.baidu.mapapi.map.MapStatus
 import com.baidu.mapapi.map.MapStatusUpdateFactory
-import com.baidu.mapapi.map.TextureMapView
 import com.baidu.mapapi.model.LatLng
 import com.craxiom.networksurvey.R
 import com.craxiom.networksurvey.db.EngineeringParamDbHelper
@@ -357,20 +352,6 @@ fun BaiduTowerMapScreen(
         }
     }
 
-    val owner = LocalLifecycleOwner.current
-    DisposableEffect(map, owner) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_RESUME -> map?.mapView?.onResume()
-                Lifecycle.Event.ON_PAUSE -> {
-                    map?.mapView?.onPause()
-                }
-                else -> Unit
-            }
-        }
-        owner.lifecycle.addObserver(observer)
-        onDispose { owner.lifecycle.removeObserver(observer) }
-    }
     LifecycleResumeEffect(context) {
         permissions = mapLocationPermissions(context)
         onPauseOrDispose {}
@@ -486,9 +467,9 @@ fun BaiduTowerMapScreen(
                 }
             }
             Box(Modifier.weight(1f).fillMaxWidth().background(colors.surfaceContainerLow)) {
-                AndroidView(
-                    factory = { ctx ->
-                        TextureMapView(ctx).apply {
+                BaiduMapView(
+                    onCreate = { created ->
+                        created.apply {
                             showZoomControls(false)
                             val renderer = BaiduMapArea(this)
                             val baidu = renderer.baiduMap
@@ -498,12 +479,15 @@ fun BaiduTowerMapScreen(
                             baidu.uiSettings.setOverlookingGesturesEnabled(false)
                             baidu.setMaxAndMinZoomLevel(21f, BaiduMapArea.MAP_MIN_ZOOM)
                             baidu.setOnMapLoadedCallback {
-                                ready = true
-                                viewport = renderer.viewport(baidu.mapStatus)
+                                if (area === renderer) {
+                                    ready = true
+                                    viewport = renderer.viewport(baidu.mapStatus)
+                                }
                             }
                             baidu.setOnMapStatusChangeListener(object : BaiduMap.OnMapStatusChangeListener {
                                 override fun onMapStatusChangeStart(status: MapStatus?) = Unit
                                 override fun onMapStatusChangeStart(status: MapStatus?, reason: Int) {
+                                    if (area !== renderer) return
                                     if (reason == BaiduMap.OnMapStatusChangeListener.REASON_GESTURE) {
                                         follow = false
                                         cameraPositioned = true
@@ -511,10 +495,11 @@ fun BaiduTowerMapScreen(
                                 }
                                 override fun onMapStatusChange(status: MapStatus?) = Unit
                                 override fun onMapStatusChangeFinish(status: MapStatus?) {
-                                    if (ready) viewport = renderer.viewport(status)
+                                    if (ready && area === renderer) viewport = renderer.viewport(status)
                                 }
                             })
                             baidu.setOnMarkerClickListener { marker ->
+                                if (area !== renderer) return@setOnMarkerClickListener false
                                 val param = renderer.paramOf(marker) ?: return@setOnMarkerClickListener false
                                 selected = param
                                 detailOrigin = param
@@ -525,10 +510,15 @@ fun BaiduTowerMapScreen(
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
-                    onRelease = { it.onDestroy() },
+                    onRelease = { released ->
+                        if (area?.mapView === released) {
+                            area = null
+                            ready = false
+                            viewport = null
+                        }
+                    },
                 )
-
-                if (!ready) {
+                if (!ready && area != null) {
                     CircularProgressIndicator(Modifier.align(Alignment.Center).size(28.dp), strokeWidth = 3.dp)
                 }
                 location?.let { fix ->

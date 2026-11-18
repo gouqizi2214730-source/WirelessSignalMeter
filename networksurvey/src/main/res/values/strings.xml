@@ -1760,4 +1760,5 @@
     <string name="diag_mr_no_neighbors">This report contains no neighbor measurements</string>
     <string name="diag_mr_best_neighbor">Best neighbor reported with a serving cell</string>
     <string name="diag_nas_protected">This NAS message is ciphered. The report shows its security header.</string>
+    <string name="map_unavailable">Map unavailable on this device. Restart the app or upload logs from Settings.</string>
 </resources>

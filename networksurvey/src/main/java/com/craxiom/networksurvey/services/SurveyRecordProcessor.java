@@ -116,6 +116,7 @@ import com.craxiom.networksurvey.services.controller.CellularController;
 import com.craxiom.networksurvey.ui.activesurvey.NewTowerNotificationHelper;
 import com.craxiom.networksurvey.ui.activesurvey.TowerDetectionJavaWrapper;
 import com.craxiom.networksurvey.util.CellularBandwidthUtils;
+import com.craxiom.networksurvey.util.AndroidLteSinrReader;
 import com.craxiom.networksurvey.util.CellularUtils;
 import com.craxiom.networksurvey.util.LocationUtils;
 import com.craxiom.networksurvey.util.LteSinrUtils;
@@ -1763,23 +1764,9 @@ public class SurveyRecordProcessor
             dataBuilder.setSlot(Int32Value.newBuilder().setValue(subscriptionId).build());
         }
 
-        int rssnr = LteSinrUtils.read(cellSignalStrengthLte.getRssnr(), cellSignalStrengthLte);
-        if (!LteSinrUtils.isValid(rssnr) && signalStrength != null
-                && LteSinrUtils.canUseSnapshot(isLteSinrSnapshotCandidate(cellInfoLte), fallbackEligibleLteCells,
-                cellInfoLte.getTimestampMillis(), signalStrength.getTimestampMillis(), elapsedTimeMillis))
-        {
-            final List<CellSignalStrengthLte> strengths = signalStrength.getCellSignalStrengths(CellSignalStrengthLte.class);
-            if (strengths.size() <= 1)
-            {
-                if (!strengths.isEmpty())
-                {
-                    final CellSignalStrengthLte serving = strengths.get(0);
-                    rssnr = LteSinrUtils.read(serving.getRssnr(), serving);
-                }
-                if (!LteSinrUtils.isValid(rssnr)) rssnr = LteSinrUtils.readSnapshot(signalStrength);
-            }
-        }
-        if (LteSinrUtils.isValid(rssnr))
+        int rssnr = AndroidLteSinrReader.read(cellInfoLte, signalStrength, subscriptionId,
+                fallbackEligibleLteCells, elapsedTimeMillis);
+        if (LteSinrUtils.isReported(rssnr))
         {
             dataBuilder.setSnr(FloatValue.newBuilder().setValue(rssnr).build());
         }
@@ -2037,7 +2024,7 @@ public class SurveyRecordProcessor
 
     static boolean isLteSinrSnapshotCandidate(CellInfo cellInfo)
     {
-        // SignalStrength describes the subscription's LTE primary, not its CA secondary carriers.
+        // Diagnostic count; Network Survey's RSSNR read does not depend on cell count or timestamps.
         return cellInfo instanceof CellInfoLte && cellInfo.isRegistered()
                 && !isSecondaryServingCell(cellInfo);
     }

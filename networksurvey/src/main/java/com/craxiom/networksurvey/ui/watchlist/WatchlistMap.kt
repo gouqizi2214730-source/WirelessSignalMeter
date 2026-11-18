@@ -3,12 +3,10 @@ package com.craxiom.networksurvey.ui.watchlist
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
-import android.os.Bundle
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -17,10 +15,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.baidu.mapapi.map.BaiduMap
 import com.baidu.mapapi.map.BitmapDescriptorFactory
 import com.baidu.mapapi.map.MapStatusUpdateFactory
@@ -30,6 +24,7 @@ import com.baidu.mapapi.map.OverlayOptions
 import com.baidu.mapapi.map.TextureMapView
 import com.baidu.mapapi.model.LatLng
 import com.baidu.mapapi.model.LatLngBounds
+import com.craxiom.networksurvey.ui.cellular.baidumap.BaiduMapView
 import com.craxiom.networksurvey.util.CoordConverter
 
 /**
@@ -53,27 +48,10 @@ fun WatchlistMap(
     var fitted by remember { mutableStateOf(false) }
     val markerMap = remember { mutableMapOf<String, Marker>() }
 
-    // Lifecycle management for TextureMapView
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_RESUME -> runCatching { mapView?.onResume() }
-                Lifecycle.Event.ON_PAUSE -> runCatching { mapView?.onPause() }
-                else -> {}
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-            runCatching { mapView?.onDestroy() }
-        }
-    }
-
     Box(modifier = modifier) {
-        AndroidView(
-            factory = { ctx ->
-                TextureMapView(ctx).apply {
+        BaiduMapView(
+            onCreate = { created ->
+                created.apply {
                     mapView = this
                     baiduMap = this.map
                     this.map.setOnMarkerClickListener { marker ->
@@ -88,7 +66,15 @@ fun WatchlistMap(
                     }
                 }
             },
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            onRelease = { released ->
+                if (mapView === released) {
+                    markerMap.clear()
+                    baiduMap = null
+                    mapView = null
+                    fitted = false
+                }
+            },
         )
 
         // Update markers when points or selection change

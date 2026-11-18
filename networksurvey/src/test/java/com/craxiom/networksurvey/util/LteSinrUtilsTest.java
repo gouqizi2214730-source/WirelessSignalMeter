@@ -161,30 +161,24 @@ public class LteSinrUtilsTest
     }
 
     @Test
-    public void freshSnapshotDoesNotRequireIdenticalRsrp()
+    public void snapshotTextSupportsLiteralClosingBrace()
     {
-        assertTrue(LteSinrUtils.canUseSnapshot(true, 1, 19_000, 20_000, 21_000));
-        assertTrue(LteSinrUtils.canUseSnapshot(true, 1, 15_000, 20_000, 21_000));
+        assertEquals(13, LteSinrUtils.readSnapshot(new TextStrength(
+                "SignalStrength:{mLte=CellSignalStrengthLte: rsrp=-95 rssnr=13}")));
+        assertEquals(0, LteSinrUtils.readSnapshot(new TextStrength(
+                "SignalStrength:{mLte=CellSignalStrengthLte: rssnr=0}  ")));
+        assertEquals(-9, LteSinrUtils.readSnapshot(new TextStrength(
+                "SignalStrength:{mLte=CellSignalStrengthLte: rssnr=-9}")));
     }
 
     @Test
-    public void snapshotCannotFillNeighborsOrAmbiguousServingCells()
+    public void publicRssnrOnlyRejectsMissingSentinels()
     {
-        assertFalse(LteSinrUtils.canUseSnapshot(false, 1, 19_000, 20_000, 21_000));
-        assertFalse(LteSinrUtils.canUseSnapshot(true, 0, 19_000, 20_000, 21_000));
-        assertFalse(LteSinrUtils.canUseSnapshot(true, 2, 19_000, 20_000, 21_000));
-    }
-
-    @Test
-    public void snapshotAgeAndTimeGapAreBounded()
-    {
-        assertFalse(LteSinrUtils.canUseSnapshot(true, 1, 19_000, 10_000, 21_000));
-        assertFalse(LteSinrUtils.canUseSnapshot(true, 1, 10_000, 19_000, 21_000));
-        assertFalse(LteSinrUtils.canUseSnapshot(true, 1, 14_999, 20_000, 21_000));
-        assertFalse(LteSinrUtils.canUseSnapshot(true, 1, 0, 20_000, 21_000));
-        assertFalse(LteSinrUtils.canUseSnapshot(true, 1, 19_000, 0, 21_000));
-        assertFalse(LteSinrUtils.canUseSnapshot(true, 1, 22_000, 20_000, 21_000));
-        assertFalse(LteSinrUtils.canUseSnapshot(true, 1, 19_000, 22_000, 21_000));
+        assertFalse(LteSinrUtils.isReported(Integer.MAX_VALUE));
+        assertFalse(LteSinrUtils.isReported(Integer.MIN_VALUE));
+        assertTrue(LteSinrUtils.isReported(0));
+        assertTrue(LteSinrUtils.isReported(-7));
+        assertTrue(LteSinrUtils.isReported(180));
     }
 
     private static class VendorStrength
