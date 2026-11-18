@@ -12,9 +12,7 @@ import com.craxiom.networksurvey.logging.db.dao.CdmaRecordDao;
 import com.craxiom.networksurvey.logging.db.dao.GsmRecordDao;
 import com.craxiom.networksurvey.logging.db.dao.LteRecordDao;
 import com.craxiom.networksurvey.logging.db.dao.NrRecordDao;
-import com.craxiom.networksurvey.logging.db.dao.NsAnalyticsDao;
 import com.craxiom.networksurvey.logging.db.dao.SurveyRecordDao;
-import com.craxiom.networksurvey.logging.db.dao.TowerCacheDao;
 import com.craxiom.networksurvey.logging.db.dao.UmtsRecordDao;
 import com.craxiom.networksurvey.logging.db.dao.WatchlistDao;
 import com.craxiom.networksurvey.logging.db.dao.WatchlistHitDao;
@@ -23,18 +21,14 @@ import com.craxiom.networksurvey.logging.db.model.CdmaRecordEntity;
 import com.craxiom.networksurvey.logging.db.model.GsmRecordEntity;
 import com.craxiom.networksurvey.logging.db.model.LteRecordEntity;
 import com.craxiom.networksurvey.logging.db.model.NrRecordEntity;
-import com.craxiom.networksurvey.logging.db.model.NsAnalyticsConnectionEntity;
-import com.craxiom.networksurvey.logging.db.model.NsAnalyticsQueueEntity;
-import com.craxiom.networksurvey.logging.db.model.TowerCacheEntity;
 import com.craxiom.networksurvey.logging.db.model.UmtsRecordEntity;
 import com.craxiom.networksurvey.logging.db.model.WatchlistEntryEntity;
 import com.craxiom.networksurvey.logging.db.model.WatchlistHitEntity;
 import com.craxiom.networksurvey.logging.db.model.WifiBeaconRecordEntity;
 
 @Database(entities = {GsmRecordEntity.class, CdmaRecordEntity.class, UmtsRecordEntity.class,
-        LteRecordEntity.class, NrRecordEntity.class, WifiBeaconRecordEntity.class, TowerCacheEntity.class,
-        NsAnalyticsQueueEntity.class, NsAnalyticsConnectionEntity.class, WatchlistEntryEntity.class,
-        WatchlistHitEntity.class}, version = 14, exportSchema = false)
+        LteRecordEntity.class, NrRecordEntity.class, WifiBeaconRecordEntity.class, WatchlistEntryEntity.class,
+        WatchlistHitEntity.class}, version = 15, exportSchema = false)
 public abstract class SurveyDatabase extends RoomDatabase
 {
     public abstract GsmRecordDao gsmRecordDao();
@@ -50,10 +44,6 @@ public abstract class SurveyDatabase extends RoomDatabase
     public abstract WifiRecordDao wifiRecordDao();
 
     public abstract SurveyRecordDao surveyRecordDao();
-
-    public abstract TowerCacheDao towerCacheDao();
-
-    public abstract NsAnalyticsDao nsAnalyticsDao();
 
     public abstract WatchlistDao watchlistDao();
 
@@ -348,6 +338,31 @@ public abstract class SurveyDatabase extends RoomDatabase
         }
     };
 
+    private static final Migration MIGRATION_14_15 = new Migration(14, 15)
+    {
+        @Override
+        public void migrate(SupportSQLiteDatabase database)
+        {
+            // Remove NS Analytics and tower-cache tables (overseas services removed)
+            database.execSQL("DROP TABLE IF EXISTS ns_analytics_queue");
+            database.execSQL("DROP TABLE IF EXISTS ns_analytics_connection");
+            database.execSQL("DROP TABLE IF EXISTS tower_cache");
+
+            // Drop the community-survey (OpenCelliD / BeaconDB) upload marker columns
+            database.execSQL("ALTER TABLE gsm_survey_records DROP COLUMN ocidUploaded");
+            database.execSQL("ALTER TABLE gsm_survey_records DROP COLUMN beaconDbUploaded");
+            database.execSQL("ALTER TABLE cdma_survey_records DROP COLUMN ocidUploaded");
+            database.execSQL("ALTER TABLE cdma_survey_records DROP COLUMN beaconDbUploaded");
+            database.execSQL("ALTER TABLE umts_survey_records DROP COLUMN ocidUploaded");
+            database.execSQL("ALTER TABLE umts_survey_records DROP COLUMN beaconDbUploaded");
+            database.execSQL("ALTER TABLE lte_survey_records DROP COLUMN ocidUploaded");
+            database.execSQL("ALTER TABLE lte_survey_records DROP COLUMN beaconDbUploaded");
+            database.execSQL("ALTER TABLE nr_survey_records DROP COLUMN ocidUploaded");
+            database.execSQL("ALTER TABLE nr_survey_records DROP COLUMN beaconDbUploaded");
+            database.execSQL("ALTER TABLE wifi_survey_records DROP COLUMN beaconDbUploaded");
+        }
+    };
+
     public static SurveyDatabase getInstance(Context context)
     {
         if (INSTANCE == null)
@@ -358,7 +373,7 @@ public abstract class SurveyDatabase extends RoomDatabase
                 {
                     INSTANCE = Room.databaseBuilder(context.getApplicationContext(),
                                     SurveyDatabase.class, "survey_db")
-                            .addMigrations(MIGRATION_7_9, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
+                            .addMigrations(MIGRATION_7_9, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
                             .fallbackToDestructiveMigration()
                             .build();
                 }

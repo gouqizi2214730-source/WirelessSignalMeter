@@ -9,9 +9,6 @@ public class NrRecordEntity extends BaseRecordEntity
     @PrimaryKey(autoGenerate = true)
     public long id;
 
-    public boolean ocidUploaded = false;
-    public boolean beaconDbUploaded = false;
-
     public int groupNumber;
 
     // NR specific fields (nullable due to protobuf Int32Value and FloatValue)

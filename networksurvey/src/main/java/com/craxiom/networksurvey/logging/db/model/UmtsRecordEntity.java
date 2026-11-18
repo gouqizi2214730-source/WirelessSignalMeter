@@ -9,9 +9,6 @@ public class UmtsRecordEntity extends BaseRecordEntity
     @PrimaryKey(autoGenerate = true)
     public long id;
 
-    public boolean ocidUploaded = false;
-    public boolean beaconDbUploaded = false;
-
     public int groupNumber;
 
     // UMTS-specific fields (nullable due to protobuf Int32Value and FloatValue)

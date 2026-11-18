@@ -9,9 +9,6 @@ public class GsmRecordEntity extends BaseRecordEntity
     @PrimaryKey(autoGenerate = true)
     public long id;
 
-    public boolean ocidUploaded = false;
-    public boolean beaconDbUploaded = false;
-
     public int groupNumber;
 
     // GSM-specific fields (nullable due to protobuf Int32Value and FloatValue)
