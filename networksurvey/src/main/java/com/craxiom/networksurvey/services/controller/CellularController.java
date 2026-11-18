@@ -154,6 +154,7 @@ public class CellularController extends AController
             // clearing it breaks the reference chain even if framework binder stubs hold the callbacks
             synchronized (activeSubscriptionInfoListLock)
             {
+                unregisterScanCallbacks();
                 cellInfoCallbackMap.clear();
                 cellInfoListenerMap.clear();
                 displayInfoCallbackMap.clear();
@@ -656,6 +657,7 @@ public class CellularController extends AController
             synchronized (activeSubscriptionInfoListLock)
             {
                 // Clear the lists because this could be a re-initialization if the SIM state changes
+                unregisterScanCallbacks();
                 activeSubscriptionInfoList.clear();
                 telephonyManagerList.clear();
                 cellInfoCallbackMap.clear();
@@ -688,7 +690,11 @@ public class CellularController extends AController
                     } else
                     {
                         String myPhoneNumber = NsUtils.getMyPhoneNumber(surveyService, telephonyManager);
-                        telephonyManagerList.add(new TelephonyManagerWrapper(telephonyManager, DEFAULT_SUBSCRIPTION_ID, myPhoneNumber));
+                        // Keep records slotless for one SIM, but bind reads and callbacks to that SIM.
+                        TelephonyManager singleSimManager = activeSubscriptionInfoList.size() == 1
+                                ? telephonyManager.createForSubscriptionId(activeSubscriptionInfoList.get(0).getSubscriptionId())
+                                : telephonyManager;
+                        telephonyManagerList.add(new TelephonyManagerWrapper(singleSimManager, DEFAULT_SUBSCRIPTION_ID, myPhoneNumber));
                     }
                 } else
                 {
@@ -741,7 +747,7 @@ public class CellularController extends AController
                             if (surveyService == null) return;
 
                             String networkOperatorName = telephonyManager.getNetworkOperatorName();
-                            SignalStrength signalStrength = telephonyManager.getSignalStrength();
+                            SignalStrength signalStrength = getSignalStrengthForScan(wrapper);
 
                             NetworkTechnologyInfo technologyInfo = buildNetworkTechnologyInfo(telephonyManager, subscriptionId, "N/A");
 
@@ -766,6 +772,62 @@ public class CellularController extends AController
                     {
                         cellInfoCallbackMap.put(wrapper.getSubscriptionId(), callback);
                     }
+                }
+            }
+            if (cellularScanningActive.get()) registerScanCallbacks();
+        }
+    }
+
+    @Nullable
+    private SignalStrength getSignalStrengthForScan(TelephonyManagerWrapper wrapper)
+    {
+        SignalStrength snapshot = TelephonyCallbackFactory.getSignalStrength(
+                displayInfoCallbackMap.get(wrapper.getSubscriptionId()));
+        if (snapshot != null) return snapshot;
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                ? wrapper.getTelephonyManager().getSignalStrength() : null;
+    }
+
+    private void registerScanCallbacks()
+    {
+        synchronized (activeSubscriptionInfoListLock)
+        {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
+            for (TelephonyManagerWrapper wrapper : telephonyManagerList)
+            {
+                Object listener = displayInfoCallbackMap.get(wrapper.getSubscriptionId());
+                if (listener instanceof TelephonyCallback)
+                {
+                    try
+                    {
+                        wrapper.getTelephonyManager().registerTelephonyCallback(executorService, (TelephonyCallback) listener);
+                    } catch (RuntimeException e)
+                    {
+                        Timber.w(e, "Could not register telephony scan callbacks");
+                    }
+                }
+            }
+        }
+    }
+
+    private void unregisterScanCallbacks()
+    {
+        synchronized (activeSubscriptionInfoListLock)
+        {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
+            for (TelephonyManagerWrapper wrapper : telephonyManagerList)
+            {
+                Object listener = displayInfoCallbackMap.get(wrapper.getSubscriptionId());
+                if (listener instanceof TelephonyCallback)
+                {
+                    try
+                    {
+                        wrapper.getTelephonyManager().unregisterTelephonyCallback((TelephonyCallback) listener);
+                    } catch (RuntimeException e)
+                    {
+                        Timber.w(e, "Could not unregister telephony scan callbacks");
+                    }
+                    TelephonyCallbackFactory.clearSignalStrength(listener);
                 }
             }
         }
@@ -1034,7 +1096,7 @@ public class CellularController extends AController
                                     SignalStrength signalStrength = null;
                                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P)
                                     {
-                                        signalStrength = subscriptionTelephonyManager.getSignalStrength();
+                                        signalStrength = getSignalStrengthForScan(wrapper);
                                     }
 
                                     NetworkTechnologyInfo technologyInfo = buildNetworkTechnologyInfo(
@@ -1086,17 +1148,7 @@ public class CellularController extends AController
 
             final int handlerTaskId = cellularScanningTaskId.incrementAndGet();
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-            {
-                for (TelephonyManagerWrapper wrapper : telephonyManagerList)
-                {
-                    Object displayInfoListener = displayInfoCallbackMap.get(wrapper.getSubscriptionId());
-                    if (displayInfoListener instanceof TelephonyCallback)
-                    {
-                        wrapper.getTelephonyManager().registerTelephonyCallback(executorService, (TelephonyCallback) displayInfoListener);
-                    }
-                }
-            }
+            registerScanCallbacks();
 
             serviceHandler.postDelayed(new Runnable()
             {
@@ -1156,7 +1208,7 @@ public class CellularController extends AController
                                             SignalStrength signalStrength = null;
                                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
                                             {
-                                                signalStrength = subscriptionTelephonyManager.getSignalStrength();
+                                                signalStrength = getSignalStrengthForScan(wrapper);
                                             }
 
                                             NetworkTechnologyInfo technologyInfo = buildNetworkTechnologyInfo(
@@ -1199,17 +1251,7 @@ public class CellularController extends AController
         Timber.d("Setting the cellular scanning active flag to false");
         cellularScanningActive.set(false);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-        {
-            for (TelephonyManagerWrapper wrapper : telephonyManagerList)
-            {
-                Object displayInfoListener = displayInfoCallbackMap.get(wrapper.getSubscriptionId());
-                if (displayInfoListener instanceof TelephonyCallback)
-                {
-                    wrapper.getTelephonyManager().unregisterTelephonyCallback((TelephonyCallback) displayInfoListener);
-                }
-            }
-        }
+        unregisterScanCallbacks();
 
         if (surveyService != null) surveyService.updateLocationListener();
     }

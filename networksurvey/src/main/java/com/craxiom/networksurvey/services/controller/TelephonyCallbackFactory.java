@@ -2,6 +2,7 @@ package com.craxiom.networksurvey.services.controller;
 
 import android.os.Build;
 import android.telephony.ServiceState;
+import android.telephony.SignalStrength;
 import android.telephony.TelephonyCallback;
 import android.telephony.TelephonyManager;
 
@@ -112,6 +113,24 @@ public class TelephonyCallbackFactory
     private static ServiceState getServiceStateInternal(OverrideNetworkTypeListener listener)
     {
         return listener.getServiceState();
+    }
+
+    @Nullable
+    public static SignalStrength getSignalStrength(@Nullable Object listener)
+    {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && listener instanceof OverrideNetworkTypeListener)
+        {
+            return ((OverrideNetworkTypeListener) listener).getSignalStrength();
+        }
+        return null;
+    }
+
+    public static void clearSignalStrength(@Nullable Object listener)
+    {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && listener instanceof OverrideNetworkTypeListener)
+        {
+            ((OverrideNetworkTypeListener) listener).clearSignalStrength();
+        }
     }
 
     /**

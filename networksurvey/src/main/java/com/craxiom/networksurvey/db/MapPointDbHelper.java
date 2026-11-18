@@ -29,7 +29,7 @@ import java.util.TimeZone;
 public class MapPointDbHelper extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "mappoint.db";
-    private static final int DB_VERSION = 1;
+    private static final int DB_VERSION = 2;
 
     public static final String TABLE = "map_point";
     public static final String COL_ID = "id";
@@ -49,12 +49,13 @@ public class MapPointDbHelper extends SQLiteOpenHelper {
     public static final String COL_NET = "net_type";
     public static final String COL_REMARK = "remark";
     public static final String COL_TIME = "timestamp";
+    private static final String COL_SIM_SLOT = "sim_slot";
 
     private static final String CREATE_SQL =
             "CREATE TABLE map_point (id INTEGER PRIMARY KEY AUTOINCREMENT, latitude REAL, " +
             "longitude REAL, rsrp INTEGER, sinr INTEGER, rsrq INTEGER, gnb_id INTEGER, " +
             "cell_id INTEGER, sector_id INTEGER, pci INTEGER, earfcn INTEGER, mcc INTEGER, " +
-            "mnc INTEGER, tac INTEGER, net_type TEXT, remark TEXT, timestamp INTEGER)";
+            "mnc INTEGER, tac INTEGER, net_type TEXT, remark TEXT, timestamp INTEGER, sim_slot INTEGER NOT NULL DEFAULT -1)";
 
     private static MapPointDbHelper instance;
 
@@ -77,6 +78,7 @@ public class MapPointDbHelper extends SQLiteOpenHelper {
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if (oldVersion < 2) db.execSQL("ALTER TABLE " + TABLE + " ADD COLUMN " + COL_SIM_SLOT + " INTEGER NOT NULL DEFAULT -1");
         createIndexes(db);
     }
 
@@ -104,12 +106,17 @@ public class MapPointDbHelper extends SQLiteOpenHelper {
         cv.put(COL_NET, r.getNetType());
         cv.put(COL_REMARK, r.getRemark());
         cv.put(COL_TIME, r.getTimestamp());
+        cv.put(COL_SIM_SLOT, r.getSimSlot());
         return getWritableDatabase().insert(TABLE, null, cv);
     }
 
     /** 全部打点（按时间升序）。 */
     public List<MapPointRecord> getAll() {
         return queryPoints(null, null, COL_TIME + " ASC, " + COL_ID + " ASC", null);
+    }
+
+    public List<MapPointRecord> getRecentForReplay(int limit) {
+        return queryPoints(null, null, COL_TIME + " DESC, " + COL_ID + " DESC", String.valueOf(limit));
     }
 
     public List<MapPointRecord> getByRange(double minLat, double minLon, double maxLat, double maxLon,
@@ -146,6 +153,7 @@ public class MapPointDbHelper extends SQLiteOpenHelper {
                 r.setNetType(c.getString(c.getColumnIndexOrThrow(COL_NET)));
                 r.setRemark(c.getString(c.getColumnIndexOrThrow(COL_REMARK)));
                 r.setTimestamp(c.getLong(c.getColumnIndexOrThrow(COL_TIME)));
+                r.setSimSlot(c.getInt(c.getColumnIndexOrThrow(COL_SIM_SLOT)));
                 list.add(r);
             }
         } finally {
