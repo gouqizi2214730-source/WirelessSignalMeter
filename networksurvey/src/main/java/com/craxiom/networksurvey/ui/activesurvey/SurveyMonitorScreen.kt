@@ -50,6 +50,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -121,7 +122,7 @@ fun SurveyMonitorScreen(
                 Tab(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    text = { Text("状�?) }
+                    text = { Text("状态") }
                 )
                 Tab(
                     selected = selectedTab == 1,
@@ -215,7 +216,7 @@ private fun SurveyStatusTab(
                 )
 
                 Text(
-                    text = if (surveyState.isAnyActive) "测量进行�? else "测量已停�?,
+                    text = if (surveyState.isAnyActive) "测量进行中" else "测量已停止",
                     style = MaterialTheme.typography.headlineMedium.copy(
                         fontWeight = FontWeight.Bold
                     ),
@@ -264,7 +265,8 @@ private fun SurveyMapTab(
     servingCellInfo: ServingCellInfo?,
     onNavigateToTowerMapSettings: () -> Unit
 ) {
-    // 使用百度地图基站地图页（已替代旧 MapLibre TowerMapScreen�?    BaiduTowerMapScreen(
+    // 使用百度地图基站地图页（已替代旧 MapLibre TowerMapScreen）
+    BaiduTowerMapScreen(
         onBackButtonPressed = null,
         servingCellInfo = servingCellInfo
     )
@@ -477,7 +479,7 @@ private fun SurveyStatistics(
         // Active survey types indicator
         if (activeSurveyTypes.isNotEmpty()) {
             Text(
-                text = "进行�? ${activeSurveyTypes.joinToString(", ")}",
+                text = "进行中: ${activeSurveyTypes.joinToString(", ")}",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                 modifier = Modifier.padding(top = 4.dp)
@@ -642,7 +644,7 @@ private fun ServingCellCard(
                     tint = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "主服务小�?,
+                    text = "主服务小区",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(start = 8.dp)
@@ -728,7 +730,7 @@ private fun ServingCellCard(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "技术制�?,
+                                text = "技术制式",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(bottom = 2.dp)
@@ -843,7 +845,7 @@ private fun ServingCellCard(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "运营商网�?,
+                            text = "运营商网络",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(bottom = 2.dp)
@@ -859,7 +861,7 @@ private fun ServingCellCard(
                         Text(
                             text = if (protocol == com.craxiom.networksurvey.model.CellularProtocol.GSM ||
                                 protocol == com.craxiom.networksurvey.model.CellularProtocol.UMTS
-                            ) "区域�?LAC" else "区域�?TAC",
+                            ) "区域码 LAC" else "区域码 TAC",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(bottom = 2.dp)
@@ -932,7 +934,7 @@ private fun ServingCellCardSkeleton() {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "技术制�?,
+                    text = "技术制式",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 2.dp)
@@ -969,7 +971,7 @@ private fun ServingCellCardSkeleton() {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "运营商网�?,
+                    text = "运营商网络",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 2.dp)
@@ -983,7 +985,7 @@ private fun ServingCellCardSkeleton() {
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "区域�?,
+                    text = "区域码",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 2.dp)

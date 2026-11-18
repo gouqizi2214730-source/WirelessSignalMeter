@@ -67,7 +67,8 @@ public class BatteryPauseState implements Parcelable
         wasWifiLoggingEnabled = in.readByte() != 0;
         wasBluetoothLoggingEnabled = in.readByte() != 0;
         wasGnssLoggingEnabled = in.readByte() != 0;
-
+        wasCdrLoggingEnabled = in.readByte() != 0;
+        wasDeviceStatusActive = in.readByte() != 0;
     }
 
     @Override
@@ -82,7 +83,8 @@ public class BatteryPauseState implements Parcelable
         dest.writeByte((byte) (wasWifiLoggingEnabled ? 1 : 0));
         dest.writeByte((byte) (wasBluetoothLoggingEnabled ? 1 : 0));
         dest.writeByte((byte) (wasGnssLoggingEnabled ? 1 : 0));
-
+        dest.writeByte((byte) (wasCdrLoggingEnabled ? 1 : 0));
+        dest.writeByte((byte) (wasDeviceStatusActive ? 1 : 0));
     }
 
     @Override
@@ -125,6 +127,8 @@ public class BatteryPauseState implements Parcelable
             json.put(KEY_WIFI_LOGGING, wasWifiLoggingEnabled);
             json.put(KEY_BLUETOOTH_LOGGING, wasBluetoothLoggingEnabled);
             json.put(KEY_GNSS_LOGGING, wasGnssLoggingEnabled);
+            json.put(KEY_CDR_LOGGING, wasCdrLoggingEnabled);
+            json.put(KEY_DEVICE_STATUS, wasDeviceStatusActive);
 
             return json.toString();
         } catch (JSONException e)
@@ -161,7 +165,8 @@ public class BatteryPauseState implements Parcelable
             state.wasWifiLoggingEnabled = json.optBoolean(KEY_WIFI_LOGGING, false);
             state.wasBluetoothLoggingEnabled = json.optBoolean(KEY_BLUETOOTH_LOGGING, false);
             state.wasGnssLoggingEnabled = json.optBoolean(KEY_GNSS_LOGGING, false);
-
+            state.wasCdrLoggingEnabled = json.optBoolean(KEY_CDR_LOGGING, false);
+            state.wasDeviceStatusActive = json.optBoolean(KEY_DEVICE_STATUS, false);
 
             return state;
         } catch (JSONException e)
@@ -181,7 +186,7 @@ public class BatteryPauseState implements Parcelable
         return wasCellularScanningActive || wasWifiScanningActive || wasBluetoothScanningActive ||
                 wasGnssScanningActive || wasCdrScanningActive || wasCellularLoggingEnabled ||
                 wasWifiLoggingEnabled || wasBluetoothLoggingEnabled || wasGnssLoggingEnabled ||
-
+                wasCdrLoggingEnabled || wasDeviceStatusActive;
     }
 
     /**
@@ -198,7 +203,8 @@ public class BatteryPauseState implements Parcelable
         wasWifiLoggingEnabled = false;
         wasBluetoothLoggingEnabled = false;
         wasGnssLoggingEnabled = false;
-
+        wasCdrLoggingEnabled = false;
+        wasDeviceStatusActive = false;
     }
 
     // Getters and setters for all fields
@@ -302,7 +308,7 @@ public class BatteryPauseState implements Parcelable
         this.wasCdrLoggingEnabled = wasCdrLoggingEnabled;
     }
 
-
+    public boolean wasDeviceStatusActive()
     {
         return wasDeviceStatusActive;
     }

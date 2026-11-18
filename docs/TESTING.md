@@ -157,6 +157,33 @@ Windows 下使用项目 NDK 直接执行协议、原始掩码备份与恢复测�
 读取失败时限制持久锁定、备份创建/写入/同步失败，以及 NR 备份失败与缺失标记区分。
 2026-11-18 两套主机测试通过，原实现会在新增备份回归中失败。
 
+## 海外服务清理后的数据库迁移
+
+`SurveyDatabase` v14 -> v15 清理海外服务表和上传标记，但保留六类本地测量记录、
+Mission ID、观察列表和命中历史。Android 13 自带 SQLite 3.32.2，不支持
+`DROP COLUMN`，因此迁移采用建表、复制、重命名，并保留自增 ID 的历史上限。
+
+```powershell
+node networksurvey/src/test/host/test_survey_migration.cjs
+.\networksurvey\src\test\host\test_battery_pause.ps1
+```
+
+该检查从生产 Java 迁移直接提取 SQL，在主机 SQLite 上分别执行有记录及记录已
+清空的 v14 升级；校验 NULL、SINR 0、64 位 NCI、记录 ID、自增序列、观察列表
+和外键完整性。测试夹具是清理前 Room v14 的建表结构，不含用户数据。
+电池暂停测试直接编译生产模型，校验 11 个本地标志的独立保存恢复及清理，
+包含旧 JSON 的 CDR 和设备状态；只替换 Android Parcel 和日志边界。
+
+Release 构建生成 Room 实现后，还可核对迁移结果与新装数据库的一致性：
+
+```powershell
+node networksurvey/src/test/host/test_survey_migration.cjs --room-schema `
+  networksurvey/build/generated/ksp/cdrRelease/kotlin/com/craxiom/networksurvey/logging/db/SurveyDatabase_Impl.kt
+```
+
+以上是主机检查，不是 Android instrumentation。真机升级仍需安装在有历史记录的
+旧版之上，检查记录、观察列表、地图打点及测速历史；不能通过卸载重装替代升级验证。
+
 ## 上游电源管理测试
 
 锁网协议、限制、本地验证结果和真机验收步骤见 [锁网工具](LOCKBAND.md)。

@@ -44,6 +44,7 @@ import android.telephony.ServiceState;
 import android.telephony.SignalStrength;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
+import android.text.TextUtils;
 import android.util.SparseArray;
 
 import androidx.annotation.NonNull;
@@ -122,7 +123,6 @@ import com.craxiom.networksurvey.util.NsUtils;
 import com.craxiom.networksurvey.util.ParserUtils;
 import com.craxiom.networksurvey.util.PreferenceUtils;
 import com.craxiom.networksurvey.util.WifiUtils;
-import com.google.common.base.Strings;
 import com.google.protobuf.BoolValue;
 import com.google.protobuf.FloatValue;
 import com.google.protobuf.GeneratedMessage;
@@ -2257,7 +2257,7 @@ public class SurveyRecordProcessor
         String scanRecordDeviceName = scanRecord != null ? scanRecord.getDeviceName() : "";
 
         String otaDeviceName = "";
-        if (!Strings.isNullOrEmpty(scanRecordDeviceName))
+        if (!TextUtils.isEmpty(scanRecordDeviceName))
         {
             otaDeviceName = scanRecordDeviceName;
         } else

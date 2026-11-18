@@ -21,6 +21,7 @@ import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.BatteryManager;
+import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -218,11 +219,11 @@ public class NetworkSurveyService extends Service implements
         // Register for MDM updates
         registerManagedConfigurationListener();
 
-        // 蜂窝控制器立即初始化（首屏信号页需要，最高优先级�?
+        // 蜂窝控制器立即初始化（首屏信号页需要，最高优先级）
         cellularController.initialize();
 
         // WiFi/蓝牙/GNSS 控制器延迟初始化：放到后台线程，避免阻塞 Service onCreate
-        // 这些控制器只在对�?Tab 页首次打开时才需�?
+        // 这些控制器只在对应 Tab 页首次打开时才需要
         executorService.execute(() -> {
             try { wifiController.initializeWifiScanningResources(); } catch (Throwable t) { Timber.e(t, "WiFi init failed"); }
             try { bluetoothController.initializeBtScanningResources(); } catch (Throwable t) { Timber.e(t, "BT init failed"); }
@@ -485,7 +486,24 @@ public class NetworkSurveyService extends Service implements
         }
     }
 
-/**
+    public GpsListener getPrimaryLocationListener()
+    {
+        return primaryLocationListener;
+    }
+
+    /**
+     * @return The SsidExclusionManager instance for managing excluded WiFi SSIDs.
+     */
+    public SsidExclusionManager getSsidExclusionManager()
+    {
+        if (surveyRecordProcessor != null)
+        {
+            return surveyRecordProcessor.getSsidExclusionManager();
+        }
+        return null;
+    }
+
+    /**
      * Registers a new listener for changes to the location information.
      */
     public void registerLocationListener(LocationListener locationListener)
@@ -2229,6 +2247,11 @@ public class NetworkSurveyService extends Service implements
         public SurveyServiceBinder(NetworkSurveyService service)
         {
             this.service = service;
+        }
+
+        public NetworkSurveyService getService()
+        {
+            return service;
         }
 
         public void onDestroy()

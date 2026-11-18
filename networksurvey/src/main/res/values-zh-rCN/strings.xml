@@ -601,6 +601,7 @@
 <string name="survey_statistics_header">探测统计</string>
     <string name="records_captured_label">已捕获记录</string>
     <string name="help_dialog_title">了解记录计数</string>
+    <string name="help_dialog_total_count">本次测量任务已采集的记录总数。</string>
     <string name="help_dialog_both_counts">• <b>已捕获记录：</b>正在保存到文件或发送到服务器的探测记录总数。包含所有数据，无论质量如何。\n\n• <b>待上传记录：</b>符合上传至众包数据库质量标准的数据。\n\n应用的筛选条件：\n  - GPS 精度 &lt; 100 米\n  - 设备在两次记录间移动距离 &gt; 35 米\n  - 记录必须包含完整的基站/网络信息\n\n为何存在差异？上传数据库需要高质量数据以确保基站/网络地图的准确性。</string>
     <string name="help_dialog_upload_only">这显示已准备好上传到 OpenCelliD 和 BeaconDB 等众包数据库的记录。\n\n仅统计高质量记录：\n  - GPS 精度 &lt; 100 米\n  - 设备自上次位置后移动距离 &gt; 35 米\n  - 完整的基站/网络信息\n\n记录经过筛选以保证数据库质量。</string>
     <string name="help_dialog_got_it">知道了</string>

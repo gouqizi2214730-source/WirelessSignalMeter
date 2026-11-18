@@ -348,18 +348,117 @@ public abstract class SurveyDatabase extends RoomDatabase
             database.execSQL("DROP TABLE IF EXISTS ns_analytics_connection");
             database.execSQL("DROP TABLE IF EXISTS tower_cache");
 
-            // Drop the community-survey (OpenCelliD / BeaconDB) upload marker columns
-            database.execSQL("ALTER TABLE gsm_survey_records DROP COLUMN ocidUploaded");
-            database.execSQL("ALTER TABLE gsm_survey_records DROP COLUMN beaconDbUploaded");
-            database.execSQL("ALTER TABLE cdma_survey_records DROP COLUMN ocidUploaded");
-            database.execSQL("ALTER TABLE cdma_survey_records DROP COLUMN beaconDbUploaded");
-            database.execSQL("ALTER TABLE umts_survey_records DROP COLUMN ocidUploaded");
-            database.execSQL("ALTER TABLE umts_survey_records DROP COLUMN beaconDbUploaded");
-            database.execSQL("ALTER TABLE lte_survey_records DROP COLUMN ocidUploaded");
-            database.execSQL("ALTER TABLE lte_survey_records DROP COLUMN beaconDbUploaded");
-            database.execSQL("ALTER TABLE nr_survey_records DROP COLUMN ocidUploaded");
-            database.execSQL("ALTER TABLE nr_survey_records DROP COLUMN beaconDbUploaded");
-            database.execSQL("ALTER TABLE wifi_survey_records DROP COLUMN beaconDbUploaded");
+            // Android 13 ships SQLite 3.32: rebuild instead of using DROP COLUMN (3.35+).
+            // Room wraps the migration in a transaction. Preserve rows, IDs and AUTOINCREMENT
+            // high-water marks, including IDs belonging to records already deleted by the user.
+            database.execSQL("CREATE TABLE gsm_survey_records_new ("
+                    + "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, groupNumber INTEGER NOT NULL, "
+                    + "mcc INTEGER, mnc INTEGER, lac INTEGER, ci INTEGER, arfcn INTEGER, bsic INTEGER, "
+                    + "signalStrength REAL, ta INTEGER, servingCell INTEGER, provider TEXT, slot INTEGER, "
+                    + "deviceSerialNumber TEXT NOT NULL, deviceName TEXT NOT NULL, deviceTime TEXT NOT NULL, "
+                    + "latitude REAL NOT NULL, longitude REAL NOT NULL, altitude REAL NOT NULL, missionId TEXT, "
+                    + "recordNumber INTEGER NOT NULL, accuracy INTEGER NOT NULL, locationAge INTEGER NOT NULL, speed REAL)");
+            database.execSQL("INSERT INTO gsm_survey_records_new SELECT "
+                    + "id, groupNumber, mcc, mnc, lac, ci, arfcn, bsic, signalStrength, ta, servingCell, provider, slot, "
+                    + "deviceSerialNumber, deviceName, deviceTime, latitude, longitude, altitude, missionId, "
+                    + "recordNumber, accuracy, locationAge, speed FROM gsm_survey_records");
+            database.execSQL("UPDATE sqlite_sequence SET seq = max(seq, "
+                    + "coalesce((SELECT seq FROM sqlite_sequence WHERE name = 'gsm_survey_records'), 0)) "
+                    + "WHERE name = 'gsm_survey_records_new'");
+            database.execSQL("DROP TABLE gsm_survey_records");
+            database.execSQL("ALTER TABLE gsm_survey_records_new RENAME TO gsm_survey_records");
+
+            database.execSQL("CREATE TABLE cdma_survey_records_new ("
+                    + "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, groupNumber INTEGER NOT NULL, "
+                    + "sid INTEGER, nid INTEGER, zone INTEGER, bsid INTEGER, channel INTEGER, pnOffset INTEGER, "
+                    + "signalStrength REAL, ecio REAL, servingCell INTEGER, provider TEXT, slot INTEGER, "
+                    + "deviceSerialNumber TEXT NOT NULL, deviceName TEXT NOT NULL, deviceTime TEXT NOT NULL, "
+                    + "latitude REAL NOT NULL, longitude REAL NOT NULL, altitude REAL NOT NULL, missionId TEXT, "
+                    + "recordNumber INTEGER NOT NULL, accuracy INTEGER NOT NULL, locationAge INTEGER NOT NULL, speed REAL)");
+            database.execSQL("INSERT INTO cdma_survey_records_new SELECT "
+                    + "id, groupNumber, sid, nid, zone, bsid, channel, pnOffset, signalStrength, ecio, servingCell, provider, slot, "
+                    + "deviceSerialNumber, deviceName, deviceTime, latitude, longitude, altitude, missionId, "
+                    + "recordNumber, accuracy, locationAge, speed FROM cdma_survey_records");
+            database.execSQL("UPDATE sqlite_sequence SET seq = max(seq, "
+                    + "coalesce((SELECT seq FROM sqlite_sequence WHERE name = 'cdma_survey_records'), 0)) "
+                    + "WHERE name = 'cdma_survey_records_new'");
+            database.execSQL("DROP TABLE cdma_survey_records");
+            database.execSQL("ALTER TABLE cdma_survey_records_new RENAME TO cdma_survey_records");
+
+            database.execSQL("CREATE TABLE umts_survey_records_new ("
+                    + "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, groupNumber INTEGER NOT NULL, "
+                    + "mcc INTEGER, mnc INTEGER, lac INTEGER, cid INTEGER, uarfcn INTEGER, psc INTEGER, "
+                    + "rscp REAL, signalStrength REAL, ecno REAL, servingCell INTEGER, provider TEXT, slot INTEGER, "
+                    + "deviceSerialNumber TEXT NOT NULL, deviceName TEXT NOT NULL, deviceTime TEXT NOT NULL, "
+                    + "latitude REAL NOT NULL, longitude REAL NOT NULL, altitude REAL NOT NULL, missionId TEXT, "
+                    + "recordNumber INTEGER NOT NULL, accuracy INTEGER NOT NULL, locationAge INTEGER NOT NULL, speed REAL)");
+            database.execSQL("INSERT INTO umts_survey_records_new SELECT "
+                    + "id, groupNumber, mcc, mnc, lac, cid, uarfcn, psc, rscp, signalStrength, ecno, servingCell, provider, slot, "
+                    + "deviceSerialNumber, deviceName, deviceTime, latitude, longitude, altitude, missionId, "
+                    + "recordNumber, accuracy, locationAge, speed FROM umts_survey_records");
+            database.execSQL("UPDATE sqlite_sequence SET seq = max(seq, "
+                    + "coalesce((SELECT seq FROM sqlite_sequence WHERE name = 'umts_survey_records'), 0)) "
+                    + "WHERE name = 'umts_survey_records_new'");
+            database.execSQL("DROP TABLE umts_survey_records");
+            database.execSQL("ALTER TABLE umts_survey_records_new RENAME TO umts_survey_records");
+
+            database.execSQL("CREATE TABLE lte_survey_records_new ("
+                    + "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, groupNumber INTEGER NOT NULL, "
+                    + "mcc INTEGER, mnc INTEGER, tac INTEGER, eci INTEGER, earfcn INTEGER, pci INTEGER, rsrp REAL, rsrq REAL, "
+                    + "ta INTEGER, servingCell INTEGER, lteBandwidth TEXT, provider TEXT, signalStrength REAL, "
+                    + "cqi INTEGER, slot INTEGER, snr REAL, "
+                    + "deviceSerialNumber TEXT NOT NULL, deviceName TEXT NOT NULL, deviceTime TEXT NOT NULL, "
+                    + "latitude REAL NOT NULL, longitude REAL NOT NULL, altitude REAL NOT NULL, missionId TEXT, "
+                    + "recordNumber INTEGER NOT NULL, accuracy INTEGER NOT NULL, locationAge INTEGER NOT NULL, speed REAL)");
+            database.execSQL("INSERT INTO lte_survey_records_new SELECT "
+                    + "id, groupNumber, mcc, mnc, tac, eci, earfcn, pci, rsrp, rsrq, ta, servingCell, lteBandwidth, "
+                    + "provider, signalStrength, cqi, slot, snr, "
+                    + "deviceSerialNumber, deviceName, deviceTime, latitude, longitude, altitude, missionId, "
+                    + "recordNumber, accuracy, locationAge, speed FROM lte_survey_records");
+            database.execSQL("UPDATE sqlite_sequence SET seq = max(seq, "
+                    + "coalesce((SELECT seq FROM sqlite_sequence WHERE name = 'lte_survey_records'), 0)) "
+                    + "WHERE name = 'lte_survey_records_new'");
+            database.execSQL("DROP TABLE lte_survey_records");
+            database.execSQL("ALTER TABLE lte_survey_records_new RENAME TO lte_survey_records");
+
+            database.execSQL("CREATE TABLE nr_survey_records_new ("
+                    + "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, groupNumber INTEGER NOT NULL, "
+                    + "mcc INTEGER, mnc INTEGER, tac INTEGER, nci INTEGER, narfcn INTEGER, pci INTEGER, "
+                    + "ssRsrp REAL, ssRsrq REAL, ssSinr REAL, csiRsrp REAL, csiRsrq REAL, csiSinr REAL, "
+                    + "ta INTEGER, servingCell INTEGER, provider TEXT, slot INTEGER, "
+                    + "deviceSerialNumber TEXT NOT NULL, deviceName TEXT NOT NULL, deviceTime TEXT NOT NULL, "
+                    + "latitude REAL NOT NULL, longitude REAL NOT NULL, altitude REAL NOT NULL, missionId TEXT, "
+                    + "recordNumber INTEGER NOT NULL, accuracy INTEGER NOT NULL, locationAge INTEGER NOT NULL, speed REAL)");
+            database.execSQL("INSERT INTO nr_survey_records_new SELECT "
+                    + "id, groupNumber, mcc, mnc, tac, nci, narfcn, pci, ssRsrp, ssRsrq, ssSinr, csiRsrp, csiRsrq, csiSinr, "
+                    + "ta, servingCell, provider, slot, "
+                    + "deviceSerialNumber, deviceName, deviceTime, latitude, longitude, altitude, missionId, "
+                    + "recordNumber, accuracy, locationAge, speed FROM nr_survey_records");
+            database.execSQL("UPDATE sqlite_sequence SET seq = max(seq, "
+                    + "coalesce((SELECT seq FROM sqlite_sequence WHERE name = 'nr_survey_records'), 0)) "
+                    + "WHERE name = 'nr_survey_records_new'");
+            database.execSQL("DROP TABLE nr_survey_records");
+            database.execSQL("ALTER TABLE nr_survey_records_new RENAME TO nr_survey_records");
+
+            database.execSQL("CREATE TABLE wifi_survey_records_new ("
+                    + "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, sourceAddress TEXT, destinationAddress TEXT, bssid TEXT, "
+                    + "beaconInterval INTEGER, serviceSetType TEXT, ssid TEXT, supportedRates TEXT, extendedSupportedRates TEXT, "
+                    + "cipherSuites TEXT, akmSuites TEXT, encryptionType TEXT, wps INTEGER, passpoint INTEGER, bandwidth TEXT, "
+                    + "channel INTEGER, frequencyMhz INTEGER, signalStrength REAL, snr REAL, nodeType TEXT, standard TEXT, "
+                    + "deviceSerialNumber TEXT NOT NULL, deviceName TEXT NOT NULL, deviceTime TEXT NOT NULL, "
+                    + "latitude REAL NOT NULL, longitude REAL NOT NULL, altitude REAL NOT NULL, missionId TEXT, "
+                    + "recordNumber INTEGER NOT NULL, accuracy INTEGER NOT NULL, locationAge INTEGER NOT NULL, speed REAL)");
+            database.execSQL("INSERT INTO wifi_survey_records_new SELECT "
+                    + "id, sourceAddress, destinationAddress, bssid, beaconInterval, serviceSetType, ssid, supportedRates, "
+                    + "extendedSupportedRates, cipherSuites, akmSuites, encryptionType, wps, passpoint, bandwidth, "
+                    + "channel, frequencyMhz, signalStrength, snr, nodeType, standard, "
+                    + "deviceSerialNumber, deviceName, deviceTime, latitude, longitude, altitude, missionId, "
+                    + "recordNumber, accuracy, locationAge, speed FROM wifi_survey_records");
+            database.execSQL("UPDATE sqlite_sequence SET seq = max(seq, "
+                    + "coalesce((SELECT seq FROM sqlite_sequence WHERE name = 'wifi_survey_records'), 0)) "
+                    + "WHERE name = 'wifi_survey_records_new'");
+            database.execSQL("DROP TABLE wifi_survey_records");
+            database.execSQL("ALTER TABLE wifi_survey_records_new RENAME TO wifi_survey_records");
         }
     };
 
