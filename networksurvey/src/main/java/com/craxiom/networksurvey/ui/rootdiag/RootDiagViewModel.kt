@@ -934,7 +934,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
         const val MAX_DIAGNOSTIC_MESSAGES = 400
         const val MAX_COLLECTOR_RUNS = 8
         const val MAX_NEIGHBOR_SAMPLES_PER_CODE = 6
-        val neighborProbeSampleCodes = setOf("0xB119", "0xB123", "0xB96A", "0xB96D", "0xB96E", "0xB96F")
+        val neighborProbeSampleCodes = setOf("0xB119", "0xB123", "0xB96A", "0xB96D", "0xB96E", "0xB96F", "0xB992")
         const val MAX_LINE_BYTES = 540_672
         const val MAX_DETAIL_CHARS = 12_000_000
         const val MAX_BROADCAST_CELLS = 12
