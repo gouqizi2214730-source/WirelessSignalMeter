@@ -320,8 +320,13 @@ static int nr_band_command(const char *bands, int restore) {
             }
             if (fsync(state_dir)) return fail("Cannot sync the missing baseline; no band changes were made.");
         }
-        if (nsa && backup_mask(LB_NR_NSA_BANDS, "nr-nsa-original.bin", 64))
-            puts("Note: nr_nsa_band_pref found but not readable; restoring will remove it.");
+        if (nsa) {
+            int nsa_backup = backup_mask(LB_NR_NSA_BANDS, "nr-nsa-original.bin", 64);
+            if (nsa_backup == 1)
+                return fail("Cannot persist the original NR-NSA backup. No band changes were made.");
+            if (nsa_backup == 2)
+                puts("Note: nr_nsa_band_pref found but not readable now; restoring will remove it.");
+        }
     }
     if (nsa && put_file(LB_MMODE, LB_NR_NSA_BANDS, LB_MMODE, mask, 64, 0x7a, 0x7a, 0)) return 1;
     if (put_file(LB_MMODE, LB_NR_BANDS, LB_MMODE, mask, 64, 0x7a, 0x7a, 0)) return 1;
