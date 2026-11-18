@@ -129,6 +129,9 @@ android {
 }
 
 abstract class CompileRootDiag extends DefaultTask {
+    @Input
+    abstract Property<String> getBinaryName()
+
     @InputFile
     @PathSensitive(PathSensitivity.RELATIVE)
     abstract RegularFileProperty getSourceFile()
@@ -157,7 +160,7 @@ abstract class CompileRootDiag extends DefaultTask {
         def suffix = os.startsWith("windows") ? ".exe" : ""
         def ndk = ndkDirectory.get()
         def clang = ndk.file("toolchains/llvm/prebuilt/$host/bin/clang$suffix").asFile
-        def binary = outputDirectory.file("arm64-v8a/libwireless_root_diag.so").get().asFile
+        def binary = outputDirectory.file("arm64-v8a/${binaryName.get()}").get().asFile
         binary.parentFile.mkdirs()
         execOperations.exec {
             commandLine clang, "--target=aarch64-linux-android33", "-std=gnu17", "-O2", "-fPIE", "-pie",
@@ -168,6 +171,7 @@ abstract class CompileRootDiag extends DefaultTask {
 }
 
 def compileRootDiag = tasks.register("compileRootDiag", CompileRootDiag) {
+    binaryName.set("libwireless_root_diag.so")
     sourceFile.set(layout.projectDirectory.file("src/main/cpp/root_diag.c"))
     decoderSources.from(fileTree("src/main/cpp") { include "sigdec.c", "nasdec.c", "rrc_schema.h" })
     ndkDirectory.set(androidComponents.sdkComponents.ndkDirectory)
@@ -177,6 +181,19 @@ def compileRootDiag = tasks.register("compileRootDiag", CompileRootDiag) {
 
 androidComponents.onVariants(androidComponents.selector().all()) { variant ->
     variant.sources.jniLibs.addGeneratedSourceDirectory(compileRootDiag) { it.outputDirectory }
+}
+
+def compileBandLock = tasks.register("compileBandLock", CompileRootDiag) {
+    sourceFile.set(layout.projectDirectory.file("src/main/cpp/band_lock.c"))
+    decoderSources.from(layout.projectDirectory.file("src/main/cpp/band_lock_protocol.h"))
+    ndkDirectory.set(androidComponents.sdkComponents.ndkDirectory)
+    ndkVersion.set(android.ndkVersion)
+    outputDirectory.set(layout.buildDirectory.dir("generated/bandLock/jniLibs"))
+    binaryName.set("libwireless_band_lock.so")
+}
+
+androidComponents.onVariants(androidComponents.selector().all()) { variant ->
+    variant.sources.jniLibs.addGeneratedSourceDirectory(compileBandLock) { it.outputDirectory }
 }
 
 android.applicationVariants.configureEach { variant ->

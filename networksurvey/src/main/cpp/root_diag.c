@@ -174,8 +174,8 @@ static uint16_t k_qmdl_codes[] = {
 };
 #define N_QMDL_CODES ((int)(sizeof(k_qmdl_codes) / sizeof(k_qmdl_codes[0])))
 
-/* LL1 neighbor tracking/CER and NR searcher candidates. Kept out of the required mask. */
-static uint16_t k_neighbor_probe_codes[] = { 0xB119, 0xB123, 0xB96D, 0xB96E, 0xB96F };
+/* LL1 neighbor tracking/CER and NR measurement candidates. Kept out of the required mask. */
+static uint16_t k_neighbor_probe_codes[] = { 0xB119, 0xB123, 0xB96D, 0xB96E, 0xB96F, 0xB992 };
 #define N_NEIGHBOR_PROBES ((int)(sizeof(k_neighbor_probe_codes) / sizeof(k_neighbor_probe_codes[0])))
 
 static uint16_t g_codes[MAX_CODES];
@@ -214,6 +214,7 @@ static struct neighbor_stat g_neighbor_stats[] = {
     { .code = 0xB975, .serving_reference = 1 }, { .code = 0xB8DD, .serving_reference = 1 },
     { .code = 0xB119, .probe = 1 }, { .code = 0xB123, .probe = 1 },
     { .code = 0xB96D, .probe = 1 }, { .code = 0xB96E, .probe = 1 }, { .code = 0xB96F, .probe = 1 },
+    { .code = 0xB992, .probe = 1 },
 };
 static struct neighbor_stat *neighbor_stat_for(uint16_t code) {
     for (unsigned i = 0; i < sizeof(g_neighbor_stats) / sizeof(g_neighbor_stats[0]); i++) {
@@ -2056,35 +2057,90 @@ static void parse_nr_b96a(const uint8_t *b, int n) {
 }
 
 /* --- 0xB97F NR ML1 measurement database update --- */
+static int b97f_cell_count(const uint8_t *layer, int count_at, int use_index) {
+    int count = layer[count_at];
+    if (use_index && (count == 0 || count == 0xFF)) {
+        int fallback = layer[count_at == 4 ? 5 : 8];
+        if (fallback != 0xFF) return fallback;
+    }
+    return count == 0xFF ? 0 : count;
+}
+
+static int b97f_layout_fits(const uint8_t *b, int n, int off, int nlayers,
+                            int lsz, int bsz, int count_at, int use_index) {
+    for (int layer = 0; layer < nlayers; layer++) {
+        if (n - off < lsz) return 0;
+        const uint8_t *lb = b + off;
+        uint32_t arfcn = rd32(lb);
+        int serving_pci = rd16(lb + 6), cells = b97f_cell_count(lb, count_at, use_index);
+        if (!arfcn || arfcn > 3279165 || (serving_pci > 1007 && serving_pci != 0xFFFF) || cells > 64) return 0;
+        off += lsz;
+        for (int cell = 0; cell < cells; cell++) {
+            if (n - off < 16 || rd16(b + off) > 1007) return 0;
+            unsigned beams = b[off + 4];
+            if (beams > 64 || beams > (unsigned)(n - off - 16) / bsz) return 0;
+            off += 16 + beams * bsz;
+        }
+    }
+    if (n - off > 3) return 0;
+    while (off < n) if (b[off++] != 0) return 0;
+    return 1;
+}
+
+static int b97f_neighbor_beam(const uint8_t *beams, unsigned count, int stride) {
+    if (count == 1) return rd16(beams);
+    int best = -1, tied = 0;
+    double best_rsrp = -156.0;
+    for (unsigned i = 0; i < count; i++) {
+        const uint8_t *beam = beams + i * stride;
+        int ssb = rd16(beam);
+        double rsrp = q7(rd32(beam + stride - 16));
+        if (ssb >= 64 || rsrp <= -156.0 || rsrp > -31.0) continue;
+        if (rsrp > best_rsrp) {
+            best = ssb;
+            best_rsrp = rsrp;
+            tied = 0;
+        } else if (rsrp == best_rsrp && ssb != best) {
+            tied = 1;
+        }
+    }
+    return tied ? -1 : best;
+}
+
 static void parse_nr_b97f(const uint8_t *b, int n) {
     if (n < 20) { unknown_layout(0xB97F, 0, b, n, "short header"); return; }
     int rel_min = rd16(b), rel_maj = rd16(b + 2);
     uint32_t version = rd32(b);
-    int nlayers, off, lsz, bsz, v3 = 0, guess = 0;
+    int nlayers, off, lsz, bsz, guess = 0;
     if (rel_maj == 2 && rel_min == 7) { nlayers = b[4]; off = 16; lsz = 32; bsz = 44; }
     else if (rel_maj == 2 && (rel_min == 9 || rel_min == 10)) { nlayers = b[8]; off = 20; lsz = 32; bsz = rel_min == 10 ? 84 : 44; }
-    else if (rel_maj == 3) { nlayers = b[8]; off = 20; lsz = 40; bsz = 84; v3 = 1; guess = rel_min != 0; }
+    else if (rel_maj == 3) { nlayers = b[8]; off = 20; lsz = 40; bsz = 84; guess = rel_min != 0; }
     else { unknown_layout(0xB97F, ((uint32_t)rel_maj << 16 | (uint32_t)rel_min), b, n, "version"); return; }
     if (nlayers <= 0 || nlayers > 16) { unknown_layout(0xB97F, ((uint32_t)rel_maj << 16 | (uint32_t)rel_min), b, n, "num_layers"); return; }
+    int count_at = rel_maj == 2 && rel_min == 7 ? 4 : 5, use_index = 0;
+    int matched = 0;
+    for (; use_index <= 1 && !matched; use_index++) {
+        if (b97f_layout_fits(b, n, off, nlayers, lsz, bsz, count_at, use_index)) {
+            matched = 1;
+        } else if (rel_maj == 2 && count_at == 5 &&
+                   b97f_layout_fits(b, n, off, nlayers, lsz, bsz, 4, use_index)) {
+            /* Some 2.9/2.10 modems retain the 2.7 carrier field order. */
+            count_at = 4;
+            matched = 1;
+        }
+    }
+    if (!matched) { unknown_layout(0xB97F, version, b, n, "carrier/cell/beam layout"); return; }
+    use_index--;
     layout_seen(0xB97F, version, b, n);
     for (int L = 0; L < nlayers; L++) {
-        if (off + lsz > n) {
-            unknown_layout(0xB97F, ((uint32_t)rel_maj << 16 | (uint32_t)rel_min), b, n, "layer length");
-            return;
-        }
         const uint8_t *lb = b + off;
         long arfcn = rd32(lb);
-        /* 2.9/2.10 and 3.0 put the count in byte 5. Byte 4 is a separate serving flag. */
-        int ncells = lb[!v3 && rel_min == 7 ? 4 : 5];
-        int spci = rd16(lb + 6), sssb = lb[v3 || rel_min >= 9 ? 9 : 8];
+        int ncells = b97f_cell_count(lb, count_at, use_index);
+        int spci = rd16(lb + 6), sssb = lb[count_at == 4 ? 8 : 9];
         double layer_rsrp = q7(rd32(lb + 12));
         double rx0 = NA_F, rx1 = NA_F;
         off += lsz;
         int nonserv = (spci == 0xFFFF);
-        if (arfcn <= 0 || arfcn > 3279165 || (spci > 1007 && !nonserv) || ncells > 64) {
-            unknown_layout(0xB97F, ((uint32_t)rel_maj << 16 | (uint32_t)rel_min), b, n, "carrier or cell count");
-            return;
-        }
         struct jb j; jb_init(&j, "nr_meas");
         if (nonserv) jb_add(&j, ",\"src\":\"B97F\",\"layer\":%d,\"arfcn\":%ld,\"freq_mhz\":%.2f,\"serving\":0", L, arfcn, nr_freq(arfcn));
         else {
@@ -2093,13 +2149,11 @@ static void parse_nr_b97f(const uint8_t *b, int n) {
         }
         double srsrp = NA_F, srsrq = NA_F;
         jb_add(&j, ",\"cells\":[");
-        int first = 1, bad = 0, neighbors = 0, power_count = 0, quality_count = 0;
+        int first = 1, neighbors = 0, power_count = 0, quality_count = 0;
         for (int c = 0; c < ncells; c++) {
-            if (off + 16 > n) { bad = 1; break; }
             const uint8_t *cb = b + off;
             int pci = rd16(cb);
-            uint32_t nb = rd32(cb + 4);
-            if (pci > 1007 || nb > 64 || nb > (uint32_t)(n - off - 16) / bsz) { bad = 1; break; }
+            unsigned nb = cb[4];
             double rp = q7(rd32(cb + 8)), rq = q7(rd32(cb + 12));
             if (rp == -156.0) rp = NA_F;
             if (rq == -43.0) rq = NA_F;
@@ -2119,31 +2173,28 @@ static void parse_nr_b97f(const uint8_t *b, int n) {
             if (pci != spci) { neighbors++; power_count += rp != NA_F; quality_count += rq != NA_F; }
             jb_add(&j, "%s{\"pci\":%d", first ? "" : ",", pci);
             jb_f(&j, "rsrp", rp); jb_f(&j, "rsrq", rq);
-            if (pci != spci && !guess && nb == 1) {
-                /* One reported SSB unambiguously belongs to this PCI and frequency. */
-                int ssb = rd16(cb + 16);
-                if (ssb < 64) jb_i(&j, "ssb", ssb);
+            if (pci != spci && !guess && nb) {
+                int ssb = b97f_neighbor_beam(cb + 16, nb, bsz);
+                if (ssb >= 0 && ssb < 64) jb_i(&j, "ssb", ssb);
             }
             jb_add(&j, "}");
             first = 0;
         }
         jb_add(&j, "]");
         if (!nonserv) {
-            if (!bad && !guess && rx0 > -156 && rx0 < -20) jb_f(&j, "rsrp_rx0", rx0);
-            if (!bad && !guess && rx1 > -156 && rx1 < -20) jb_f(&j, "rsrp_rx1", rx1);
+            if (!guess && rx0 > -156 && rx0 < -20) jb_f(&j, "rsrp_rx0", rx0);
+            if (!guess && rx1 > -156 && rx1 < -20) jb_f(&j, "rsrp_rx1", rx1);
             jb_f(&j, "rsrp", srsrp > NA_F + 1 ? srsrp : layer_rsrp);
             jb_f(&j, "rsrq", srsrq);
         }
         jb_add(&j, ",\"ver\":\"%d.%d\"", rel_maj, rel_min);
         if (guess) jb_add(&j, ",\"guess\":1");
-        if (bad) jb_add(&j, ",\"truncated\":1");
         jb_emit(&j);
-        if (!guess && !bad && !nonserv && (L == 0 || g_nr.arfcn == arfcn)) {
+        if (!guess && !nonserv && (L == 0 || g_nr.arfcn == arfcn)) {
             serving_update(&g_nr, spci, arfcn, "B97F");
             g_nr.rsrp = srsrp > NA_F + 1 ? srsrp : layer_rsrp; g_nr.rsrq = srsrq;
             g_nr.t_meas = mono_ms(); snprintf(g_nr.src, sizeof(g_nr.src), "B97F");
         }
-        if (bad) { unknown_layout(0xB97F, version, b, n, "invalid or truncated cell"); return; }
         if (!guess) neighbor_decoded(0xB97F, neighbors, power_count, quality_count, 0, 0);
     }
 }
@@ -4643,7 +4694,7 @@ static void handle_record(const uint8_t *rec, int len) {
     case 0xB119: case 0xB123:
         if (blen >= 1) layout_seen(code, body[0], body, blen);
         break;
-    case 0xB96D: case 0xB96E: case 0xB96F:
+    case 0xB96D: case 0xB96E: case 0xB96F: case 0xB992:
         if (blen >= 4) layout_seen(code, rd32(body), body, blen);
         break;
     default: break; /* saved raw only; counted in status */
