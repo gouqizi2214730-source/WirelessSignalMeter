@@ -129,6 +129,13 @@ public class AndroidLteSinrHostTest
             check(expected == failing.fatal, "fatal VM error propagates");
         }
 
+        AndroidLteSinrReader.read(missing, snapshot(17), 7, 1, 21_000, "task-a", "clock");
+        var capturedTask = last();
+        AndroidLteSinrReader.read(missing, snapshot(18), 7, 1, 22_000, "task-b", "clock");
+        check(capturedTask.taskId().equals("task-a") && last().taskId().equals("task-b"),
+                "diagnostics retain task captured at sample time");
+        check(capturedTask.selectedSinr() == 17 && last().selectedSinr() == 18 &&
+                last().clockId().equals("clock"), "task metadata does not alter SINR selection");
         for (int i = 0; i < 140; i++)
             AndroidLteSinrReader.read(missing, snapshot(17), i % 2, 1, 21_000);
         List<AndroidLteSinrReader.Sample> captured = AndroidLteSinrReader.snapshot();

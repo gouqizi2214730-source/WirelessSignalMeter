@@ -2291,6 +2291,7 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
 
     private void notifyMissionIdListeners(String currentMissionId, boolean sessionActive)
     {
+        com.craxiom.networksurvey.db.SurveyTaskStore.onMissionState(this, currentMissionId, sessionActive);
         for (IMissionIdListener listener : missionIdListeners)
         {
             listener.onMissionIdChanged(currentMissionId, sessionActive);

@@ -8,6 +8,10 @@ import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.craxiom.networksurvey.BuildConfig
+import com.craxiom.networksurvey.db.SurveyTaskStore
+import com.craxiom.networksurvey.db.toJson
+import com.craxiom.networksurvey.model.SurveyEvent
+import com.craxiom.networksurvey.model.ownsDiagnostic
 import com.craxiom.networksurvey.R
 import com.craxiom.networksurvey.fragments.model.CellularViewModel
 import com.craxiom.networksurvey.model.CellularProtocol
@@ -37,7 +41,11 @@ internal enum class RootDiagStatus {
     Checking, Unavailable, Denied, Starting, Unsupported, Running, Stopped,
 }
 
-internal data class DiagRecord(val id: Long, val receivedAt: Long, val data: JSONObject) {
+internal data class DiagRecord(
+    val id: Long, val receivedAt: Long, val data: JSONObject,
+    val taskId: String? = if (data.isNull("task_id")) null else data.optString("task_id").takeIf(String::isNotBlank),
+    val clockId: String? = if (data.isNull("clock_id")) null else data.optString("clock_id").takeIf(String::isNotBlank),
+) {
     val type = data.optString("type")
     val source = data.optString("src")
     val time = data.optLong("t")
@@ -208,9 +216,21 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
         val neighborTables = neighborTableDiagnostics(snapshot.records)
         val invalidLines = invalidLineCount
         withContext(Dispatchers.IO) {
+            val tasks = SurveyTaskStore.get(app)
+            val taskIds = (snapshot.records.map { it.data } + records + samples + probeSamples)
+                .mapNotNull { if (it.isNull("task_id")) null else it.optString("task_id").takeIf(String::isNotBlank) }.toMutableSet()
+            snapshot.records.mapNotNullTo(taskIds) { it.taskId }
+            androidLteSinr.mapNotNullTo(taskIds) { it.taskId() }
+            tasks.active.value?.id?.let(taskIds::add)
             val header = JSONObject()
                 .put("type", "export")
-                .put("schema", 2)
+                .put("schema", 3)
+                .put("active_task_id", tasks.active.value?.id ?: JSONObject.NULL)
+                .put("tasks", JSONArray(taskIds.map { id -> tasks.taskMetadata(id).apply {
+                    put("mission_count", optJSONArray("mission_ids")?.length() ?: 0)
+                    remove("mission_ids")
+                } }))
+                .put("task_association", "captured_at_sample; missing task_id remains unassigned")
                 .put("time_ms", System.currentTimeMillis())
                 .put("app_version", BuildConfig.VERSION_NAME)
                 .put("app_version_code", BuildConfig.VERSION_CODE)
@@ -231,6 +251,15 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
             val output = app.contentResolver.openOutputStream(uri, "wt") ?: throw IOException("No output stream")
             output.bufferedWriter(Charsets.UTF_8).use { writer ->
                 writer.appendLine(header.toString())
+                for (taskId in taskIds) {
+                    val events = tasks.events(taskId)
+                    writer.appendLine(JSONObject().put("type", "task_event_window").put("task_id", taskId)
+                        .put("limit", SurveyTaskStore.EVENT_LIMIT).put("limited", events.size > SurveyTaskStore.EVENT_LIMIT).toString())
+                    for (event in events.takeLast(SurveyTaskStore.EVENT_LIMIT)) {
+                        // Diagnostic exports retain the existing identity-redaction boundary.
+                        writer.appendLine(event.toJson().apply { remove("detail") }.toString())
+                    }
+                }
                 collectorStatus?.let { writer.appendLine(redactDiagnostic(it).toString()) }
                 for (entry in runs) writer.appendLine(redactDiagnostic(entry).toString())
                 signalMode?.let { writer.appendLine(it.toString()) }
@@ -238,7 +267,8 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 for (entry in androidLteSinr) writer.appendLine(entry.toDiagnosticJson().toString())
                 for (entry in neighborTables) writer.appendLine(entry.toString())
                 for (entry in layouts) writer.appendLine(redactDiagnostic(entry).toString())
-                for (entry in snapshot.records) writer.appendLine(redactDiagnostic(entry.data).toString())
+                for (entry in snapshot.records) writer.appendLine(redactDiagnostic(entry.data)
+                    .put("task_id", entry.taskId ?: JSONObject.NULL).put("clock_id", entry.clockId ?: JSONObject.NULL).toString())
                 for (entry in records) writer.appendLine(redactDiagnostic(entry).toString())
                 for (entry in samples) writer.appendLine(entry.toString())
                 for (entry in probeSamples) writer.appendLine(entry.toString())
@@ -332,9 +362,14 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
     }
 
     private suspend fun captureRecords() {
+        val tasks = try { withContext(Dispatchers.IO) { SurveyTaskStore.get(app) } }
+        catch (error: android.database.SQLException) {
+            timber.log.Timber.w(error, "Could not open diagnostic task store")
+            null
+        }
         val helper = File(app.applicationInfo.nativeLibraryDir, "libwireless_root_diag.so")
         val run = JSONObject().put("type", "collector_run").put("id", nextCollectorRun++)
-            .put("started_ms", System.currentTimeMillis())
+            .put("started_ms", System.currentTimeMillis()).put("clock_id", SurveyTaskStore.CLOCK_ID)
         if (collectorRuns.size == MAX_COLLECTOR_RUNS) collectorRuns.removeFirst()
         collectorRuns.addLast(run)
 
@@ -352,6 +387,9 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
         var lastFlush = 0L
         var lastHeartbeat = SystemClock.elapsedRealtime()
         val lastChartRecords = mutableMapOf<String, Long>()
+        val lastEventStates = mutableMapOf<String, String>()
+        val recentRrc = mutableMapOf<String, JSONObject>()
+        val runTaskIds = linkedSetOf<String>()
         val buffer = ByteArray(8192)
         var qmdlCommand: Char? = null
         var qmdlDeadline: Long? = null
@@ -459,6 +497,75 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
 
         suspend fun receive(value: JSONObject) {
             val now = SystemClock.elapsedRealtime()
+            val receivedTime = System.currentTimeMillis()
+            val type = value.optString("type")
+            val task = try {
+                tasks?.active?.value ?: if (type in signalingTypes || type == "serving") tasks?.observationTask() else null
+            } catch (error: android.database.SQLException) {
+                timber.log.Timber.w(error, "Could not associate diagnostic task")
+                null
+            }?.takeIf { it.ownsDiagnostic(value.optLong("t"), receivedTime, now, SurveyTaskStore.CLOCK_ID) }
+            value.put("task_id", task?.id ?: JSONObject.NULL).put("received_time_ms", receivedTime)
+                .put("received_elapsed_ms", now).put("clock_id", SurveyTaskStore.CLOCK_ID)
+                .put("collector_run", run.optLong("id"))
+            if (task != null && runTaskIds.add(task.id)) run.put("task_ids", JSONArray(runTaskIds.toList()))
+            val messageRat = value.optString("rat")
+            if (type == "rrc") {
+                value.put("message_id", nextId)
+                recentRrc[messageRat] = value
+            }
+            if (type == "event") {
+                val parent = recentRrc[messageRat]?.takeIf {
+                    it.optString("msg") == value.optString("msg") &&
+                        it.optString("task_id") == value.optString("task_id") &&
+                        now - it.optLong("received_elapsed_ms") in 0..1_000
+                }
+                if (parent != null) {
+                    for (key in listOf("pci", "arfcn", "src", "rrc_transaction_id", "cause", "tentative", "guess", "decode_incomplete")) {
+                        if (!value.has(key) && parent.has(key)) value.put(key, parent.get(key))
+                    }
+                    value.put("related_message_id", parent.optLong("message_id"))
+                }
+            }
+            val stateKey = "$type:${value.optString("rat")}"
+            val state = listOf("state", "reg", "call", "status").joinToString(":") { value.optString(it) }
+            val isStateChange = type in setOf("nas_mm", "ims_reg", "ims_call", "ims_state") &&
+                state.replace(":", "").isNotBlank() && lastEventStates.put(stateKey, state) != state
+            val completion = type == "rrc" && value.optString("msg") in setOf(
+                "rrcSetupComplete", "rrcConnectionSetupComplete", "rrcResumeComplete", "rrcConnectionResumeComplete",
+                "rrcReconfigurationComplete", "rrcConnectionReconfigurationComplete",
+                "rrcReestablishmentComplete", "rrcConnectionReestablishmentComplete", "securityModeFailure",
+            )
+            if (task != null && (type in setOf("event", "cell_change", "nas_release") || isStateChange || completion)) {
+                val rat = value.optString("rat").takeIf { it in setOf("NR", "LTE") }
+                // A private DIAG stream has no reliable Android subscription ID.
+                val estimated = value.optInt("tentative") == 1 || value.optInt("guess") == 1
+                val sourceTime = value.optLong("t")
+                val sourceAge = receivedTime - sourceTime
+                val fresh = sourceTime > 0 && sourceAge in 0..10_000
+                val pci = value.optInt("to_pci", value.optInt("pci", -1)).takeIf { !estimated && fresh && it in 0..1007 }
+                val arfcn = value.optInt("to_arfcn", value.optInt("arfcn", -1)).takeIf { !estimated && fresh && it >= 0 }
+                val title = if (type == "cell_change") "服务小区变化（DIAG）"
+                    else (if (messageRat == "IMS") value.optString("event") else value.optString("msg"))
+                        .ifBlank { value.optString("event").ifBlank { "$type $state" } } +
+                        if (estimated) "（推测）" else ""
+                val safeValue = redactDiagnostic(value)
+                val details = listOf("msg", "cause", "why", "from_pci", "from_arfcn", "to_pci",
+                    "to_arfcn", "rrc_transaction_id", "related_message_id", "collector_run", "src", "tentative", "guess", "decode_incomplete")
+                    .filter { safeValue.has(it) }.joinToString(" · ") { "$it=${safeValue.opt(it)}" }
+                try {
+                    withContext(Dispatchers.IO) {
+                        tasks?.append(SurveyEvent(java.util.UUID.randomUUID().toString(), task.id,
+                            if (fresh) sourceTime else receivedTime, if (fresh) now - sourceAge else now,
+                            SurveyTaskStore.CLOCK_ID, "root_diag", type,
+                            title, details, rat = rat, pci = pci, arfcn = arfcn,
+                            sourceTimeMs = sourceTime.takeIf { it > 0 },
+                            timeBasis = if (fresh) "source_age_adjusted" else "received"))
+                    }
+                } catch (error: android.database.SQLException) {
+                    timber.log.Timber.w(error, "Could not save DIAG event")
+                }
+            }
             if (value.optString("type") == "neighbor_probe_sample") value.put("collector_run", run.optLong("id"))
             recordDiagnostic(value)
             when (value.optString("type")) {
@@ -970,6 +1077,8 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
 private fun AndroidLteSinrReader.Sample.toDiagnosticJson() = JSONObject().apply {
     fun sinr(value: Int): Any = if (LteSinrUtils.isReported(value)) value else JSONObject.NULL
     put("type", "android_lte_sinr")
+    put("task_id", taskId() ?: JSONObject.NULL)
+    put("clock_id", clockId() ?: JSONObject.NULL)
     put("t", timeMs())
     put("elapsed_ms", elapsedMs())
     put("subscription_id", subscriptionId())

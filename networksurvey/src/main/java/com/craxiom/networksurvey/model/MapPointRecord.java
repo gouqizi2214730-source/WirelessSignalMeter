@@ -23,6 +23,14 @@ public class MapPointRecord {
     private String netType;
     private String remark;
     private int simSlot = -1;
+    private String taskId;
+    private String missionId;
+    private int subscriptionId = -1;
+    private long elapsedRealtimeMs;
+    private String clockId;
+    private long locationAgeMs = -1;
+    private float locationAccuracyM = -1;
+    private String locationProvider;
     private long timestamp = System.currentTimeMillis();
 
     public long getId() {
@@ -179,4 +187,21 @@ public class MapPointRecord {
         }
         return this.mcc + "-" + this.mnc;
     }
+
+    public String getTaskId() { return taskId; }
+    public void setTaskId(String value) { taskId = value; }
+    public String getMissionId() { return missionId; }
+    public void setMissionId(String value) { missionId = value; }
+    public int getSubscriptionId() { return subscriptionId; }
+    public void setSubscriptionId(int value) { subscriptionId = value; }
+    public long getElapsedRealtimeMs() { return elapsedRealtimeMs; }
+    public void setElapsedRealtimeMs(long value) { elapsedRealtimeMs = value; }
+    public String getClockId() { return clockId; }
+    public void setClockId(String value) { clockId = value; }
+    public long getLocationAgeMs() { return locationAgeMs; }
+    public void setLocationAgeMs(long value) { locationAgeMs = value; }
+    public float getLocationAccuracyM() { return locationAccuracyM; }
+    public void setLocationAccuracyM(float value) { locationAccuracyM = value; }
+    public String getLocationProvider() { return locationProvider; }
+    public void setLocationProvider(String value) { locationProvider = value; }
 }

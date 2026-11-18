@@ -1765,7 +1765,9 @@ public class SurveyRecordProcessor
         }
 
         int rssnr = AndroidLteSinrReader.read(cellInfoLte, signalStrength, subscriptionId,
-                fallbackEligibleLteCells, elapsedTimeMillis);
+                fallbackEligibleLteCells, elapsedTimeMillis,
+                com.craxiom.networksurvey.db.SurveyTaskStore.peekActiveTaskId(),
+                com.craxiom.networksurvey.db.SurveyTaskStore.clockId());
         if (LteSinrUtils.isReported(rssnr))
         {
             dataBuilder.setSnr(FloatValue.newBuilder().setValue(rssnr).build());
