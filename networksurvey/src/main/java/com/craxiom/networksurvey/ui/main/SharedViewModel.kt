@@ -3,7 +3,6 @@ package com.craxiom.networksurvey.ui.main
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import com.craxiom.messaging.BluetoothRecordData
-import com.craxiom.networksurvey.fragments.model.MqttConnectionSettings
 import com.craxiom.networksurvey.model.WifiNetwork
 import com.craxiom.networksurvey.ui.cellular.model.ServingCellInfo
 import com.craxiom.networksurvey.ui.wifi.model.WifiNetworkInfoList
@@ -19,9 +18,7 @@ import javax.inject.Inject
  * Some events carry data needed for the destination screen.
  */
 sealed class NavigationEvent {
-    data object UploadSettings : NavigationEvent()
     data object TowerMapSettings : NavigationEvent()
-    data class QrCodeShare(val mqttConnectionSettings: MqttConnectionSettings) : NavigationEvent()
     data class TowerMap(val servingCellInfo: ServingCellInfo) : NavigationEvent()
     data class WifiDetails(val wifiNetwork: WifiNetwork) : NavigationEvent()
     data class BluetoothDetails(val bluetoothData: BluetoothRecordData) : NavigationEvent()
@@ -29,11 +26,7 @@ sealed class NavigationEvent {
     data object Watchlist : NavigationEvent()
     data object Acknowledgments : NavigationEvent()
     data object ProviderColorOverrides : NavigationEvent()
-    data class MqttConnection(val mqttConnectionSettings: MqttConnectionSettings?) :
-        NavigationEvent()
-
     data object Settings : NavigationEvent()
-    data object NsAnalyticsConnection : NavigationEvent()
 }
 
 /**
@@ -86,19 +79,7 @@ class SharedViewModel @Inject constructor(application: Application) :
     val wifiNetworkList: WifiNetworkInfoList?
         get() = _wifiNetworkList
 
-    // MQTT connection settings - kept for backward compatibility with Java fragments
-    // TODO: Remove this field once all Java fragments (MqttConnectionFragment) are migrated to Compose
-    //  The data is already included in NavigationEvent.QrCodeScanner/QrCodeShare/MqttConnection
-    @Volatile
-    private var _mqttConnectionSettings: MqttConnectionSettings? = null
-    val mqttConnectionSettings: MqttConnectionSettings?
-        get() = _mqttConnectionSettings
-
     // Navigation trigger functions
-    fun triggerNavigationToUploadSettings() {
-        _navigationEvent.value = NavigationEvent.UploadSettings
-    }
-
     fun triggerNavigationToTowerMapSettings() {
         _navigationEvent.value = NavigationEvent.TowerMapSettings
     }
@@ -117,11 +98,6 @@ class SharedViewModel @Inject constructor(application: Application) :
 
     fun triggerNavigationToProviderColorOverrides() {
         _navigationEvent.value = NavigationEvent.ProviderColorOverrides
-    }
-
-    fun triggerNavigationToQrCodeShare(mqttConnectionSettings: MqttConnectionSettings) {
-        _mqttConnectionSettings = mqttConnectionSettings
-        _navigationEvent.value = NavigationEvent.QrCodeShare(mqttConnectionSettings)
     }
 
     fun updateLatestServingCellInfo(servingCellInfo: ServingCellInfo) {
@@ -158,30 +134,12 @@ class SharedViewModel @Inject constructor(application: Application) :
         _navigationEvent.value = NavigationEvent.BluetoothDetails(bluetoothRecordData)
     }
 
-    fun triggerNavigationToMqttConnection() {
-        _mqttConnectionSettings = null
-        _navigationEvent.value = NavigationEvent.MqttConnection(null)
-    }
-
-    /**
-     * Triggers navigation to the MQTT Connection screen with pre-filled settings.
-     * @param mqttConnectionSettings Optional MQTT connection settings to pre-fill
-     */
-    fun triggerNavigationToMqttConnection(mqttConnectionSettings: MqttConnectionSettings?) {
-        _mqttConnectionSettings = mqttConnectionSettings
-        _navigationEvent.value = NavigationEvent.MqttConnection(mqttConnectionSettings)
-    }
-
     fun triggerNavigationToSettings() {
         _navigationEvent.value = NavigationEvent.Settings
     }
 
     fun triggerBatteryOptimizationDialog() {
         _dialogEvent.value = DialogEvent.BatteryOptimization
-    }
-
-    fun triggerNavigationToNsAnalyticsConnection() {
-        _navigationEvent.value = NavigationEvent.NsAnalyticsConnection
     }
 
     /**

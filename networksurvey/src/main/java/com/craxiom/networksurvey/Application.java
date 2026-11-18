@@ -33,7 +33,6 @@ import com.craxiom.networksurvey.lang.LocaleManager;
 import com.craxiom.networksurvey.services.watchlist.WatchlistNotificationHelper;
 import com.craxiom.networksurvey.update.UpdateDownloader;
 import com.craxiom.networksurvey.util.AppLogger;
-import com.craxiom.networksurvey.util.CredentialSecureStorage;
 import com.craxiom.networksurvey.util.ThemePref;
 
 import android.os.Build;
@@ -85,8 +84,6 @@ public class Application extends android.app.Application
         AppLogger.init(this);
         AppLogger.i("App", "启动 v" + BuildConfig.VERSION_NAME + " device=" + Build.MANUFACTURER + " " + Build.MODEL + " API=" + Build.VERSION.SDK_INT);
         mPrefs = PreferenceManager.getDefaultSharedPreferences(this);
-
-        CredentialSecureStorage.INSTANCE.migrateFromPlainTextIfNeeded(this);
 
         // Material You（Monet）动态取色：在 Activity 创建前统一应用（XML 层：preference/dialog/fragment）
         // - Android 12（API 31）+：从系统壁纸提取主色，覆盖到当前 Activity 主题；

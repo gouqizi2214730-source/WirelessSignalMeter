@@ -29,21 +29,15 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.work.WorkInfo
-import androidx.work.WorkManager
 import com.craxiom.networksurvey.NetworkSurveyActivity
 import com.craxiom.networksurvey.constants.NetworkSurveyConstants
-import com.craxiom.networksurvey.logging.db.uploader.NsUploaderWorker
 import com.craxiom.networksurvey.services.NetworkSurveyService
 import com.craxiom.networksurvey.ui.main.CdrHelpDialog
-import com.craxiom.networksurvey.ui.main.FileMqttHelpDialog
+import com.craxiom.networksurvey.ui.main.FileLoggingHelpDialog
 import com.craxiom.networksurvey.ui.main.MissionIdHelpDialog
-import com.craxiom.networksurvey.ui.main.NsAnalyticsHelpDialog
 import com.craxiom.networksurvey.ui.main.PhoneStateHelpDialog
 import com.craxiom.networksurvey.ui.main.SharedViewModel
-import com.craxiom.networksurvey.ui.main.UploadHelpDialog
 import com.craxiom.networksurvey.util.BatteryOptimizationHelper
-import com.craxiom.networksurvey.util.PreferenceUtils
 import timber.log.Timber
 
 /**
@@ -65,27 +59,18 @@ fun DashboardScreen(
 
     // Collect state from separate flows
     val batteryState by dashboardViewModel.batteryState.collectAsStateWithLifecycle()
-    val queueState by dashboardViewModel.queueState.collectAsStateWithLifecycle()
     val locationState by dashboardViewModel.locationState.collectAsStateWithLifecycle()
     val loggingState by dashboardViewModel.loggingState.collectAsStateWithLifecycle()
-    val mqttState by dashboardViewModel.mqttState.collectAsStateWithLifecycle()
-    val uploadState by dashboardViewModel.uploadState.collectAsStateWithLifecycle()
-    val nsAnalyticsState by dashboardViewModel.nsAnalyticsState.collectAsStateWithLifecycle()
     val missionIdState by dashboardViewModel.missionIdState.collectAsStateWithLifecycle()
 
     // Dialog visibility states
-    var showUploadHelpDialog by remember { mutableStateOf(false) }
-    var showFileMqttHelpDialog by remember { mutableStateOf(false) }
     var showPhoneStateHelpDialog by remember { mutableStateOf(false) }
     var showCdrHelpDialog by remember { mutableStateOf(false) }
-    var showNsAnalyticsHelpDialog by remember { mutableStateOf(false) }
+    var showFileLoggingHelpDialog by remember { mutableStateOf(false) }
     var showMissionIdHelpDialog by remember { mutableStateOf(false) }
-    var showDisableQueueLimitDialog by remember { mutableStateOf(false) }
-    var showUploadDialog by remember { mutableStateOf(false) }
     var showBluetoothPermissionDialog by remember { mutableStateOf(false) }
     var showCdrRequiredPermissionDialog by remember { mutableStateOf(false) }
     var showCdrOptionalPermissionDialog by remember { mutableStateOf(false) }
-    var showNoInternetDialog by remember { mutableStateOf(false) }
 
     // Service binding via lifecycle
     ServiceBindingEffect(
@@ -103,9 +88,6 @@ fun DashboardScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Observe WorkManager uploads
-    UploadWorkObserver(dashboardViewModel = dashboardViewModel)
-
     // Handle one-shot events
     LaunchedEffect(Unit) {
         dashboardViewModel.events.collect { event ->
@@ -115,10 +97,7 @@ fun DashboardScreen(
                 }
 
                 is DashboardEvent.ShowSnackbar -> {
-                    // For MQTT "Open" snackbar - navigate to MQTT settings
-                    if (event.actionLabel == "Open") {
-                        sharedViewModel.triggerNavigationToMqttConnection()
-                    }
+                    // No-op (previously navigated to MQTT settings)
                 }
 
                 is DashboardEvent.ShowBatteryOptimizationDialog -> {
@@ -136,14 +115,6 @@ fun DashboardScreen(
                         showCdrOptionalPermissionDialog = true
                     }
                 }
-
-                is DashboardEvent.ShowUploadDialog -> {
-                    showUploadDialog = true
-                }
-
-                is DashboardEvent.ShowDisableQueueLimitDialog -> {
-                    showDisableQueueLimitDialog = true
-                }
             }
         }
     }
@@ -159,8 +130,6 @@ fun DashboardScreen(
         MainHeroStatusCard(
             loggingState = loggingState,
             locationState = locationState,
-            mqttState = mqttState,
-            nsAnalyticsState = nsAnalyticsState,
             onCellularClick = onCellularClick,
             onWifiClick = onWifiClick,
             onBluetoothClick = onBluetoothClick,
@@ -170,25 +139,10 @@ fun DashboardScreen(
         // Battery card (animated visibility handled internally)
         BatteryCard(state = batteryState)
 
-        // Queue status card (animated visibility handled internally)
-        QueueStatusCard(
-            state = queueState,
-            onAdjustLimit = { sharedViewModel.triggerNavigationToSettings() },
-            onDisableLimit = { showDisableQueueLimitDialog = true },
-        )
-
         // Location card
         LocationCard(
             state = locationState,
             onNavigateToSettings = { sharedViewModel.triggerNavigationToSettings() },
-        )
-
-        // NS Analytics card (animated visibility handled internally)
-        NsAnalyticsCard(
-            state = nsAnalyticsState,
-            onToggleSurvey = { dashboardViewModel.toggleNsAnalyticsSurvey() },
-            onOpenDetails = { sharedViewModel.triggerNavigationToNsAnalyticsConnection() },
-            onHelpClick = { showNsAnalyticsHelpDialog = true },
         )
 
         // Mission ID card (animated visibility handled internally)
@@ -299,93 +253,24 @@ fun DashboardScreen(
             },
             onPhoneStateHelpClick = { showPhoneStateHelpDialog = true },
             onCdrHelpClick = { showCdrHelpDialog = true },
-            onFileHelpClick = { showFileMqttHelpDialog = true },
-        )
-
-        // MQTT status card
-        MqttStatusCard(
-            state = mqttState,
-            onToggleMqtt = { connect -> dashboardViewModel.toggleMqttConnection(connect) },
-            onNavigateToMqttSettings = { sharedViewModel.triggerNavigationToMqttConnection() },
-            onHelpClick = { showFileMqttHelpDialog = true },
-        )
-
-        // Upload scanning card (placed last so its Start button is not confused
-        // with the NS Analytics card's Start button)
-        UploadScanningCard(
-            state = uploadState,
-            onStartScanning = {
-                val batteryHelper = BatteryOptimizationHelper(context)
-                if (batteryHelper.shouldPromptForBatteryOptimization()) {
-                    sharedViewModel.triggerBatteryOptimizationDialog()
-                } else {
-                    dashboardViewModel.toggleUploadScanning(true)
-                }
-            },
-            onStopScanning = { dashboardViewModel.toggleUploadScanning(false) },
-            onUpload = {
-                if (dashboardViewModel.shouldShowUploadConfigDialog()) {
-                    showUploadDialog = true
-                } else {
-                    // Skip dialog, use saved preferences directly
-                    val started = dashboardViewModel.startUpload(
-                        uploadToOpenCellId = PreferenceUtils.getBoolean(
-                            NetworkSurveyConstants.PROPERTY_UPLOAD_TO_OPENCELLID,
-                            NetworkSurveyConstants.DEFAULT_UPLOAD_TO_OPENCELLID,
-                        ),
-                        anonymously = PreferenceUtils.getBoolean(
-                            NetworkSurveyConstants.PROPERTY_ANONYMOUS_OPENCELLID_UPLOAD,
-                            NetworkSurveyConstants.DEFAULT_UPLOAD_TO_OPENCELLID,
-                        ),
-                        uploadToBeaconDb = PreferenceUtils.getBoolean(
-                            NetworkSurveyConstants.PROPERTY_UPLOAD_TO_BEACONDB,
-                            NetworkSurveyConstants.DEFAULT_UPLOAD_TO_BEACONDB,
-                        ),
-                        retry = PreferenceUtils.getBoolean(
-                            NetworkSurveyConstants.PROPERTY_UPLOAD_RETRY_ENABLED,
-                            NetworkSurveyConstants.DEFAULT_UPLOAD_RETRY_ENABLED,
-                        ),
-                    )
-                    if (!started) showNoInternetDialog = true
-                }
-            },
-            onCancelUpload = {
-                WorkManager.getInstance(context)
-                    .cancelAllWorkByTag(NsUploaderWorker.WORKER_TAG)
-            },
-            onNavigateToUploadSettings = { sharedViewModel.triggerNavigationToUploadSettings() },
-            onHelpClick = { showUploadHelpDialog = true },
-            shouldStartCellular = PreferenceUtils.shouldStartCellularForUpload(context),
-            shouldStartWifi = PreferenceUtils.shouldStartWifiForUpload(context),
+            onFileHelpClick = { showFileLoggingHelpDialog = true },
         )
 
         Spacer(modifier = Modifier.height(16.dp))
     }
 
     // Dialogs
-    if (showUploadHelpDialog) {
-        UploadHelpDialog(onDismissRequest = { showUploadHelpDialog = false })
-    }
-    if (showFileMqttHelpDialog) {
-        FileMqttHelpDialog(onDismissRequest = { showFileMqttHelpDialog = false })
-    }
     if (showPhoneStateHelpDialog) {
         PhoneStateHelpDialog(onDismissRequest = { showPhoneStateHelpDialog = false })
     }
     if (showCdrHelpDialog) {
         CdrHelpDialog(onDismissRequest = { showCdrHelpDialog = false })
     }
-    if (showNsAnalyticsHelpDialog) {
-        NsAnalyticsHelpDialog(onDismissRequest = { showNsAnalyticsHelpDialog = false })
+    if (showFileLoggingHelpDialog) {
+        FileLoggingHelpDialog(onDismissRequest = { showFileLoggingHelpDialog = false })
     }
     if (showMissionIdHelpDialog) {
         MissionIdHelpDialog(onDismissRequest = { showMissionIdHelpDialog = false })
-    }
-    if (showDisableQueueLimitDialog) {
-        DisableQueueLimitDialog(
-            onConfirm = { dashboardViewModel.disableQueueLimit() },
-            onDismiss = { showDisableQueueLimitDialog = false },
-        )
     }
     if (showBluetoothPermissionDialog) {
         BluetoothPermissionRationaleDialog(
@@ -434,24 +319,6 @@ fun DashboardScreen(
             },
             onDismiss = { showCdrOptionalPermissionDialog = false },
         )
-    }
-    if (showUploadDialog) {
-        UploadConfirmationDialog(
-            onUpload = { uploadToOcid, anonymously, uploadToBeaconDb, retry, dontShowAgain ->
-                if (dontShowAgain) {
-                    dashboardViewModel.setShowUploadDialog(dontShowAgain)
-                }
-                val started = dashboardViewModel.startUpload(
-                    uploadToOcid, anonymously, uploadToBeaconDb, retry,
-                )
-                if (!started) showNoInternetDialog = true
-            },
-            onNavigateToUploadSettings = { sharedViewModel.triggerNavigationToUploadSettings() },
-            onDismiss = { showUploadDialog = false },
-        )
-    }
-    if (showNoInternetDialog) {
-        NoInternetDialog(onDismiss = { showNoInternetDialog = false })
     }
 }
 
@@ -527,80 +394,6 @@ private fun ServiceBindingEffect(
             } catch (e: IllegalArgumentException) {
                 // Already unbound
             }
-        }
-    }
-}
-
-/**
- * Observes WorkManager upload tasks and updates the ViewModel's upload progress state.
- */
-@Composable
-private fun UploadWorkObserver(
-    dashboardViewModel: DashboardViewModel,
-) {
-    val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-
-    DisposableEffect(Unit) {
-        val workManager = WorkManager.getInstance(context)
-        val liveData = workManager.getWorkInfosByTagLiveData(NsUploaderWorker.WORKER_TAG)
-
-        val observer = androidx.lifecycle.Observer<List<WorkInfo>> { workInfos ->
-            val activeWork = workInfos?.firstOrNull { info ->
-                info.state == WorkInfo.State.ENQUEUED || info.state == WorkInfo.State.RUNNING
-            }
-
-            if (activeWork != null) {
-                val progress = activeWork.progress
-                val currentPercent =
-                    progress.getInt(NsUploaderWorker.PROGRESS, NsUploaderWorker.PROGRESS_MIN_VALUE)
-                val maxPercent = progress.getInt(
-                    NsUploaderWorker.PROGRESS_MAX,
-                    NsUploaderWorker.PROGRESS_MAX_VALUE,
-                )
-                val statusMessage = progress.getString(NsUploaderWorker.PROGRESS_STATUS_MESSAGE)
-                    ?: if (activeWork.state == WorkInfo.State.ENQUEUED) {
-                        context.getString(com.craxiom.networksurvey.R.string.uploader_enqueued)
-                    } else ""
-
-                dashboardViewModel.updateUploadProgress(
-                    UploadProgressState.InProgress(
-                        progress = currentPercent.coerceAtMost(maxPercent),
-                        maxProgress = maxPercent,
-                        statusMessage = statusMessage,
-                    )
-                )
-            } else {
-                // Check if any finished work
-                val finishedWork = workInfos?.firstOrNull { it.state.isFinished }
-                if (finishedWork != null) {
-                    val cancelled = finishedWork.state == WorkInfo.State.CANCELLED
-                    dashboardViewModel.updateUploadProgress(
-                        UploadProgressState.Finished(
-                            cancelled = cancelled,
-                            ocidResult = finishedWork.outputData.getString(NsUploaderWorker.OCID_RESULT)
-                                ?: "",
-                            beaconDbResult = finishedWork.outputData.getString(NsUploaderWorker.BEACONDB_RESULT)
-                                ?: "",
-                            ocidResultMessage = finishedWork.outputData.getString(NsUploaderWorker.OCID_RESULT_MESSAGE)
-                                ?: "",
-                            beaconDbResultMessage = finishedWork.outputData.getString(
-                                NsUploaderWorker.BEACONDB_RESULT_MESSAGE
-                            )
-                                ?: "",
-                        )
-                    )
-                    workManager.pruneWork()
-                } else {
-                    dashboardViewModel.updateUploadProgress(UploadProgressState.Hidden)
-                }
-            }
-        }
-
-        liveData.observe(lifecycleOwner, observer)
-
-        onDispose {
-            liveData.removeObserver(observer)
         }
     }
 }

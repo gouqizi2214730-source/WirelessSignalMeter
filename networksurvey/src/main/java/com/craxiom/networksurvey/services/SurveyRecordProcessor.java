@@ -113,8 +113,6 @@ import com.craxiom.networksurvey.model.NetworkTechnologyInfo;
 import com.craxiom.networksurvey.model.NrRecordWrapper;
 import com.craxiom.networksurvey.model.WifiRecordWrapper;
 import com.craxiom.networksurvey.services.controller.CellularController;
-import com.craxiom.networksurvey.ui.activesurvey.NewTowerNotificationHelper;
-import com.craxiom.networksurvey.ui.activesurvey.TowerDetectionJavaWrapper;
 import com.craxiom.networksurvey.util.CellularBandwidthUtils;
 import com.craxiom.networksurvey.util.AndroidLteSinrReader;
 import com.craxiom.networksurvey.util.CellularUtils;
@@ -203,7 +201,6 @@ public class SurveyRecordProcessor
     private final Context context;
     private NetworkSurveyService networkSurveyService;
     private final SsidExclusionManager ssidExclusionManager;
-    private final TowerDetectionJavaWrapper towerDetectionWrapper;
     private String lastServingCellKey = null;
 
     private final AtomicInteger cellularRecordNumber = new AtomicInteger(1);
@@ -253,7 +250,6 @@ public class SurveyRecordProcessor
                 NetworkSurveyConstants.DEFAULT_GNSS_SCAN_INTERVAL_SECONDS, context);
 
         ssidExclusionManager = new SsidExclusionManager(context);
-        towerDetectionWrapper = new TowerDetectionJavaWrapper(context);
     }
 
     /**
@@ -3041,9 +3037,6 @@ public class SurveyRecordProcessor
                 Timber.e(t, "Unable to notify a Cellular Survey Record Listener because of an exception");
             }
         });
-
-        // Check for new towers if the preference is enabled and upload scanning is active
-        checkForNewTowers(cellularRecords);
     }
 
     /**
@@ -3064,149 +3057,6 @@ public class SurveyRecordProcessor
                 Timber.e(e, "Unable to notify a Cellular Survey Record Listener because of an exception");
             }
         });
-    }
-
-    /**
-     * Check if the serving cell is a new tower and show notification if enabled.
-     *
-     * @param cellularRecords The batch of cellular records to check
-     */
-    private void checkForNewTowers(List<CellularRecordWrapper> cellularRecords)
-    {
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
-        boolean newTowerAlertsEnabled = prefs.getBoolean(NetworkSurveyConstants.PROPERTY_NEW_TOWER_ALERTS_ENABLED, false);
-
-        if (!newTowerAlertsEnabled || cellularRecords == null || cellularRecords.isEmpty())
-        {
-            return;
-        }
-
-        if (networkSurveyService == null || !networkSurveyService.isUploadScanningActive())
-        {
-            return;
-        }
-
-        // Find the serving cell
-        for (CellularRecordWrapper cellularRecord : cellularRecords)
-        {
-            if (CellularUtils.isServingCell(cellularRecord.cellularRecord))
-            {
-                checkServingCellForNewTower(cellularRecord);
-                break; // Only process the first serving cell
-            }
-        }
-    }
-
-    /**
-     * Check if the serving cell is a new tower and fire notification if needed.
-     *
-     * @param cellularRecord The serving cell record to check
-     */
-    private void checkServingCellForNewTower(CellularRecordWrapper cellularRecord)
-    {
-        final CellularProtocol protocol = cellularRecord.cellularProtocol;
-        final GeneratedMessage record = cellularRecord.cellularRecord;
-
-        String cellKey;
-        String mcc;
-        String mnc;
-        int area;
-        long cellId;
-        String radio;
-
-        switch (protocol)
-        {
-            case LTE:
-                LteRecord lte = (LteRecord) record;
-                LteRecordData lteData = lte.getData();
-                String[] lteMccMnc = NsUtils.extractMccMncStrings(lteData.hasPlmn(),
-                        lteData.hasPlmn() ? lteData.getPlmn().getValue() : null,
-                        lteData.hasMcc() ? lteData.getMcc().getValue() : 0,
-                        lteData.hasMnc() ? lteData.getMnc().getValue() : 0);
-                mcc = lteMccMnc[0];
-                mnc = lteMccMnc[1];
-                area = lteData.hasTac() ? lteData.getTac().getValue() : 0;
-                cellId = lteData.hasEci() ? lteData.getEci().getValue() : 0L;
-                radio = CellularProtocol.LTE.name();
-                cellKey = mcc + "-" + mnc + "-" + area + "-" + cellId;
-                break;
-
-            case NR:
-                NrRecord nr = (NrRecord) record;
-                NrRecordData nrData = nr.getData();
-                String[] nrMccMnc = NsUtils.extractMccMncStrings(nrData.hasPlmn(),
-                        nrData.hasPlmn() ? nrData.getPlmn().getValue() : null,
-                        nrData.hasMcc() ? nrData.getMcc().getValue() : 0,
-                        nrData.hasMnc() ? nrData.getMnc().getValue() : 0);
-                mcc = nrMccMnc[0];
-                mnc = nrMccMnc[1];
-                area = nrData.hasTac() ? nrData.getTac().getValue() : 0;
-                cellId = nrData.hasNci() ? nrData.getNci().getValue() : 0L;
-                radio = CellularProtocol.NR.name();
-                cellKey = mcc + "-" + mnc + "-" + area + "-" + cellId;
-                break;
-
-            case GSM:
-                GsmRecord gsm = (GsmRecord) record;
-                GsmRecordData gsmData = gsm.getData();
-                String[] gsmMccMnc = NsUtils.extractMccMncStrings(gsmData.hasPlmn(),
-                        gsmData.hasPlmn() ? gsmData.getPlmn().getValue() : null,
-                        gsmData.hasMcc() ? gsmData.getMcc().getValue() : 0,
-                        gsmData.hasMnc() ? gsmData.getMnc().getValue() : 0);
-                mcc = gsmMccMnc[0];
-                mnc = gsmMccMnc[1];
-                area = gsmData.hasLac() ? gsmData.getLac().getValue() : 0;
-                cellId = gsmData.hasCi() ? gsmData.getCi().getValue() : 0L;
-                radio = CellularProtocol.GSM.name();
-                cellKey = mcc + "-" + mnc + "-" + area + "-" + cellId;
-                break;
-
-            case UMTS:
-                UmtsRecord umts = (UmtsRecord) record;
-                UmtsRecordData umtsData = umts.getData();
-                String[] umtsMccMnc = NsUtils.extractMccMncStrings(umtsData.hasPlmn(),
-                        umtsData.hasPlmn() ? umtsData.getPlmn().getValue() : null,
-                        umtsData.hasMcc() ? umtsData.getMcc().getValue() : 0,
-                        umtsData.hasMnc() ? umtsData.getMnc().getValue() : 0);
-                mcc = umtsMccMnc[0];
-                mnc = umtsMccMnc[1];
-                area = umtsData.hasLac() ? umtsData.getLac().getValue() : 0;
-                cellId = umtsData.hasCid() ? umtsData.getCid().getValue() : 0L;
-                radio = CellularProtocol.UMTS.name();
-                cellKey = mcc + "-" + mnc + "-" + area + "-" + cellId;
-                break;
-
-            default:
-                return;
-        }
-
-        // Check if this is a different cell than the last one
-        if (!cellKey.equals(lastServingCellKey) && !mcc.isEmpty() && !"0".equals(mcc) && cellId > 0)
-        {
-            lastServingCellKey = cellKey;
-
-            final String finalMcc = mcc;
-            final String finalMnc = mnc;
-            final int finalArea = area;
-            final long finalCellId = cellId;
-            final String finalRadio = radio;
-
-            towerDetectionWrapper.checkIfTowerIsNewAsync(
-                    mcc, mnc, area, cellId, radio,
-                    (Boolean isNewTower) -> {
-                        if (isNewTower)
-                        {
-                            Timber.i("New tower detected: %s-%s-%s-%s (%s)",
-                                    finalMcc, finalMnc, finalArea, finalCellId, finalRadio);
-
-                            NewTowerNotificationHelper.INSTANCE.showNewTowerNotification(
-                                    context,
-                                    finalMcc, finalMnc, finalArea, finalCellId, finalRadio
-                            );
-                        }
-                    }
-            );
-        }
     }
 
     /**

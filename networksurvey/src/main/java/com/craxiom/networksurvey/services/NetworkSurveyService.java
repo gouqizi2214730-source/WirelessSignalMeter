@@ -14,7 +14,6 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.RestrictionsManager;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
@@ -23,7 +22,6 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.BatteryManager;
 import android.os.Build;
-import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
@@ -39,15 +37,6 @@ import androidx.preference.PreferenceManager;
 
 import com.craxiom.messaging.DeviceStatus;
 import com.craxiom.messaging.DeviceStatusData;
-import com.craxiom.mqttlibrary.IConnectionStateListener;
-import com.craxiom.mqttlibrary.IMqttService;
-import com.craxiom.mqttlibrary.IQueueBackpressureListener;
-import com.craxiom.mqttlibrary.MqttConstants;
-import com.craxiom.mqttlibrary.MqttQos;
-import com.craxiom.mqttlibrary.connection.BrokerConnectionInfo;
-import com.craxiom.mqttlibrary.connection.ConnectionState;
-import com.craxiom.mqttlibrary.connection.DefaultMqttConnection;
-import com.craxiom.mqttlibrary.ui.AConnectionFragment;
 import com.craxiom.networksurvey.Application;
 import com.craxiom.networksurvey.BuildConfig;
 import com.craxiom.networksurvey.GpsListener;
@@ -55,9 +44,7 @@ import com.craxiom.networksurvey.NetworkSurveyActivity;
 import com.craxiom.networksurvey.R;
 import com.craxiom.networksurvey.constants.DeviceStatusMessageConstants;
 import com.craxiom.networksurvey.constants.NetworkSurveyConstants;
-import com.craxiom.networksurvey.constants.NsAnalyticsConstants;
 import com.craxiom.networksurvey.data.SsidExclusionManager;
-import com.craxiom.networksurvey.fragments.model.MqttConnectionSettings;
 import com.craxiom.networksurvey.gpstest.util.FormatUtils;
 import com.craxiom.networksurvey.gpstest.util.MathUtils;
 import com.craxiom.networksurvey.listeners.ExtraLocationListener;
@@ -70,39 +57,23 @@ import com.craxiom.networksurvey.listeners.IGnssSurveyRecordListener;
 import com.craxiom.networksurvey.listeners.ILoggingChangeListener;
 import com.craxiom.networksurvey.listeners.IMissionIdListener;
 import com.craxiom.networksurvey.listeners.IPhoneStateListener;
-import com.craxiom.networksurvey.listeners.IUploadRecordCountListener;
 import com.craxiom.networksurvey.listeners.IWifiSurveyRecordListener;
 import com.craxiom.networksurvey.logging.DeviceStatusCsvLogger;
-import com.craxiom.networksurvey.logging.db.DbUploadStore;
-import com.craxiom.networksurvey.logging.db.NsAnalyticsDataStore;
-import com.craxiom.networksurvey.logging.db.SurveyDatabase;
-import com.craxiom.networksurvey.logging.db.uploader.AutoUploadManager;
-import com.craxiom.networksurvey.logging.db.uploader.NsAnalyticsUploadWorker;
 import com.craxiom.networksurvey.model.BatteryPauseState;
 import com.craxiom.networksurvey.model.LogTypeState;
-import com.craxiom.networksurvey.model.SurveyTypes;
-import com.craxiom.networksurvey.model.UploadScanningResult;
-import com.craxiom.networksurvey.mqtt.MqttConnection;
-import com.craxiom.networksurvey.mqtt.MqttConnectionInfo;
 import com.craxiom.networksurvey.services.controller.BluetoothController;
 import com.craxiom.networksurvey.services.controller.CellularController;
 import com.craxiom.networksurvey.services.controller.GnssController;
 import com.craxiom.networksurvey.services.controller.WifiController;
-import com.craxiom.networksurvey.services.watchlist.WatchlistChangePublisher;
 import com.craxiom.networksurvey.services.watchlist.WatchlistDetectionManager;
-import com.craxiom.networksurvey.util.CredentialSecureStorage;
 import com.craxiom.networksurvey.util.LocationUtils;
-import com.craxiom.networksurvey.util.MdmUtils;
-import com.craxiom.networksurvey.util.NsAnalyticsSecureStorage;
 import com.craxiom.networksurvey.util.NsUtils;
 import com.craxiom.networksurvey.util.PreferenceUtils;
-import com.google.gson.Gson;
 import com.google.protobuf.BoolValue;
 import com.google.protobuf.Int32Value;
 
 import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
@@ -129,7 +100,9 @@ import timber.log.Timber;
  *
  * @since 0.0.9
  */
-public class NetworkSurveyService extends Service implements IConnectionStateListener, SharedPreferences.OnSharedPreferenceChangeListener, IMqttService, IUploadRecordCountListener, BatteryMonitor.IBatteryLevelListener, IQueueBackpressureListener
+public class NetworkSurveyService extends Service implements
+        SharedPreferences.OnSharedPreferenceChangeListener,
+        BatteryMonitor.IBatteryLevelListener
 {
     public static final String ACTION_START_SURVEY = "com.craxiom.networksurvey.START_SURVEY";
     public static final String ACTION_STOP_SURVEY = "com.craxiom.networksurvey.STOP_SURVEY";
@@ -153,12 +126,6 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
     private WifiController wifiController;
     private WatchlistDetectionManager watchlistDetectionManager;
     private boolean watchlistRegistered = false;
-    // Volatile because it is written on the thread that starts the MQTT connection and read from the
-    // MQTT client's connection-state callback thread in onConnectionStateChange.
-    private volatile WatchlistChangePublisher watchlistChangePublisher;
-    // Volatile for the same reason as the publisher field: written from the connect paths and read
-    // when the watchlist detection manager is (re)created.
-    private volatile boolean mqttWatchlistStreamEnabled = false;
     private BluetoothController bluetoothController;
     private GnssController gnssController;
     private String deviceId;
@@ -166,28 +133,15 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
     private GpsListener primaryLocationListener;
     private ExtraLocationListener gnssLocationListener;
     private ExtraLocationListener networkLocationListener;
-    private DbUploadStore dbUploadStore;
-    private AutoUploadManager autoUploadManager;
-    private NsAnalyticsDataStore nsAnalyticsDataStore;
 
     private DeviceStatusCsvLogger deviceStatusCsvLogger;
     private Looper serviceLooper;
     private Handler serviceHandler;
-    private MqttConnection mqttConnection;
     private BroadcastReceiver managedConfigurationListener;
     private boolean mdmOverride = false;
 
     private BatteryMonitor batteryMonitor;
     private BatteryPauseState batteryPauseState;
-
-    // Queue backpressure states. These two states are mutually exclusive:
-    // - isPausedDueToQueueBackpressure: Scanning is paused when streaming queue is full and no other outputs are active
-    // - mqttConnection.isDropping(): MQTT messages are dropped (not paused) when queue is full but other outputs (file logging, gRPC) are active
-    // Only one can be true at a time. When the MQTT queue fills up, we enter drop mode if other outputs are enabled,
-    // otherwise we pause scanning entirely. MqttConnection is the single source of truth for drop mode state.
-    private final AtomicBoolean isPausedDueToQueueBackpressure = new AtomicBoolean(false);
-    private final Set<IQueueBackpressureStateListener> queueBackpressureListeners = new CopyOnWriteArraySet<>();
-    private final Set<IMqttDropModeStateListener> mqttDropModeListeners = new CopyOnWriteArraySet<>();
 
     private final Set<ILoggingChangeListener> loggingChangeListeners = new CopyOnWriteArraySet<>();
 
@@ -196,7 +150,6 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
     // Survey session tracking
     private Long surveySessionStartTime = null;
     private final AtomicInteger surveySessionRecordCount = new AtomicInteger(0);
-    private final AtomicInteger surveySessionUploadRecordCount = new AtomicInteger(0);
 
     // Mission ID tracking. The Mission ID identifies one survey session and rolls when the first
     // mission relevant survey of a session starts (OpenCelliD/BeaconDB uploads do not count).
@@ -260,18 +213,16 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
 
         setScanRateValues();
         readMdmOverridePreference();
-        PreferenceUtils.populateRandomMqttClientIdIfMissing(context);
         PreferenceManager.getDefaultSharedPreferences(context).registerOnSharedPreferenceChangeListener(this);
 
-        // Must register for MDM updates AFTER initializing the MQTT connection because we try to make an MQTT connection if the MDM settings change
-        initializeMqttConnection();
+        // Register for MDM updates
         registerManagedConfigurationListener();
 
-        // 蜂窝控制器立即初始化（首屏信号页需要，最高优先级）
+        // 蜂窝控制器立即初始化（首屏信号页需要，最高优先级�?
         cellularController.initialize();
 
         // WiFi/蓝牙/GNSS 控制器延迟初始化：放到后台线程，避免阻塞 Service onCreate
-        // 这些控制器只在对应 Tab 页首次打开时才需要
+        // 这些控制器只在对�?Tab 页首次打开时才需�?
         executorService.execute(() -> {
             try { wifiController.initializeWifiScanningResources(); } catch (Throwable t) { Timber.e(t, "WiFi init failed"); }
             try { bluetoothController.initializeBtScanningResources(); } catch (Throwable t) { Timber.e(t, "BT init failed"); }
@@ -317,8 +268,6 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
         {
             Timber.i("Received the startedAtBoot flag in the NetworkSurveyService. Reading the auto start preferences");
 
-            attemptMqttConnectionAtBoot();
-
             final Context applicationContext = getApplicationContext();
 
             final boolean autoStartCellularLogging = PreferenceUtils.getAutoStartPreference(NetworkSurveyConstants.PROPERTY_AUTO_START_CELLULAR_LOGGING, false, applicationContext);
@@ -355,12 +304,6 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
             if (autoStartCdrLogging && !isCdrLoggingEnabled())
             {
                 toggleCdrLogging(true);
-            }
-
-            final boolean autoStartCommunitySurvey = PreferenceUtils.getCommunitySurveyAutoStartPreference(applicationContext);
-            if (autoStartCommunitySurvey && !isUploadScanningActive())
-            {
-                toggleUploadRecordSaving(true);
             }
         } else if (ACTION_START_SURVEY.equals(intent.getAction()))
         {
@@ -404,27 +347,6 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
                 toggleGnssLogging(true);
             }
             if (startCdr && !isCdrLoggingEnabled()) toggleCdrLogging(true);
-
-            final String mqttConfigJsonString = intent.getStringExtra(NetworkSurveyConstants.EXTRA_MQTT_CONFIG_JSON);
-            if (mqttConfigJsonString != null)
-            {
-                try
-                {
-                    MqttConnectionSettings mqttConnectionSettings = new Gson().fromJson(mqttConfigJsonString, MqttConnectionSettings.class);
-
-                    Timber.i("Starting the MQTT connection with the intent provided configuration");
-
-                    if (mqttConnection.getConnectionState() != ConnectionState.DISCONNECTED)
-                    {
-                        mqttConnection.disconnect();
-                    }
-
-                    connectToMqttBroker(mqttConnectionSettings.toMqttConnectionInfo());
-                } catch (Exception e)
-                {
-                    Timber.e(e, "Failed to parse the MQTT connection settings from the intent");
-                }
-            }
         } else if (ACTION_STOP_SURVEY.equals(intent.getAction()))
         {
             boolean allowIntentControl = PreferenceUtils.getAllowIntentControlPreference(this);
@@ -437,7 +359,6 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
             Timber.i("The Network Survey Service is being stopped via an external intent");
 
             stopAllLogging();
-            disconnectFromMqttBroker();
 
             stopSelf();
         }
@@ -479,13 +400,6 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
 
         unregisterManagedConfigurationListener();
 
-        if (mqttConnection != null)
-        {
-            unregisterMqttConnectionStateListener(this);
-            mqttConnection.unregisterQueueBackpressureListener(this);
-            mqttConnection.disconnect();
-        }
-
         PreferenceManager.getDefaultSharedPreferences(getApplicationContext()).unregisterOnSharedPreferenceChangeListener(this);
 
         if (watchlistDetectionManager != null)
@@ -493,12 +407,6 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
             watchlistDetectionManager.stop();
             watchlistDetectionManager = null;
             watchlistRegistered = false;
-        }
-
-        if (watchlistChangePublisher != null)
-        {
-            watchlistChangePublisher.stop();
-            watchlistChangePublisher = null;
         }
 
         cellularController.stopCellularRecordScanning();
@@ -567,16 +475,9 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
             case NetworkSurveyConstants.PROPERTY_WATCHLIST_ABSENCE_WINDOW_SECONDS:
                 if (watchlistDetectionManager != null) watchlistDetectionManager.refreshConfig();
                 break;
-            case NetworkSurveyConstants.PROPERTY_MQTT_WATCHLIST_STREAM_ENABLED:
-                handleWatchlistStreamingPreferenceChange();
-                break;
 
             case NetworkSurveyConstants.PROPERTY_BATTERY_THRESHOLD_PERCENT:
                 handleBatteryPreferenceChange();
-                break;
-
-            case NetworkSurveyConstants.PROPERTY_STREAMING_QUEUE_LIMIT:
-                handleStreamingQueueLimitChange();
                 break;
 
             default:
@@ -584,279 +485,7 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
         }
     }
 
-    /**
-     * Creates the {@link DefaultMqttConnection} instance.
-     */
-    public void initializeMqttConnection()
-    {
-        mqttConnection = new MqttConnection();
-        mqttConnection.registerMqttConnectionStateListener(this);
-        mqttConnection.registerQueueBackpressureListener(this);
-
-        // Set the streaming queue limit from preferences
-        final int queueLimit = PreferenceUtils.getStreamingQueueLimit(getApplicationContext());
-        mqttConnection.setStreamingQueueLimit(queueLimit);
-        Timber.d("Initialized MQTT connection with streaming queue limit: %d", queueLimit);
-    }
-
-    /**
-     * Attempts to connect to the MQTT broker using the saved connection information. First, the MDM
-     * saved connection information is used if it is present. If not, then the regular stored "user"
-     * MQTT entered parameters are used.
-     *
-     * @return True if the connection is going to be attempted, false if it could not (for example,
-     * the saved connection information is invalid).
-     */
-    public boolean connectToMqttBrokerUsingSavedConnectionInfo()
-    {
-        // First try to use the MDM settings. The only exception to this is if the user has overridden the MDM settings
-        if (!isMqttMdmOverrideEnabled())
-        {
-            final RestrictionsManager restrictionsManager = (RestrictionsManager) getSystemService(RESTRICTIONS_SERVICE);
-            if (restrictionsManager != null)
-            {
-                final BrokerConnectionInfo connectionInfo = getMdmBrokerConnectionInfo();
-                if (connectionInfo != null)
-                {
-                    connectToMqttBroker(connectionInfo);
-                    return true;
-                }
-            }
-        }
-
-        final BrokerConnectionInfo userBrokerConnectionInfo = getUserBrokerConnectionInfo();
-        if (userBrokerConnectionInfo != null)
-        {
-            connectToMqttBroker(userBrokerConnectionInfo);
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
-     * Connect to an MQTT broker.
-     *
-     * @param connectionInfo The information needed to connect to the MQTT broker.
-     */
-    @Override
-    public void connectToMqttBroker(BrokerConnectionInfo connectionInfo)
-    {
-        MqttConnectionInfo networkSurveyConnection = (MqttConnectionInfo) connectionInfo;
-
-        // Start or stop watchlist streaming BEFORE connecting so the CONNECTED callback, which publishes
-        // the initial watchlist snapshot, can never fire while the publisher is still null (the publisher's
-        // first flow emission publishes a snapshot that is simply dropped while disconnected). Watchlist
-        // streaming is governed by the Watchlist "Stream over MQTT" setting rather than a per-connection
-        // stream flag; the stop call covers a reconnect (for example an MDM reconfiguration) that never
-        // goes through disconnectFromMqttBroker().
-        if (isWatchlistStreamingEnabled())
-        {
-            startWatchlistStreaming();
-        } else
-        {
-            stopWatchlistStreaming();
-        }
-
-        mqttConnection.connect(getApplicationContext(), connectionInfo);
-
-        // Track survey session when MQTT streaming starts
-        onSurveyStarted(true);
-        updateWakeLock();
-
-        // Saving the MQTT protocol streaming flags here allows the Dashboard UI to get notified
-        // of the updates since otherwise MDM specified flags won't get propagated to the Dashboard
-        PreferenceUtils.saveMqttStreamFlags(networkSurveyConnection, getApplicationContext());
-
-        if (networkSurveyConnection.isCellularStreamEnabled())
-        {
-            registerCellularSurveyRecordListener(mqttConnection);
-        }
-        if (networkSurveyConnection.isPhoneStateStreamEnabled())
-        {
-            registerPhoneStateListener(mqttConnection);
-        }
-        if (networkSurveyConnection.isWifiStreamEnabled())
-        {
-            registerWifiSurveyRecordListener(mqttConnection);
-        }
-        if (networkSurveyConnection.isBluetoothStreamEnabled())
-        {
-            registerBluetoothSurveyRecordListener(mqttConnection);
-        }
-        if (networkSurveyConnection.isGnssStreamEnabled())
-        {
-            registerGnssSurveyRecordListener(mqttConnection);
-        }
-        if (networkSurveyConnection.isDeviceStatusStreamEnabled())
-        {
-            registerDeviceStatusListener(mqttConnection);
-        }
-    }
-
-    /**
-     * Begin streaming Wi-Fi Watchlist match events and watchlist snapshots over MQTT.
-     * <p>
-     * Match events are published by attaching the MQTT connection as the detection manager's match
-     * listener (when a manager exists; if watchlist detection is enabled later the listener is attached
-     * at that point). Watchlist state is published by a {@link WatchlistChangePublisher} that publishes
-     * a full snapshot on every change. The initial snapshot is published from
-     * {@link #onConnectionStateChange(ConnectionState)} once the connection is established, so it also
-     * fires on a silent auto-reconnect.
-     */
-    private void startWatchlistStreaming()
-    {
-        mqttWatchlistStreamEnabled = true;
-
-        if (watchlistDetectionManager != null)
-        {
-            watchlistDetectionManager.setMatchListener(mqttConnection);
-        }
-
-        if (watchlistChangePublisher == null)
-        {
-            watchlistChangePublisher = new WatchlistChangePublisher(getApplicationContext(), deviceId,
-                    this::getMissionIdForRecords, mqttConnection);
-            watchlistChangePublisher.start();
-        }
-    }
-
-    /**
-     * Stop streaming Wi-Fi Watchlist events over MQTT.
-     */
-    private void stopWatchlistStreaming()
-    {
-        mqttWatchlistStreamEnabled = false;
-
-        if (watchlistDetectionManager != null)
-        {
-            watchlistDetectionManager.setMatchListener(null);
-        }
-
-        if (watchlistChangePublisher != null)
-        {
-            watchlistChangePublisher.stop();
-            watchlistChangePublisher = null;
-        }
-    }
-
-    /**
-     * Disconnect from the MQTT broker and also remove the MQTT survey record listener.
-     */
-    @Override
-    public void disconnectFromMqttBroker()
-    {
-        Timber.i("Disconnecting from the MQTT Broker");
-
-        mqttConnection.disconnect();
-
-        unregisterCellularSurveyRecordListener(mqttConnection);
-        unregisterWifiSurveyRecordListener(mqttConnection);
-        unregisterBluetoothSurveyRecordListener(mqttConnection);
-        unregisterGnssSurveyRecordListener(mqttConnection);
-        unregisterDeviceStatusListener(mqttConnection);
-        unregisterPhoneStateListener(mqttConnection);
-        stopWatchlistStreaming();
-
-        // Clear queue backpressure states since there's no active connection to be backed up
-        clearMqttBackpressureStates();
-
-        // Track survey session end
-        onSurveyStopped();
-        updateWakeLock();
-    }
-
-    /**
-     * If connection information is specified for an MQTT Broker via the MDM Managed Configuration, then kick off an
-     * MQTT connection.
-     *
-     * @param forceDisconnect Set to true so that the MQTT broker connection will be shutdown even if the MDM configured
-     *                        connection info is not present.  This flag is needed to stop an MQTT connection if it was
-     *                        previously configured via MDM, but the config has since been removed from the MDM.  In
-     *                        that case, the connection info will be null but we still want to disconnect from the MQTT
-     *                        broker.
-     */
-    @Override
-    public void attemptMqttConnectWithMdmConfig(boolean forceDisconnect)
-    {
-        if (isMqttMdmOverrideEnabled())
-        {
-            Timber.i("The MQTT MDM override is enabled, so no MDM configured MQTT connection will be attempted");
-            return;
-        }
-
-        final BrokerConnectionInfo connectionInfo = getMdmBrokerConnectionInfo();
-
-        if (connectionInfo != null)
-        {
-            // Make sure there is not another connection active first, if there is, disconnect. Don't use the
-            // disconnectFromMqttBroker() method because it will cause the listener to get unregistered, which will
-            // cause the NetworkSurveyService to get stopped if it is the last listener/user of the service.  Since we
-            // are starting the connection right back up there is not a need to remove the listener.
-            mqttConnection.disconnect();
-
-            connectToMqttBroker(connectionInfo);
-        } else
-        {
-            Timber.i("Skipping the MQTT connection because no MDN MQTT broker configuration has been set");
-
-            if (forceDisconnect) disconnectFromMqttBroker();
-        }
-    }
-
-    /**
-     * @return The current connection state to the MQTT Broker.
-     */
-    @Override
-    public ConnectionState getMqttConnectionState()
-    {
-        if (mqttConnection != null) return mqttConnection.getConnectionState();
-
-        return ConnectionState.DISCONNECTED;
-    }
-
-    /**
-     * Adds an {@link IConnectionStateListener} so that it will be notified of all future MQTT connection state changes.
-     *
-     * @param connectionStateListener The listener to add.
-     */
-    @Override
-    public void registerMqttConnectionStateListener(IConnectionStateListener
-                                                            connectionStateListener)
-    {
-        mqttConnection.registerMqttConnectionStateListener(connectionStateListener);
-    }
-
-    /**
-     * Removes an {@link IConnectionStateListener} so that it will no longer be notified of MQTT connection state changes.
-     *
-     * @param connectionStateListener The listener to remove.
-     */
-    @Override
-    public void unregisterMqttConnectionStateListener(IConnectionStateListener
-                                                              connectionStateListener)
-    {
-        mqttConnection.unregisterMqttConnectionStateListener(connectionStateListener);
-    }
-
-    public GpsListener getPrimaryLocationListener()
-    {
-        return primaryLocationListener;
-    }
-
-    /**
-     * @return The SsidExclusionManager instance for managing excluded WiFi SSIDs.
-     */
-    public SsidExclusionManager getSsidExclusionManager()
-    {
-        if (surveyRecordProcessor != null)
-        {
-            return surveyRecordProcessor.getSsidExclusionManager();
-        }
-        return null;
-    }
-
-    /**
+/**
      * Registers a new listener for changes to the location information.
      */
     public void registerLocationListener(LocationListener locationListener)
@@ -1000,12 +629,6 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
             }
             surveyRecordProcessor.registerPassiveWifiSurveyRecordListener(watchlistDetectionManager);
             watchlistDetectionManager.start();
-            // Attach the match listener to the freshly created manager if watchlist streaming is already
-            // active, since the detection and MQTT lifecycles are independent.
-            if (mqttWatchlistStreamEnabled)
-            {
-                watchlistDetectionManager.setMatchListener(mqttConnection);
-            }
             watchlistRegistered = true;
             Timber.i("Watchlist detection enabled");
         } else if (!enabled && watchlistRegistered)
@@ -1037,39 +660,6 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
     public boolean isWatchlistAlertsActive()
     {
         return isWatchlistEnabled() && wifiController != null && wifiController.isScanningActive();
-    }
-
-    /**
-     * @return true if the Wi-Fi Watchlist should be streamed while an MQTT connection is active. This is
-     * controlled by the "Stream over MQTT" switch in the Watchlist settings (or the matching MDM
-     * restriction), not by a per-connection stream flag like the survey streams.
-     */
-    private boolean isWatchlistStreamingEnabled()
-    {
-        return PreferenceUtils.getAutoStartPreference(NetworkSurveyConstants.PROPERTY_MQTT_WATCHLIST_STREAM_ENABLED,
-                NetworkSurveyConstants.DEFAULT_MQTT_WATCHLIST_STREAM_SETTING, getApplicationContext());
-    }
-
-    /**
-     * Starts or stops watchlist streaming when the Watchlist "Stream over MQTT" setting changes while an
-     * MQTT connection is active. On enable, the current snapshot is published immediately so the backend
-     * is reconciled without waiting for the next watchlist change or reconnect.
-     */
-    private void handleWatchlistStreamingPreferenceChange()
-    {
-        if (mqttConnection == null || mqttConnection.getConnectionState() == ConnectionState.DISCONNECTED)
-        {
-            return;
-        }
-
-        if (isWatchlistStreamingEnabled())
-        {
-            startWatchlistStreaming();
-            if (watchlistChangePublisher != null) watchlistChangePublisher.publishSnapshot();
-        } else
-        {
-            stopWatchlistStreaming();
-        }
     }
 
     /**
@@ -1319,8 +909,6 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
                 || bluetoothController.isLoggingEnabled()
                 || gnssController.isLoggingEnabled()
                 || cellularController.isCdrLoggingEnabled()
-                || getMqttConnectionState() != ConnectionState.DISCONNECTED
-                || GrpcConnectionService.getConnectedState() != ConnectionState.DISCONNECTED
                 || surveyRecordProcessor.isBeingUsed();
     }
 
@@ -1573,256 +1161,6 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
         return result;
     }
 
-    public synchronized UploadScanningResult toggleUploadRecordSaving(boolean enable)
-    {
-        try
-        {
-            boolean externalDataUploadAllowedForMdm = MdmUtils.isExternalDataUploadAllowed(this);
-            if (!externalDataUploadAllowedForMdm)
-            {
-                return new UploadScanningResult(false, false, getString(R.string.upload_disabled_via_mdm));
-            }
-
-            if (enable)
-            {
-                // Only start surveys for protocols needed by the selected upload targets
-                final boolean shouldStartCellular = PreferenceUtils.shouldStartCellularForUpload(this);
-                final boolean shouldStartWifi = PreferenceUtils.shouldStartWifiForUpload(this);
-
-                if (!shouldStartCellular && !shouldStartWifi)
-                {
-                    Timber.w("No upload targets selected, so no survey scanning will be started");
-                    return new UploadScanningResult(false, false, getString(R.string.upload_saving_no_targets));
-                }
-
-                dbUploadStore = new DbUploadStore(this);
-                if (PreferenceUtils.isAutoUploadEnabled(this))
-                {
-                    autoUploadManager = new AutoUploadManager(this, batteryMonitor, this);
-                    dbUploadStore.setUploadRecordCountListener(autoUploadManager);
-                } else
-                {
-                    dbUploadStore.setUploadRecordCountListener(this);
-                }
-                dbUploadStore.resetLastLocations();
-
-                Set<SurveyTypes> surveysStarted = new LinkedHashSet<>();
-
-                if (shouldStartCellular)
-                {
-                    registerCellularSurveyRecordListener(dbUploadStore);
-                    surveysStarted.add(SurveyTypes.CELLULAR);
-                }
-
-                if (shouldStartWifi)
-                {
-                    registerWifiSurveyRecordListener(dbUploadStore);
-                    surveysStarted.add(SurveyTypes.WIFI);
-                }
-
-                // Track survey session. OpenCelliD/BeaconDB uploads discard the Mission ID, so this
-                // is not a mission relevant survey and must not roll a new Mission ID.
-                onSurveyStarted(false);
-                updateWakeLock();
-
-                // Generate appropriate success message based on what was started
-                String message;
-                if (shouldStartCellular && shouldStartWifi)
-                {
-                    message = getString(R.string.upload_saving_started_cellular_wifi);
-                } else if (shouldStartCellular)
-                {
-                    message = getString(R.string.upload_saving_started_cellular);
-                } else
-                {
-                    message = getString(R.string.upload_saving_start_toast); // Fallback
-                }
-
-                return new UploadScanningResult(true, true, message, surveysStarted);
-            } else
-            {
-                unregisterCellularSurveyRecordListener(dbUploadStore);
-                unregisterWifiSurveyRecordListener(dbUploadStore);
-
-                if (autoUploadManager != null)
-                {
-                    autoUploadManager.reset();
-                    autoUploadManager = null;
-                }
-
-                dbUploadStore = null;
-
-                // Track survey session end
-                onSurveyStopped();
-                updateWakeLock();
-
-                // Check to see if this service is still needed.  It is still needed if we are either logging, the UI is
-                // visible, or a server connection is active.
-                if (!isBeingUsed()) stopSelf();
-
-                return new UploadScanningResult(true, false, getString(R.string.upload_saving_stop_toast));
-            }
-        } catch (Exception e)
-        {
-            Timber.e(e, "Failed to toggle upload record saving");
-            return new UploadScanningResult(false, false, getString(R.string.upload_saving_toggle_failed));
-        }
-    }
-
-    /**
-     * Toggles NS Analytics scanning on or off. When enabled, survey records are queued
-     * to the NS Analytics data store for upload to the NS Analytics backend.
-     *
-     * @param enable True to enable NS Analytics scanning, false to disable
-     * @return Result indicating success/failure and whether scanning was started or stopped
-     */
-    public synchronized UploadScanningResult toggleNsAnalyticsScanning(boolean enable)
-    {
-        try
-        {
-            boolean isCurrentlyActive = (nsAnalyticsDataStore != null);
-
-            if (enable && !isCurrentlyActive)
-            {
-                // Check if device is registered with NS Analytics
-                if (!isNsAnalyticsRegistered())
-                {
-                    return new UploadScanningResult(false, false,
-                            getString(R.string.ns_analytics_not_registered));
-                }
-
-                nsAnalyticsDataStore = new NsAnalyticsDataStore(this);
-                nsAnalyticsDataStore.startCollecting();
-
-                // Get preferences to check which protocols are enabled
-                SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
-
-                // Register for enabled protocols
-                boolean cellularEnabled = preferences.getBoolean(
-                        NsAnalyticsConstants.PROPERTY_NS_ANALYTICS_CELLULAR_ENABLED, NsAnalyticsConstants.DEFAULT_CELLULAR_ENABLED);
-                boolean phoneStateEnabled = preferences.getBoolean(
-                        NsAnalyticsConstants.PROPERTY_NS_ANALYTICS_PHONE_STATE_ENABLED, NsAnalyticsConstants.DEFAULT_PHONE_STATE_ENABLED);
-                boolean wifiEnabled = preferences.getBoolean(
-                        NsAnalyticsConstants.PROPERTY_NS_ANALYTICS_WIFI_ENABLED, NsAnalyticsConstants.DEFAULT_WIFI_ENABLED);
-                boolean bluetoothEnabled = preferences.getBoolean(
-                        NsAnalyticsConstants.PROPERTY_NS_ANALYTICS_BLUETOOTH_ENABLED, NsAnalyticsConstants.DEFAULT_BLUETOOTH_ENABLED);
-                boolean gnssEnabled = preferences.getBoolean(
-                        NsAnalyticsConstants.PROPERTY_NS_ANALYTICS_GNSS_ENABLED, NsAnalyticsConstants.DEFAULT_GNSS_ENABLED);
-
-                if (!cellularEnabled && !phoneStateEnabled && !wifiEnabled && !bluetoothEnabled && !gnssEnabled)
-                {
-                    Timber.w("No NS Analytics protocols enabled, so no survey scanning will be started");
-                    nsAnalyticsDataStore.shutdown();
-                    nsAnalyticsDataStore = null;
-                    return new UploadScanningResult(false, false,
-                            getString(R.string.ns_analytics_survey_no_protocols_enabled));
-                }
-
-                // Roll the Mission ID before registering any listener. The phone state listener (and
-                // device status) can emit a record as soon as it is registered, so the roll must be
-                // committed first or that record would capture a pre-roll Mission ID. This is placed
-                // after the no-protocols bail-out above so an abandoned start never rolls.
-                onSurveyStarted(true);
-
-                if (cellularEnabled)
-                {
-                    registerCellularSurveyRecordListener(nsAnalyticsDataStore);
-                }
-                if (phoneStateEnabled)
-                {
-                    registerPhoneStateListener(nsAnalyticsDataStore);
-                }
-                if (wifiEnabled)
-                {
-                    registerWifiSurveyRecordListener(nsAnalyticsDataStore);
-                }
-                if (bluetoothEnabled)
-                {
-                    registerBluetoothSurveyRecordListener(nsAnalyticsDataStore);
-                }
-                if (gnssEnabled)
-                {
-                    registerGnssSurveyRecordListener(nsAnalyticsDataStore);
-                }
-
-                // Always register for device status
-                registerDeviceStatusListener(nsAnalyticsDataStore);
-
-                updateWakeLock();
-
-                Timber.i("NS Analytics survey started - Cellular: %b, WiFi: %b, Bluetooth: %b, GNSS: %b",
-                        cellularEnabled, wifiEnabled, bluetoothEnabled, gnssEnabled);
-
-                // Re-evaluate MQTT backpressure mode since NS Analytics is now active
-                reevaluateMqttBackpressureMode();
-
-                return new UploadScanningResult(true, true,
-                        getString(R.string.ns_analytics_survey_started));
-            } else if (!enable && isCurrentlyActive)
-            {
-                // Unregister from all listeners
-                unregisterCellularSurveyRecordListener(nsAnalyticsDataStore);
-                unregisterPhoneStateListener(nsAnalyticsDataStore);
-                unregisterWifiSurveyRecordListener(nsAnalyticsDataStore);
-                unregisterBluetoothSurveyRecordListener(nsAnalyticsDataStore);
-                unregisterGnssSurveyRecordListener(nsAnalyticsDataStore);
-                unregisterDeviceStatusListener(nsAnalyticsDataStore);
-
-                // Clean up the data store
-                nsAnalyticsDataStore.shutdown();
-                nsAnalyticsDataStore = null;
-
-                // Cancel periodic uploads first
-                NsAnalyticsUploadWorker.Companion.cancelPeriodicUpload(this);
-                Timber.i("Canceled NS Analytics periodic uploads after survey stop");
-
-                // Trigger immediate upload if there are pending records and auto-upload is enabled
-                if (PreferenceUtils.isNsAnalyticsAutoUpload(this))
-                {
-                    // Run in background to avoid blocking
-                    executorService.execute(() -> {
-                        try
-                        {
-                            SurveyDatabase db = SurveyDatabase.getInstance(this);
-                            int pendingCount = db.nsAnalyticsDao().getPendingRecordCount();
-                            if (pendingCount > 0)
-                            {
-                                // Trigger immediate upload to send remaining records
-                                NsAnalyticsUploadWorker.Companion.triggerImmediateUpload(this);
-                                Timber.i("NS Analytics survey stopped with %d pending records - triggered immediate upload", pendingCount);
-                            } else
-                            {
-                                Timber.i("NS Analytics survey stopped with no pending records");
-                            }
-                        } catch (Exception e)
-                        {
-                            Timber.e(e, "Failed to check pending records after stopping NS Analytics survey");
-                        }
-                    });
-                }
-
-                onSurveyStopped();
-                updateWakeLock();
-
-                Timber.i("NS Analytics survey stopped");
-
-                return new UploadScanningResult(true, false,
-                        getString(R.string.ns_analytics_survey_stopped));
-            } else
-            {
-                // Already in desired state
-                return new UploadScanningResult(true, enable,
-                        enable ? getString(R.string.ns_analytics_survey_already_running)
-                                : getString(R.string.ns_analytics_survey_already_stopped));
-            }
-        } catch (Exception e)
-        {
-            Timber.e(e, "Failed to toggle NS Analytics scanning");
-            return new UploadScanningResult(false, false,
-                    getString(R.string.ns_analytics_survey_toggle_failed));
-        }
-    }
-
     public boolean isCellularLoggingEnabled()
     {
         return cellularController.isLoggingEnabled();
@@ -1864,58 +1202,6 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
     }
 
     /**
-     * @return true if MQTT streaming is currently active (connected or connecting)
-     */
-    public boolean isMqttStreamingActive()
-    {
-        final com.craxiom.mqttlibrary.connection.ConnectionState state = mqttConnection.getConnectionState();
-        return state == ConnectionState.CONNECTED || state == ConnectionState.CONNECTING;
-    }
-
-    /**
-     * @return true if gRPC streaming is currently active
-     */
-    public boolean isGrpcConnectionActive()
-    {
-        return GrpcConnectionService.getConnectedState() == ConnectionState.CONNECTED;
-    }
-
-    public boolean isUploadScanningActive()
-    {
-        return dbUploadStore != null;
-    }
-
-    public boolean isNsAnalyticsScanningActive()
-    {
-        return nsAnalyticsDataStore != null;
-    }
-
-    /**
-     * @return true if the device is registered with NS Analytics
-     */
-    public boolean isNsAnalyticsRegistered()
-    {
-        return NsAnalyticsSecureStorage.INSTANCE.isRegistered(this);
-    }
-
-    /**
-     * @return the NS Analytics workspace ID if registered
-     */
-    public String getNsAnalyticsWorkspaceId()
-    {
-        return NsAnalyticsSecureStorage.INSTANCE.getWorkspaceId(this);
-    }
-
-    public long getNsAnalyticsSurveyStartTime()
-    {
-        if (nsAnalyticsDataStore != null)
-        {
-            return nsAnalyticsDataStore.getNsAnalyticsSurveyStartTime();
-        }
-        return 0L;
-    }
-
-    /**
      * Triggers the creation of a single device status message and notifies the listeners.
      */
     public void sendSingleDeviceStatus()
@@ -1948,64 +1234,14 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
     }
 
     /**
-     * Check if any type of survey is currently active (logging or streaming).
-     * This includes file logging, MQTT streaming, gRPC streaming, and upload scanning.
+     * Check if any type of survey is currently active (file logging).
      *
      * @return true if any survey is active
      */
     public boolean isAnySurveyActive()
     {
-        return isAnyMissionRelevantSurveyActive() || isUploadScanningActive();
-    }
-
-    /**
-     * Check if any survey that is relevant to the Mission ID is currently active.
-     * <p>
-     * This is the same set as {@link #isAnySurveyActive()} except it excludes OpenCelliD/BeaconDB
-     * upload scanning ({@link #isUploadScanningActive()}). Those community upload databases ignore
-     * the Mission ID, so starting or stopping them must not roll it.
-     *
-     * @return true if any mission relevant survey is active
-     */
-    private boolean isAnyMissionRelevantSurveyActive()
-    {
         return isCellularLoggingEnabled() || isPhoneStateLoggingEnabled() || isWifiLoggingEnabled() ||
-                isBluetoothLoggingEnabled() || isGnssLoggingEnabled() || isCdrLoggingEnabled() ||
-                isMqttStreamingActive() || isGrpcConnectionActive() || isNsAnalyticsScanningActive();
-    }
-
-    /**
-     * Checks if any survey record outputs other than MQTT streaming are currently active.
-     * This includes file logging (CSV/GeoPackage), gRPC streaming, NS Analytics, and upload scanning.
-     * <p>
-     * This is used to determine whether to pause scanning (conserve battery when only MQTT is active)
-     * or drop MQTT messages (continue other outputs when MQTT backs up).
-     *
-     * @return true if other outputs are active, false if only MQTT streaming is active
-     */
-    private boolean hasOtherActiveOutputs()
-    {
-        // Check if file logging is enabled for any protocol
-        if (isCellularLoggingEnabled() || isPhoneStateLoggingEnabled() || isWifiLoggingEnabled() ||
-                isBluetoothLoggingEnabled() || isGnssLoggingEnabled() || isCdrLoggingEnabled())
-        {
-            return true;
-        }
-
-        // Check if gRPC streaming is connected
-        if (isGrpcConnectionActive())
-        {
-            return true;
-        }
-
-        // Check if NS Analytics is active
-        if (isNsAnalyticsScanningActive())
-        {
-            return true;
-        }
-
-        // Check if upload scanning is active
-        return isUploadScanningActive();
+                isBluetoothLoggingEnabled() || isGnssLoggingEnabled() || isCdrLoggingEnabled();
     }
 
     /**
@@ -2095,7 +1331,6 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
                 Timber.i("Starting new survey session");
                 surveySessionStartTime = System.currentTimeMillis();
                 surveySessionRecordCount.set(0);
-                surveySessionUploadRecordCount.set(0);
             }
 
             // Roll the Mission ID only on the transition to the first mission relevant survey of a
@@ -2131,17 +1366,16 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
         {
             if (!isAnySurveyActive())
             {
-                Timber.i("All surveys stopped, ending survey session. Total records: %d, Upload records: %d",
-                        surveySessionRecordCount.get(), surveySessionUploadRecordCount.get());
+                Timber.i("All surveys stopped, ending survey session. Total records: %d",
+                        surveySessionRecordCount.get());
                 surveySessionStartTime = null;
                 surveySessionRecordCount.set(0);
-                surveySessionUploadRecordCount.set(0);
             }
 
-            // End the mission session when the last mission relevant survey stops. The missionId is
+            // End the mission session when the last survey stops. The missionId is
             // intentionally retained as the most recent value so the UI can still show and copy it
             // and any trailing records stay non-null. The next survey start rolls a fresh one.
-            if (missionSessionActive && !isAnyMissionRelevantSurveyActive())
+            if (missionSessionActive && !isAnySurveyActive())
             {
                 missionSessionActive = false;
                 Timber.i("Mission session ended. Most recent Mission ID: %s", missionId);
@@ -2194,7 +1428,6 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
             {
                 surveySessionStartTime = null;
                 surveySessionRecordCount.set(0);
-                surveySessionUploadRecordCount.set(0);
             }
             missionIdSnapshot = missionId;
             missionSessionActiveSnapshot = missionSessionActive;
@@ -2202,28 +1435,6 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
 
         // Notify outside the lock so the UI settles back to the pre-start Mission ID.
         if (rolledBack) notifyMissionIdListeners(missionIdSnapshot, missionSessionActiveSnapshot);
-    }
-
-    /**
-     * Called by the {@link GrpcConnectionService} when the gRPC streaming connection becomes
-     * connected or disconnected. gRPC streaming is a mission relevant survey, but unlike MQTT the
-     * connection is driven from a separate service, so it must signal the survey session here.
-     * This mirrors how connectToMqttBroker / disconnectFromMqttBroker call onSurveyStarted /
-     * onSurveyStopped. The gRPC service only reports DISCONNECTED for a real disconnect (not a
-     * transient reconnect), so a network blip will not roll a new Mission ID.
-     *
-     * @param connected true if the gRPC connection just became CONNECTED, false if it disconnected.
-     */
-    public void onGrpcConnectionStateChanged(boolean connected)
-    {
-        if (connected)
-        {
-            onSurveyStarted(true);
-        } else
-        {
-            onSurveyStopped();
-        }
-        updateWakeLock();
     }
 
     /**
@@ -2304,29 +1515,6 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
     public void incrementSurveySessionRecordCount()
     {
         surveySessionRecordCount.incrementAndGet();
-    }
-
-    /**
-     * Get the count of records that passed upload filters during the current survey session.
-     *
-     * @return Number of records written to upload database
-     */
-    public int getSurveySessionUploadRecordCount()
-    {
-        return surveySessionUploadRecordCount.get();
-    }
-
-    // IUploadRecordCountListener implementation
-    @Override
-    public void onCellularUploadRecordsWritten(int recordCount)
-    {
-        surveySessionUploadRecordCount.addAndGet(recordCount);
-    }
-
-    @Override
-    public void onWifiUploadRecordsWritten(int recordCount)
-    {
-        surveySessionUploadRecordCount.addAndGet(recordCount);
     }
 
     /**
@@ -2579,56 +1767,6 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
     public void runSingleCellularScan()
     {
         cellularController.runSingleScan();
-    }
-
-    /**
-     * Tries to establish an MQTT broker connection after the phone is first started up.
-     * <p>
-     * This method only applies to creating the MQTT connection at boot for two reasons. First, it checks the start
-     * MQTT at boot preference before creating the connection, and secondly, it does not first disconnect any existing
-     * connections because it assumes this method is being called from a fresh start of the Android phone.
-     * <p>
-     * First, it tries to create a connection using the MDM configured MQTT parameters as long as the user has not
-     * toggled the MDM override option. In that case, this method will jump straight to using the user provided MQTT
-     * connection information.
-     * <p>
-     * If the MDM override option is enabled, or if the MDM connection information could not be found then this method
-     * attempts to use the user provided MQTT connection information.
-     *
-     * @since 0.1.3
-     */
-    private void attemptMqttConnectionAtBoot()
-    {
-        if (!PreferenceUtils.getMqttStartOnBootPreference(getApplicationContext()))
-        {
-            Timber.i("Skipping the mqtt auto-connect because the preference indicated as such");
-            return;
-        }
-
-        // First try to use the MDM settings. The only exception to this is if the user has overridden the MDM settings
-        boolean mdmConnection = false;
-        if (!isMqttMdmOverrideEnabled())
-        {
-            final RestrictionsManager restrictionsManager = (RestrictionsManager) getSystemService(RESTRICTIONS_SERVICE);
-            if (restrictionsManager != null)
-            {
-                final BrokerConnectionInfo connectionInfo = getMdmBrokerConnectionInfo();
-                if (connectionInfo != null)
-                {
-                    mdmConnection = true;
-                    connectToMqttBroker(connectionInfo);
-                }
-            }
-        }
-
-        if (!mdmConnection)
-        {
-            final BrokerConnectionInfo userBrokerConnectionInfo = getUserBrokerConnectionInfo();
-            if (userBrokerConnectionInfo != null)
-            {
-                connectToMqttBroker(userBrokerConnectionInfo);
-            }
-        }
     }
 
     /**
@@ -2923,10 +2061,8 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
         Application.createNotificationChannel(this);
 
         final boolean logging = cellularController.isLoggingEnabled() || cellularController.isPhoneStateLoggingEnabled() || wifiController.isLoggingEnabled() || bluetoothController.isLoggingEnabled() || gnssController.isLoggingEnabled() || cellularController.isCdrLoggingEnabled();
-        final com.craxiom.mqttlibrary.connection.ConnectionState connectionState = mqttConnection.getConnectionState();
-        final boolean mqttConnectionActive = connectionState == ConnectionState.CONNECTED || connectionState == ConnectionState.CONNECTING;
         final CharSequence notificationTitle = getText(R.string.network_survey_notification_title);
-        final String notificationText = getNotificationText(logging, mqttConnectionActive, connectionState);
+        final String notificationText = getNotificationText(logging);
 
         final Intent notificationIntent = new Intent(this, NetworkSurveyActivity.class);
         final PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE);
@@ -2935,18 +2071,12 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
                 .setContentTitle(notificationTitle)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
-                .setSmallIcon(mqttConnectionActive ? R.drawable.ic_cloud_connection : (logging ? R.drawable.logging_thick_icon : R.drawable.gps_map_icon))
+                .setSmallIcon(logging ? R.drawable.logging_thick_icon : R.drawable.gps_map_icon)
                 .setContentIntent(pendingIntent)
                 .setTicker(notificationTitle)
                 .setContentText(notificationText)
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(notificationText));
-
-        if (connectionState == ConnectionState.CONNECTING)
-        {
-            builder.setColor(getResources().getColor(R.color.connectionStatusConnecting, null));
-            builder.setColorized(true);
-        }
 
         return builder.build();
     }
@@ -2954,14 +2084,10 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
     /**
      * Gets the text to use for the Network Survey Service Notification.
      *
-     * @param logging              True if logging is active, false if disabled.
-     * @param mqttConnectionActive True if the MQTT connection is either in a connected or reconnecting state.
-     * @param connectionState      The actual connection state of the MQTT broker connection.
+     * @param logging True if logging is active, false if disabled.
      * @return The text that can be added to the service notification.
-     * @since 0.1.1
      */
-    private String getNotificationText(boolean logging,
-                                       boolean mqttConnectionActive, ConnectionState connectionState)
+    private String getNotificationText(boolean logging)
     {
         // Check if operations are paused due to battery (highest priority - requires external action)
         if (batteryMonitor != null && batteryMonitor.isPausedDueToBattery())
@@ -2970,28 +2096,11 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
             return getString(R.string.battery_paused_notification_text, batteryLevel);
         }
 
-        // Check if operations are paused due to queue backpressure (lower priority - self-resolving)
-        if (isPausedDueToQueueBackpressure.get())
-        {
-            return getString(R.string.queue_paused_notification);
-        }
-
         String notificationText = "";
 
         if (logging)
         {
-            notificationText = String.valueOf(getText(R.string.logging_notification_text)) + (mqttConnectionActive ? getText(R.string.and) : "");
-        }
-
-        switch (connectionState)
-        {
-            case CONNECTED ->
-                    notificationText += getText(R.string.mqtt_connection_notification_text);
-            case CONNECTING ->
-                    notificationText += getText(R.string.mqtt_reconnecting_notification_text);
-            default ->
-            {
-            }
+            notificationText = String.valueOf(getText(R.string.logging_notification_text));
         }
 
         return notificationText;
@@ -3036,7 +2145,6 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
             public void onReceive(Context context, Intent intent)
             {
                 setScanRateValues();
-                attemptMqttConnectWithMdmConfig(true);
 
                 cellularController.onMdmPreferenceChanged();
                 wifiController.onMdmPreferenceChanged();
@@ -3070,130 +2178,7 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
         }
     }
 
-    /**
-     * @return True if the MQTT MDM override has been enabled by the user.  False if the MDM config should still be employed.
-     */
-    private boolean isMqttMdmOverrideEnabled()
-    {
-        final SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getApplicationContext());
-        return preferences.getBoolean(MqttConstants.PROPERTY_MQTT_MDM_OVERRIDE, false);
-    }
-
-    /**
-     * Get the MDM configured MQTT broker connection information to use to establish the connection.
-     * <p>
-     * If the user has specified to override the MDM connection config, then null is returned.
-     *
-     * @return The connection settings to use for the MQTT broker, or null if no connection information is present or
-     * the user has overrode the MDM config.
-     * @since 0.1.1
-     */
-
-    private BrokerConnectionInfo getMdmBrokerConnectionInfo()
-    {
-        final RestrictionsManager restrictionsManager = (RestrictionsManager) getSystemService(RESTRICTIONS_SERVICE);
-        if (restrictionsManager != null)
-        {
-            final Bundle mdmProperties = restrictionsManager.getApplicationRestrictions();
-
-            final boolean hasBrokerHost = mdmProperties.containsKey(MqttConstants.PROPERTY_MQTT_CONNECTION_HOST);
-            if (!hasBrokerHost) return null;
-
-            final String mqttBrokerHost = mdmProperties.getString(MqttConstants.PROPERTY_MQTT_CONNECTION_HOST);
-            final int portNumber = mdmProperties.getInt(MqttConstants.PROPERTY_MQTT_CONNECTION_PORT, MqttConstants.DEFAULT_MQTT_PORT);
-            final boolean tlsEnabled = mdmProperties.getBoolean(MqttConstants.PROPERTY_MQTT_CONNECTION_TLS_ENABLED, MqttConstants.DEFAULT_MQTT_TLS_SETTING);
-            final String clientId = mdmProperties.getString(MqttConstants.PROPERTY_MQTT_CLIENT_ID);
-            final String username = mdmProperties.getString(MqttConstants.PROPERTY_MQTT_USERNAME);
-            final String password = mdmProperties.getString(MqttConstants.PROPERTY_MQTT_PASSWORD);
-
-            final boolean cellularStreamEnabled = mdmProperties.getBoolean(NetworkSurveyConstants.PROPERTY_MQTT_CELLULAR_STREAM_ENABLED, NetworkSurveyConstants.DEFAULT_MQTT_CELLULAR_STREAM_SETTING);
-            final boolean phoneStateStreamEnabled = mdmProperties.getBoolean(NetworkSurveyConstants.PROPERTY_MQTT_PHONE_STATE_STREAM_ENABLED, NetworkSurveyConstants.DEFAULT_MQTT_PHONE_STATE_STREAM_SETTING);
-            final boolean wifiStreamEnabled = mdmProperties.getBoolean(NetworkSurveyConstants.PROPERTY_MQTT_WIFI_STREAM_ENABLED, NetworkSurveyConstants.DEFAULT_MQTT_WIFI_STREAM_SETTING);
-            final boolean bluetoothStreamEnabled = mdmProperties.getBoolean(NetworkSurveyConstants.PROPERTY_MQTT_BLUETOOTH_STREAM_ENABLED, NetworkSurveyConstants.DEFAULT_MQTT_BLUETOOTH_STREAM_SETTING);
-            final boolean gnssStreamEnabled = mdmProperties.getBoolean(NetworkSurveyConstants.PROPERTY_MQTT_GNSS_STREAM_ENABLED, NetworkSurveyConstants.DEFAULT_MQTT_GNSS_STREAM_SETTING);
-            final boolean deviceStatusStreamEnabled = mdmProperties.getBoolean(NetworkSurveyConstants.PROPERTY_MQTT_DEVICE_STATUS_STREAM_ENABLED, NetworkSurveyConstants.DEFAULT_MQTT_DEVICE_STATUS_STREAM_SETTING);
-            final String topicPrefix = mdmProperties.getString(MqttConstants.PROPERTY_MQTT_TOPIC_PREFIX, MqttConstants.DEFAULT_MQTT_TOPIC_PREFIX);
-            final int qosValue = mdmProperties.getInt(MqttConstants.PROPERTY_MQTT_QOS, MqttConstants.DEFAULT_MQTT_QOS.getValue());
-            MqttQos mqttQos;
-            try
-            {
-                mqttQos = MqttQos.fromValue(qosValue);
-            } catch (IllegalArgumentException e)
-            {
-                Timber.w(e, "Invalid MQTT QoS value from MDM: %d, using default", qosValue);
-                mqttQos = MqttConstants.DEFAULT_MQTT_QOS;
-            }
-
-            String deviceName = mdmProperties.getString(NetworkSurveyConstants.PROPERTY_MDM_MQTT_DEVICE_NAME);
-            // Validate and truncate device name to 100 characters if needed
-            if (deviceName != null && deviceName.length() > 100)
-            {
-                deviceName = deviceName.substring(0, 100);
-                Timber.w("MDM device name was truncated to 100 characters");
-            }
-
-            if (mqttBrokerHost == null || clientId == null)
-            {
-                return null;
-            }
-
-            return new MqttConnectionInfo(mqttBrokerHost, portNumber, tlsEnabled, clientId, username, password,
-                    cellularStreamEnabled, wifiStreamEnabled, bluetoothStreamEnabled, gnssStreamEnabled,
-                    deviceStatusStreamEnabled, phoneStateStreamEnabled, topicPrefix, deviceName, mqttQos);
-        }
-
-        return null;
-    }
-
-    /**
-     * Get the user configured MQTT broker connection information to use to establish the connection.
-     * <p>
-     * If no user defined MQTT broker connection information is present, then null is returned.
-     *
-     * @return The connection settings to use for the MQTT broker, or null if no connection information is present.
-     * @since 0.1.3
-     */
-    private BrokerConnectionInfo getUserBrokerConnectionInfo()
-    {
-        final SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getApplicationContext());
-
-        final String mqttBrokerHost = preferences.getString(MqttConstants.PROPERTY_MQTT_CONNECTION_HOST, "");
-        if (mqttBrokerHost.isEmpty()) return null;
-
-        final String clientId = preferences.getString(MqttConstants.PROPERTY_MQTT_CLIENT_ID, "");
-        if (clientId.isEmpty()) return null;
-
-        final int portNumber = preferences.getInt(MqttConstants.PROPERTY_MQTT_CONNECTION_PORT, MqttConstants.DEFAULT_MQTT_PORT);
-        final boolean tlsEnabled = preferences.getBoolean(MqttConstants.PROPERTY_MQTT_CONNECTION_TLS_ENABLED, MqttConstants.DEFAULT_MQTT_TLS_SETTING);
-        String username = CredentialSecureStorage.INSTANCE.getMqttUsername(getApplicationContext());
-        if (username == null) username = "";
-        String password = CredentialSecureStorage.INSTANCE.getMqttPassword(getApplicationContext());
-        if (password == null) password = "";
-
-        final boolean cellularStreamEnabled = preferences.getBoolean(NetworkSurveyConstants.PROPERTY_MQTT_CELLULAR_STREAM_ENABLED, NetworkSurveyConstants.DEFAULT_MQTT_CELLULAR_STREAM_SETTING);
-        final boolean phoneStateStreamEnabled = preferences.getBoolean(NetworkSurveyConstants.PROPERTY_MQTT_PHONE_STATE_STREAM_ENABLED, NetworkSurveyConstants.DEFAULT_MQTT_PHONE_STATE_STREAM_SETTING);
-        final boolean wifiStreamEnabled = preferences.getBoolean(NetworkSurveyConstants.PROPERTY_MQTT_WIFI_STREAM_ENABLED, NetworkSurveyConstants.DEFAULT_MQTT_WIFI_STREAM_SETTING);
-        final boolean bluetoothStreamEnabled = preferences.getBoolean(NetworkSurveyConstants.PROPERTY_MQTT_BLUETOOTH_STREAM_ENABLED, NetworkSurveyConstants.DEFAULT_MQTT_BLUETOOTH_STREAM_SETTING);
-        final boolean gnssStreamEnabled = preferences.getBoolean(NetworkSurveyConstants.PROPERTY_MQTT_GNSS_STREAM_ENABLED, NetworkSurveyConstants.DEFAULT_MQTT_GNSS_STREAM_SETTING);
-        final boolean deviceStatusStreamEnabled = preferences.getBoolean(NetworkSurveyConstants.PROPERTY_MQTT_DEVICE_STATUS_STREAM_ENABLED, NetworkSurveyConstants.DEFAULT_MQTT_DEVICE_STATUS_STREAM_SETTING);
-        final String topicPrefix = preferences.getString(MqttConstants.PROPERTY_MQTT_TOPIC_PREFIX, MqttConstants.DEFAULT_MQTT_TOPIC_PREFIX);
-        final int qosValue = preferences.getInt(MqttConstants.PROPERTY_MQTT_QOS, MqttConstants.DEFAULT_MQTT_QOS.getValue());
-        MqttQos mqttQos;
-        try
-        {
-            mqttQos = MqttQos.fromValue(qosValue);
-        } catch (IllegalArgumentException e)
-        {
-            Timber.w(e, "Invalid MQTT QoS value from preferences: %d, using default", qosValue);
-            mqttQos = MqttConstants.DEFAULT_MQTT_QOS;
-        }
-
-        return new MqttConnectionInfo(mqttBrokerHost, portNumber, tlsEnabled, clientId, username, password,
-                cellularStreamEnabled, wifiStreamEnabled, bluetoothStreamEnabled, gnssStreamEnabled,
-                deviceStatusStreamEnabled, phoneStateStreamEnabled, topicPrefix, null, mqttQos);
-    }
-
-    /**
+/**
      * Notify {@link #loggingChangeListeners} that one or more of the logging states have changed.
      *
      * @since 1.10.0
@@ -3209,100 +2194,6 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
                 Timber.e(e, "Unable to notify a Logging Changed Listener because of an exception");
             }
         });
-
-        // Re-evaluate backpressure behavior when logging state changes
-        reevaluateMqttBackpressureMode();
-    }
-
-    /**
-     * Re-evaluates the MQTT backpressure mode when other output states change.
-     * If we were paused and user enables file logging, switch to drop mode and resume.
-     * If we were dropping and no other outputs are active anymore, we stay in drop mode
-     * (don't auto-pause - let the queue drain naturally).
-     * <p>
-     * This method should be called when any output state changes, such as when:
-     * <ul>
-     *   <li>File logging is enabled/disabled</li>
-     *   <li>gRPC streaming connects/disconnects</li>
-     *   <li>NS Analytics is enabled/disabled</li>
-     * </ul>
-     */
-    public void reevaluateMqttBackpressureMode()
-    {
-        // Only relevant if MQTT queue is currently backed up
-        if (!mqttConnection.isQueueBackpressureActive())
-        {
-            return;
-        }
-
-        boolean hasOtherOutputs = hasOtherActiveOutputs();
-
-        if (hasOtherOutputs && isPausedDueToQueueBackpressure.get())
-        {
-            // User enabled logging/streaming while MQTT was paused - switch to drop mode
-            Timber.i("Output enabled while MQTT paused - switching to drop mode and resuming scanning");
-
-            isPausedDueToQueueBackpressure.set(false);
-            mqttConnection.setDropMessages(true);
-
-            // Only resume if not paused due to battery
-            if (!isPausedForBattery())
-            {
-                cellularController.resumeScanning();
-                wifiController.resumeScanning();
-                bluetoothController.resumeScanning();
-                gnssController.resumeScanning();
-            }
-
-            updateServiceNotification();
-            notifyQueueBackpressureStateListeners(false);
-            notifyMqttDropModeStateListeners(true);
-        }
-        // Note: We don't auto-pause if other outputs are disabled while dropping.
-        // Let the queue drain naturally and MQTT will resume normally.
-    }
-
-    /**
-     * Clears both MQTT backpressure states (drop mode and pause mode) and resumes scanning if appropriate.
-     * This method should be called when the MQTT connection is disconnected or otherwise no longer active.
-     */
-    private void clearMqttBackpressureStates()
-    {
-        if (mqttConnection.getAndSetDropMessages(false))
-        {
-            Timber.i("Clearing MQTT drop mode state");
-            notifyMqttDropModeStateListeners(false);
-        }
-
-        if (isPausedDueToQueueBackpressure.getAndSet(false))
-        {
-            Timber.i("Clearing queue backpressure state");
-            notifyQueueBackpressureStateListeners(false);
-
-            if (!isPausedForBattery())
-            {
-                cellularController.resumeScanning();
-                wifiController.resumeScanning();
-                bluetoothController.resumeScanning();
-                gnssController.resumeScanning();
-            }
-        }
-    }
-
-    @Override
-    public void onConnectionStateChange(ConnectionState connectionState)
-    {
-        updateServiceNotification();
-
-        if (connectionState == ConnectionState.DISCONNECTED)
-        {
-            clearMqttBackpressureStates();
-        } else if (connectionState == ConnectionState.CONNECTED && watchlistChangePublisher != null)
-        {
-            // Publish the full authoritative watchlist snapshot on every (re)connect, including the MQTT
-            // client's silent auto-reconnects, so a backend that missed offline deltas is reconciled.
-            watchlistChangePublisher.publishSnapshot();
-        }
     }
 
     /**
@@ -3331,82 +2222,18 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
      * Class used for the client Binder.  Because we know this service always runs in the same process as its clients,
      * we don't need to deal with IPC.
      */
-    public static class SurveyServiceBinder extends AConnectionFragment.ServiceBinder
+    public static class SurveyServiceBinder extends Binder
     {
-        private NetworkSurveyService service;
+        public NetworkSurveyService service;
 
         public SurveyServiceBinder(NetworkSurveyService service)
         {
             this.service = service;
         }
 
-        @Override
-        public IMqttService getService()
-        {
-            return service;
-        }
-
         public void onDestroy()
         {
             service = null;
-        }
-    }
-
-    // ========================================
-    // Streaming Queue Management Methods
-    // ========================================
-
-    /**
-     * Handles changes to the streaming queue limit preference.
-     */
-    private void handleStreamingQueueLimitChange()
-    {
-        final int queueLimit = PreferenceUtils.getStreamingQueueLimit(this);
-        Timber.d("Streaming queue limit changed to: %d", queueLimit);
-
-        if (mqttConnection != null)
-        {
-            mqttConnection.setStreamingQueueLimit(queueLimit);
-        }
-
-        // Check if we should resume scanning due to the limit change
-        if (isPausedDueToQueueBackpressure.get())
-        {
-            boolean shouldResume = false;
-
-            if (queueLimit == NetworkSurveyConstants.STREAMING_QUEUE_LIMIT_DISABLED)
-            {
-                // Limit was disabled (set to 0), so resume
-                Timber.i("Streaming queue limit disabled, resuming scanning");
-                shouldResume = true;
-            } else if (mqttConnection != null)
-            {
-                // Check if the new limit is greater than the current queue size
-                int currentQueueSize = mqttConnection.getPendingMessageCount();
-                if (queueLimit > currentQueueSize)
-                {
-                    Timber.i("New streaming queue limit (%d) > current queue size (%d), resuming scanning",
-                            queueLimit, currentQueueSize);
-                    shouldResume = true;
-                }
-            }
-
-            if (shouldResume)
-            {
-                isPausedDueToQueueBackpressure.set(false);
-
-                // Only resume if not paused due to battery
-                if (!isPausedForBattery())
-                {
-                    cellularController.resumeScanning();
-                    wifiController.resumeScanning();
-                    bluetoothController.resumeScanning();
-                    gnssController.resumeScanning();
-
-                    // Notify listeners that queue backpressure is no longer active
-                    notifyQueueBackpressureStateListeners(false);
-                }
-            }
         }
     }
 
@@ -3490,10 +2317,6 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
         batteryPauseState.setWasBluetoothLoggingEnabled(bluetoothController.isLoggingEnabled());
         batteryPauseState.setWasGnssLoggingEnabled(gnssController.isLoggingEnabled());
         batteryPauseState.setWasCdrLoggingEnabled(cellularController.isCdrLoggingEnabled());
-
-        // Save connection states
-        batteryPauseState.setWasMqttConnectionActive(getMqttConnectionState() == ConnectionState.CONNECTED);
-        batteryPauseState.setWasGrpcConnectionActive(isGrpcConnectionActive());
 
         // Save device status state
         batteryPauseState.setWasDeviceStatusActive(deviceStatusActive.get());
@@ -3619,235 +2442,4 @@ public class NetworkSurveyService extends Service implements IConnectionStateLis
         return batteryMonitor;
     }
 
-    // ============================================================================
-    // IQueueBackpressureListener Implementation
-    // ============================================================================
-
-    @Override
-    public void onQueueFull(int queueSize, int queueLimit)
-    {
-        if (hasOtherActiveOutputs())
-        {
-            // Other outputs are active - don't pause scanning, just drop MQTT messages
-            Timber.w("MQTT queue full (%d >= %d), but other outputs active - switching to drop mode",
-                    queueSize, queueLimit);
-
-            // Don't re-enter drop mode if already dropping
-            if (mqttConnection.getAndSetDropMessages(true))
-            {
-                return;
-            }
-
-            // Notify UI that MQTT is dropping messages
-            notifyMqttDropModeStateListeners(true);
-        } else
-        {
-            // Only MQTT is active - pause scanning to conserve battery
-            Timber.w("MQTT queue full (%d >= %d), pausing scanning to conserve battery",
-                    queueSize, queueLimit);
-
-            if (isPausedDueToQueueBackpressure.getAndSet(true))
-            {
-                // Already paused, no need to pause again
-                return;
-            }
-
-            // Pause all controllers
-            cellularController.pauseScanning();
-            wifiController.pauseScanning();
-            bluetoothController.pauseScanning();
-            gnssController.pauseScanning();
-
-            updateServiceNotification();
-            notifyQueueBackpressureStateListeners(true);
-        }
     }
-
-    @Override
-    public void onQueueDrained(int queueSize, int queueLimit)
-    {
-        Timber.i("MQTT queue drained (%d < %d/2)", queueSize, queueLimit);
-
-        // If we were in drop mode, exit drop mode
-        if (mqttConnection.getAndSetDropMessages(false))
-        {
-            Timber.i("MQTT queue drained - resuming message queueing");
-            notifyMqttDropModeStateListeners(false);
-            return;
-        }
-
-        // If we were paused, resume scanning
-        if (!isPausedDueToQueueBackpressure.getAndSet(false))
-        {
-            // Was not paused due to backpressure, nothing to resume
-            return;
-        }
-
-        Timber.i("MQTT queue drained - resuming scanning");
-
-        // Notify listeners that backpressure is no longer active
-        notifyQueueBackpressureStateListeners(false);
-
-        // Only resume if we're not also paused due to battery
-        if (isPausedForBattery())
-        {
-            Timber.i("Not resuming scanning because battery is still low");
-            return;
-        }
-
-        // Resume all controllers
-        cellularController.resumeScanning();
-        wifiController.resumeScanning();
-        bluetoothController.resumeScanning();
-        gnssController.resumeScanning();
-
-        updateServiceNotification();
-    }
-
-    /**
-     * Checks if operations are currently paused due to streaming queue backpressure.
-     *
-     * @return true if paused due to queue backpressure, false otherwise
-     */
-    public boolean isPausedForQueueBackpressure()
-    {
-        return isPausedDueToQueueBackpressure.get();
-    }
-
-    /**
-     * Registers a listener to be notified when the queue backpressure state changes.
-     *
-     * @param listener The listener to register
-     */
-    public void registerQueueBackpressureStateListener(IQueueBackpressureStateListener listener)
-    {
-        if (listener != null)
-        {
-            queueBackpressureListeners.add(listener);
-            // Immediately notify listener of current state
-            listener.onQueueBackpressureStateChanged(isPausedDueToQueueBackpressure.get());
-        }
-    }
-
-    /**
-     * Unregisters a queue backpressure state listener.
-     *
-     * @param listener The listener to unregister
-     */
-    public void unregisterQueueBackpressureStateListener(IQueueBackpressureStateListener listener)
-    {
-        if (listener != null)
-        {
-            queueBackpressureListeners.remove(listener);
-        }
-    }
-
-    /**
-     * Notifies all listeners that the queue backpressure state has changed.
-     *
-     * @param isPaused True if scanning is paused due to queue backpressure
-     */
-    private void notifyQueueBackpressureStateListeners(boolean isPaused)
-    {
-        for (IQueueBackpressureStateListener listener : queueBackpressureListeners)
-        {
-            try
-            {
-                listener.onQueueBackpressureStateChanged(isPaused);
-            } catch (Exception e)
-            {
-                Timber.e(e, "Error notifying queue backpressure state listener");
-            }
-        }
-    }
-
-    /**
-     * Interface for receiving notifications when the queue backpressure state changes.
-     */
-    public interface IQueueBackpressureStateListener
-    {
-        /**
-         * Called when the queue backpressure state changes.
-         *
-         * @param isPaused True if scanning is paused due to queue backpressure, false otherwise
-         */
-        void onQueueBackpressureStateChanged(boolean isPaused);
-    }
-
-    // ============================================================================
-    // MQTT Drop Mode State Management
-    // ============================================================================
-
-    /**
-     * Checks if MQTT is currently dropping messages due to queue backpressure.
-     * This is different from pause mode - in drop mode, scanning continues but MQTT messages are dropped.
-     *
-     * @return true if MQTT is dropping messages, false otherwise
-     */
-    public boolean isMqttDroppingMessages()
-    {
-        return mqttConnection != null && mqttConnection.isDropping();
-    }
-
-    /**
-     * Registers a listener to be notified when the MQTT drop mode state changes.
-     *
-     * @param listener The listener to register
-     */
-    public void registerMqttDropModeStateListener(IMqttDropModeStateListener listener)
-    {
-        if (listener != null)
-        {
-            mqttDropModeListeners.add(listener);
-            // Immediately notify listener of current state
-            listener.onMqttDropModeStateChanged(mqttConnection != null && mqttConnection.isDropping());
-        }
-    }
-
-    /**
-     * Unregisters an MQTT drop mode state listener.
-     *
-     * @param listener The listener to unregister
-     */
-    public void unregisterMqttDropModeStateListener(IMqttDropModeStateListener listener)
-    {
-        if (listener != null)
-        {
-            mqttDropModeListeners.remove(listener);
-        }
-    }
-
-    /**
-     * Notifies all listeners that the MQTT drop mode state has changed.
-     *
-     * @param isDropping True if MQTT is dropping messages due to queue backpressure
-     */
-    private void notifyMqttDropModeStateListeners(boolean isDropping)
-    {
-        for (IMqttDropModeStateListener listener : mqttDropModeListeners)
-        {
-            try
-            {
-                listener.onMqttDropModeStateChanged(isDropping);
-            } catch (Exception e)
-            {
-                Timber.e(e, "Error notifying MQTT drop mode state listener");
-            }
-        }
-    }
-
-    /**
-     * Interface for receiving notifications when the MQTT drop mode state changes.
-     */
-    public interface IMqttDropModeStateListener
-    {
-        /**
-         * Called when the MQTT drop mode state changes.
-         * Drop mode is active when the MQTT queue is full but other outputs (file logging, gRPC, etc.)
-         * are active, so scanning continues but MQTT messages are dropped.
-         *
-         * @param isDropping True if MQTT is dropping messages, false otherwise
-         */
-        void onMqttDropModeStateChanged(boolean isDropping);
-    }
-}

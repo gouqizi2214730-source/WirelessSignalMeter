@@ -2,18 +2,12 @@ package com.craxiom.networksurvey.services.watchlist
 
 import android.content.Context
 import androidx.preference.PreferenceManager
-import com.craxiom.messaging.WatchlistMatch
-import com.craxiom.messaging.WatchlistMatchData
-import com.craxiom.networksurvey.BuildConfig
 import com.craxiom.networksurvey.constants.NetworkSurveyConstants
-import com.craxiom.networksurvey.constants.WatchlistMessageConstants
-import com.craxiom.networksurvey.listeners.IWatchlistListener
 import com.craxiom.networksurvey.listeners.IWifiSurveyRecordListener
 import com.craxiom.networksurvey.logging.db.SurveyDatabase
 import com.craxiom.networksurvey.logging.db.model.WatchlistEntryEntity
 import com.craxiom.networksurvey.logging.db.model.WatchlistHitEntity
 import com.craxiom.networksurvey.model.WifiRecordWrapper
-import com.google.protobuf.FloatValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -21,7 +15,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import java.util.concurrent.atomic.AtomicInteger
 import java.util.function.Supplier
 
 /**
@@ -46,17 +39,6 @@ class WatchlistDetectionManager(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val watchlistDao by lazy { SurveyDatabase.getInstance(context).watchlistDao() }
     private val watchlistHitDao by lazy { SurveyDatabase.getInstance(context).watchlistHitDao() }
-
-    /**
-     * Publishes match records (for example, over MQTT), or null when watchlist streaming is not active.
-     * Volatile because it is set from the service thread and read from the detection coroutine. The
-     * detection manager and MQTT connection have independent lifecycles, so the service (re)attaches
-     * this whenever a manager is created or the MQTT connection comes up or down.
-     */
-    @Volatile
-    var matchListener: IWatchlistListener? = null
-
-    private val matchRecordNumber = AtomicInteger(0)
 
     @Volatile
     private var enabledSnapshot: List<WatchlistEntryEntity> = emptyList()
@@ -202,8 +184,6 @@ class WatchlistDetectionManager(
                 Timber.e(e, "Failed to record watchlist hit")
             }
 
-            publishMatch(entry, match, label, now)
-
             WatchlistNotificationHelper.showWatchlistNotification(
                 context,
                 entry.id,
@@ -211,62 +191,6 @@ class WatchlistDetectionManager(
                 match.rssi
             )
         }
-    }
-
-    /**
-     * Build and hand a match record to the [matchListener] (for example, the MQTT connection) when
-     * watchlist streaming is active. A publish failure is logged and swallowed so it can never
-     * interfere with recording the hit or showing the notification.
-     */
-    private fun publishMatch(
-        entry: WatchlistEntryEntity,
-        match: MatchInfo,
-        label: String,
-        now: Long
-    ) {
-        val listener = matchListener ?: return
-        try {
-            listener.onWatchlistMatch(buildMatch(entry, match, label, now))
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to publish watchlist match")
-        }
-    }
-
-    /**
-     * Assemble a [WatchlistMatch] from the matched entry and the observed network. The device
-     * name is intentionally left unset here; the MQTT connection injects the effective device name at
-     * publish time, exactly as it does for every other record type.
-     */
-    private fun buildMatch(
-        entry: WatchlistEntryEntity,
-        match: MatchInfo,
-        label: String,
-        now: Long
-    ): WatchlistMatch {
-        val dataBuilder = WatchlistMatchData.newBuilder()
-            .setDeviceSerialNumber(deviceId)
-            .setDeviceTime(WatchlistProtoMapper.rfc3339(now))
-            .setMissionId(missionIdProvider.get() ?: "")
-            .setRecordNumber(matchRecordNumber.incrementAndGet())
-            .setAltitude(match.altitude)
-            .setAccuracy(match.accuracy)
-            .setLocationAge(match.locationAge)
-            .setSpeed(match.speed)
-            .setEntryUuid(entry.uuid ?: "")
-            .setLabel(label)
-            .setMatchType(WatchlistProtoMapper.toMatchType(entry.matchType))
-            .setMatchedField(WatchlistProtoMapper.toMatchField(match.matchedField))
-            .setSsid(match.ssid)
-            .setBssid(match.bssid)
-        match.latitude?.let { dataBuilder.latitude = it }
-        match.longitude?.let { dataBuilder.longitude = it }
-        match.signalStrength?.let { dataBuilder.signalStrength = FloatValue.of(it) }
-
-        return WatchlistMatch.newBuilder()
-            .setVersion(BuildConfig.MESSAGING_API_VERSION)
-            .setMessageType(WatchlistMessageConstants.WATCHLIST_MATCH_MESSAGE_TYPE)
-            .setData(dataBuilder)
-            .build()
     }
 
     private suspend fun pruneHistory() {

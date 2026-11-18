@@ -10,9 +10,8 @@
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" /> <!-- For "my" phone number in CDRs -->
-    <uses-permission android:name="android.permission.INTERNET" /> <!-- To connect to a remote gRPC server -->
+    <uses-permission android:name="android.permission.INTERNET" /> <!-- To connect to remote tower/OUI lookup services -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" /> <!-- To monitor changes to the network state -->
-    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" /> <!-- Required at API 37+ for gRPC/MQTT brokers hosted on the local network -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" /> <!-- Access a Wi-Fi Scan -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" /> <!-- Trigger a Wi-Fi Scan -->
     <uses-permission android:name="android.permission.BLUETOOTH" />
@@ -85,26 +84,6 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
-                <data android:scheme="http" />
-                <data android:host="craxiom.com" />
-                <data android:path="/grpc_server_connection" />
-            </intent-filter>
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-
-                <data android:scheme="https" />
-                <data android:host="networksurvey.app" />
-                <data android:pathPrefix="/app/register" />
-            </intent-filter>
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-
                 <data android:scheme="https" />
                 <data android:host="networksurvey.app" />
                 <data android:pathPrefix="/app/watchlist" />
@@ -121,12 +100,6 @@
                 <action android:name="com.craxiom.networksurvey.STOP_SURVEY" />
             </intent-filter>
         </service>
-
-        <service
-            android:name=".services.GrpcConnectionService"
-            android:description="@string/connection_service_description"
-            android:exported="false"
-            android:foregroundServiceType="location" />
 
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
@@ -172,15 +145,6 @@
                 <action android:name="android.intent.action.SIM_STATE_CHANGED" />
             </intent-filter>
         </receiver>
-
-        <receiver
-            android:name=".logging.db.uploader.UploadStopReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.craxiom.networksurvey.UPLOADER_STOP" />
-            </intent-filter>
-        </receiver>
-
 
     </application>
 

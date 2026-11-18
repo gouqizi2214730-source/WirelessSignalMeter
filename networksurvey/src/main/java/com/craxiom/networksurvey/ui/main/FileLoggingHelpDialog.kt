@@ -19,11 +19,10 @@ import com.craxiom.networksurvey.ui.preview.NsPreview
 import com.craxiom.networksurvey.ui.preview.PreviewDayNight
 
 /**
- * Material 3 help dialog explaining the difference between file logging and MQTT streaming,
- * and how they work independently.
+ * Material 3 help dialog explaining local file logging.
  */
 @Composable
-fun FileMqttHelpDialog(
+fun FileLoggingHelpDialog(
     onDismissRequest: () -> Unit
 ) {
     AlertDialog(
@@ -50,23 +49,6 @@ fun FileMqttHelpDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                HelpSection(title = stringResource(R.string.file_mqtt_help_mqtt_title)) {
-                    HelpItem(
-                        stringResource(R.string.file_mqtt_help_mqtt_realtime_label),
-                        stringResource(R.string.file_mqtt_help_mqtt_realtime_desc)
-                    )
-                    HelpItem(
-                        stringResource(R.string.file_mqtt_help_mqtt_broker_label),
-                        stringResource(R.string.file_mqtt_help_mqtt_broker_desc)
-                    )
-                    HelpItem(
-                        stringResource(R.string.file_mqtt_help_mqtt_watchlist_label),
-                        stringResource(R.string.file_mqtt_help_mqtt_watchlist_desc)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
                 HelpSection(title = stringResource(R.string.file_mqtt_help_key_point_title)) {
                     HelpItem(
                         stringResource(R.string.file_mqtt_help_key_independent_label),
@@ -85,8 +67,8 @@ fun FileMqttHelpDialog(
 
 @PreviewDayNight
 @Composable
-private fun FileMqttHelpDialogPreview() {
+private fun FileLoggingHelpDialogPreview() {
     NsPreview {
-        FileMqttHelpDialog(onDismissRequest = {})
+        FileLoggingHelpDialog(onDismissRequest = {})
     }
 }

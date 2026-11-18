@@ -3,7 +3,6 @@ package com.craxiom.networksurvey.util
 import android.net.Uri
 import android.util.Base64
 import com.craxiom.networksurvey.constants.NetworkSurveyConstants
-import com.craxiom.networksurvey.constants.NsAnalyticsConstants
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -22,7 +21,7 @@ import org.robolectric.annotation.Config
 class WatchlistDeepLinkHandlerTest {
 
     companion object {
-        private const val VALID_HOST = NsAnalyticsConstants.NS_ANALYTICS_DEEP_LINK_HOST
+        private const val VALID_HOST = "networksurvey.app"
         private const val VALID_PATH = NetworkSurveyConstants.WATCHLIST_DEEP_LINK_PATH
 
         private fun encode(json: String): String =
@@ -311,10 +310,10 @@ class WatchlistDeepLinkHandlerTest {
     }
 
     @Test
-    fun `parseUri returns NotApplicable for the NS Analytics register path`() {
+    fun `parseUri returns NotApplicable for a non-watchlist path`() {
         val json = """{"v":1,"entries":[{"ssid":"HQ"}]}"""
         val result = WatchlistDeepLinkHandler.parseUri(
-            uriFor(json, path = NsAnalyticsConstants.NS_ANALYTICS_DEEP_LINK_PATH)
+            uriFor(json, path = "/app/register")
         )
         assertTrue(result is WatchlistDeepLinkHandler.Result.NotApplicable)
     }

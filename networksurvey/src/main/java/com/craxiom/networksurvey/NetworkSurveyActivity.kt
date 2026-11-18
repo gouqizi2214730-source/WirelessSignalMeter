@@ -24,10 +24,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceManager
 import com.craxiom.networksurvey.constants.NetworkSurveyConstants
-import com.craxiom.networksurvey.constants.NsAnalyticsConstants
 import com.craxiom.networksurvey.data.PlmnColorOverrideManager
 import com.craxiom.networksurvey.listeners.IGnssFailureListener
-import com.craxiom.networksurvey.services.GrpcConnectionService
 import com.craxiom.networksurvey.services.NetworkSurveyService
 import com.craxiom.networksurvey.services.NetworkSurveyService.SurveyServiceBinder
 import com.craxiom.networksurvey.ui.cellular.baidumap.ForegroundMapTrack
@@ -37,8 +35,6 @@ import com.craxiom.networksurvey.ui.main.SharedViewModel
 import com.craxiom.networksurvey.ui.main.StartupDialog
 import com.craxiom.networksurvey.ui.main.StartupDialogActions
 import com.craxiom.networksurvey.ui.watchlist.WatchlistImportHolder
-import com.craxiom.networksurvey.util.NsAnalyticsDeepLinkHandler
-import com.craxiom.networksurvey.util.NsAnalyticsSecureStorage
 import com.craxiom.networksurvey.util.NsUtils
 import com.craxiom.networksurvey.util.ThemePref
 import com.craxiom.networksurvey.util.PreferenceUtils
@@ -89,12 +85,8 @@ class NetworkSurveyActivity : AppCompatActivity(), StartupDialogActions {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Handle NS Analytics deep links
-        handleNsAnalyticsDeepLink()
         // Handle a watchlist import deep link
         handleWatchlistDeepLink()
-        // Handle a tap on the "uploads paused" notification
-        handleNsAnalyticsNavigationExtra()
         // Handle a tap on a watchlist "Seen" notification
         handleWatchlistNavigationExtra()
 
@@ -186,12 +178,8 @@ class NetworkSurveyActivity : AppCompatActivity(), StartupDialogActions {
 
         // Update the activity's intent so it can be processed
         setIntent(intent)
-        // Handle the deep link when app is already running
-        handleNsAnalyticsDeepLink()
         // Handle a watchlist import deep link when app is already running
         handleWatchlistDeepLink()
-        // Handle a tap on the "uploads paused" notification when app is already running
-        handleNsAnalyticsNavigationExtra()
         // Handle a tap on a watchlist "Seen" notification when app is already running
         handleWatchlistNavigationExtra()
     }
@@ -235,12 +223,7 @@ class NetworkSurveyActivity : AppCompatActivity(), StartupDialogActions {
                     applicationContext,
                     NetworkSurveyService::class.java
                 )
-                val connectionServiceIntent = Intent(
-                    applicationContext,
-                    GrpcConnectionService::class.java
-                )
                 stopService(networkSurveyServiceIntent)
-                stopService(connectionServiceIntent)
             }
 
         }
@@ -680,50 +663,10 @@ class NetworkSurveyActivity : AppCompatActivity(), StartupDialogActions {
     }
 
     /**
-     * Handle incoming deep links for NS Analytics registration.
-     * If a valid deep link is detected, stores the QR data for processing
-     * by the NS Analytics screen.
-     */
-    private fun handleNsAnalyticsDeepLink() {
-        Timber.d(
-            "handleNsAnalyticsDeepLink: intent=%s, action=%s, data=%s",
-            intent,
-            intent.action,
-            intent.data
-        )
-
-        when (val result = NsAnalyticsDeepLinkHandler.parseIntent(intent)) {
-            is NsAnalyticsDeepLinkHandler.DeepLinkResult.Success -> {
-                Timber.i(
-                    "Received NS Analytics deep link, storing QR data for workspace: %s",
-                    result.qrData.workspaceId
-                )
-                NsAnalyticsSecureStorage.storeQrData(applicationContext, result.qrData)
-                // Trigger navigation via ViewModel
-                deepLinkViewModel.navigateToNsAnalytics()
-                Timber.d("Triggered navigation to NS Analytics via ViewModel")
-            }
-
-            is NsAnalyticsDeepLinkHandler.DeepLinkResult.Error -> {
-                Timber.w("Invalid NS Analytics deep link: %s", result.message)
-                Toast.makeText(
-                    this,
-                    "Invalid registration link: ${result.message}",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-
-            is NsAnalyticsDeepLinkHandler.DeepLinkResult.NotApplicable -> {
-                Timber.d("Not an NS Analytics deep link, ignoring")
-            }
-        }
-    }
-
-    /**
      * Handle an incoming watchlist import deep link. On a valid link, stashes the parsed networks for
      * the Watchlist screen to confirm and navigates there; on an invalid link, shows a toast. Runs on
-     * every VIEW intent alongside [handleNsAnalyticsDeepLink]; the two have disjoint path prefixes, so
-     * each returns NotApplicable for the other's links and they never interfere.
+     * every VIEW intent; the paths it accepts never overlap with other link types, so it returns
+     * NotApplicable for unrelated links and they never interfere.
      */
     private fun handleWatchlistDeepLink() {
         when (val result = WatchlistDeepLinkHandler.parseIntent(intent)) {
@@ -744,23 +687,6 @@ class NetworkSurveyActivity : AppCompatActivity(), StartupDialogActions {
             is WatchlistDeepLinkHandler.Result.NotApplicable -> {
                 Timber.d("Not a watchlist import deep link, ignoring")
             }
-        }
-    }
-
-    /**
-     * Handle a tap on the "uploads paused" notification, which routes the user to the NS Analytics
-     * screen via the navigation extra set by [com.craxiom.networksurvey.ui.nsanalytics.NsAnalyticsNotificationHelper].
-     */
-    private fun handleNsAnalyticsNavigationExtra() {
-        if (intent?.getBooleanExtra(
-                NsAnalyticsConstants.EXTRA_NAVIGATE_TO_NS_ANALYTICS,
-                false
-            ) == true
-        ) {
-            Timber.d("Navigating to NS Analytics from notification tap")
-            deepLinkViewModel.navigateToNsAnalytics()
-            // Clear the extra so a configuration change or re-create doesn't navigate again.
-            intent.removeExtra(NsAnalyticsConstants.EXTRA_NAVIGATE_TO_NS_ANALYTICS)
         }
     }
 

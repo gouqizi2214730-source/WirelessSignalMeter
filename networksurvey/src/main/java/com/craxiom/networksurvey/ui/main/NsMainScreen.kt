@@ -23,7 +23,6 @@ import androidx.compose.animation.slideOutHorizontally
 import com.craxiom.networksurvey.R
 import com.craxiom.networksurvey.ui.component.PagerNavigationSpringSpec
 import com.craxiom.networksurvey.fragments.BLUETOOTH_DATA_KEY
-import com.craxiom.networksurvey.fragments.model.MqttConnectionSettings
 import com.craxiom.networksurvey.model.WifiNetwork
 import com.craxiom.networksurvey.ui.cellular.model.ServingCellInfo
 import com.craxiom.networksurvey.ui.rootdiag.RootDiagViewModel
@@ -61,10 +60,6 @@ fun MainCompose(
     LaunchedEffect(navigationEvent) {
         navigationEvent?.let { event ->
             when (event) {
-                is NavigationEvent.UploadSettings -> {
-                    mainNavController.navigate(NavOption.UploadSettings.name)
-                }
-
                 is NavigationEvent.TowerMapSettings -> {
                     mainNavController.navigate(NavOption.TowerMapSettings.name)
                 }
@@ -83,14 +78,6 @@ fun MainCompose(
 
                 is NavigationEvent.ProviderColorOverrides -> {
                     mainNavController.navigate(NavOption.ProviderColorOverrides.name)
-                }
-
-                is NavigationEvent.QrCodeShare -> {
-                    mainNavController.currentBackStackEntry?.savedStateHandle?.set(
-                        MqttConnectionSettings.KEY,
-                        event.mqttConnectionSettings
-                    )
-                    mainNavController.navigate(NavOption.QrCodeShare.name)
                 }
 
                 is NavigationEvent.TowerMap -> {
@@ -117,25 +104,8 @@ fun MainCompose(
                     mainNavController.navigate(NavOption.BluetoothDetails.name)
                 }
 
-                is NavigationEvent.MqttConnection -> {
-                    event.mqttConnectionSettings?.let { settings ->
-                        mainNavController.currentBackStackEntry?.savedStateHandle?.set(
-                            MqttConnectionSettings.KEY,
-                            settings
-                        )
-                    }
-                    mainNavController.navigate(NavDrawerOption.MqttBrokerConnection.name)
-                }
-
                 is NavigationEvent.Settings -> {
                     mainNavController.navigate(NavDrawerOption.Settings.name)
-                }
-
-                is NavigationEvent.NsAnalyticsConnection -> {
-                    // Navigate back from QR scanner to NS Analytics connection screen
-                    mainNavController.navigate(NavDrawerOption.NsAnalyticsConnection.name) {
-                        popUpTo(NavDrawerOption.None.name)
-                    }
                 }
             }
             // Clear the event after handling to prevent re-processing

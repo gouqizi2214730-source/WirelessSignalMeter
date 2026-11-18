@@ -43,7 +43,6 @@ android {
     defaultConfig {
         buildConfigField "String", "MESSAGING_API_VERSION", "\"${libs.versions.networkSurveyMessaging.get()}\""
         buildConfigField 'String', "NS_API_KEY", "\"${nsApiKey}\""
-        buildConfigField 'String', "OCID_API_KEY", "\"${ocidApiKey}\""
         applicationId "com.wireless.signalmeter.new"
         minSdkVersion 33
         targetSdkVersion 37
@@ -227,12 +226,7 @@ dependencies {
     implementation(libs.flexbox)
     implementation(libs.kotlinx.coroutines.android)
 
-    implementation(libs.mqtt.library)
     implementation(libs.protobuf.java.util)
-    implementation(libs.bundles.grpc)
-    implementation(libs.grpc.protobuf) {
-        exclude group: 'com.google.api.grpc', module: 'proto-google-common-protos'
-    }
 
     implementation(libs.network.survey.messaging) {
         exclude group: 'com.google.api.grpc', module: 'proto-google-common-protos'

@@ -71,15 +71,11 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
             NetworkSurveyConstants.PROPERTY_BLUETOOTH_SCAN_INTERVAL_SECONDS,
             NetworkSurveyConstants.PROPERTY_GNSS_SCAN_INTERVAL_SECONDS,
             NetworkSurveyConstants.PROPERTY_DEVICE_STATUS_SCAN_INTERVAL_SECONDS,
-            NetworkSurveyConstants.PROPERTY_MQTT_START_ON_BOOT,
             NetworkSurveyConstants.PROPERTY_LOCATION_PROVIDER,
             NetworkSurveyConstants.PROPERTY_ALLOW_INTENT_CONTROL,
             NetworkSurveyConstants.PROPERTY_BATTERY_THRESHOLD_PERCENT,
             NetworkSurveyConstants.PROPERTY_STREAMING_QUEUE_LIMIT,
-            NetworkSurveyConstants.PROPERTY_AUTO_UPLOAD_ENABLED,
-            NetworkSurveyConstants.PROPERTY_AUTO_UPLOAD_WIFI_ONLY,
-            NetworkSurveyConstants.PROPERTY_OUI_LOOKUP_ENABLED,
-            NetworkSurveyConstants.PROPERTY_MQTT_WATCHLIST_STREAM_ENABLED};
+            NetworkSurveyConstants.PROPERTY_OUI_LOOKUP_ENABLED};
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey)
@@ -105,27 +101,6 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
         setAppInstanceId();
 
         updateUiForMdmIfNecessary();
-
-        final Preference uploadSettings = findPreference(NetworkSurveyConstants.UPLOAD_PREFERENCES_GROUP);
-        if (uploadSettings != null)
-        {
-            uploadSettings.setOnPreferenceClickListener(preference -> {
-                SharedViewModel viewModel = new ViewModelProvider(requireActivity()).get(SharedViewModel.class);
-                viewModel.triggerNavigationToUploadSettings();
-                return true;
-            });
-        }
-
-        // NS Analytics Connection Settings
-        final Preference nsAnalyticsConnection = findPreference(NetworkSurveyConstants.PROPERTY_NS_ANALYTICS_CONNECTION);
-        if (nsAnalyticsConnection != null)
-        {
-            nsAnalyticsConnection.setOnPreferenceClickListener(preference -> {
-                SharedViewModel viewModel = new ViewModelProvider(requireActivity()).get(SharedViewModel.class);
-                viewModel.triggerNavigationToNsAnalyticsConnection();
-                return true;
-            });
-        }
 
         final Preference towerMapSettings = findPreference(NetworkSurveyConstants.TOWER_MAP_PREFERENCES_GROUP);
         if (towerMapSettings != null)
@@ -456,28 +431,6 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
         final Preference overridePreference = getPreferenceScreen().findPreference(NetworkSurveyConstants.PROPERTY_MDM_OVERRIDE_KEY);
         if (overridePreference != null) overridePreference.setVisible(true);
 
-        // Regardless of MDM override, upload to 3rd party DBs is disabled if MDM disables it
-        if (!MdmUtils.isExternalDataUploadAllowed(context))
-        {
-            Preference preference = findPreference(NetworkSurveyConstants.UPLOAD_PREFERENCES_GROUP);
-            if (preference != null)
-            {
-                preference.setEnabled(false);
-                preference.setSummary(R.string.upload_disabled_via_mdm);
-            }
-        }
-
-        // Regardless of MDM override, NS Analytics is disabled if MDM disables it
-        if (!MdmUtils.isNsAnalyticsAllowed(context))
-        {
-            Preference preference = findPreference(NetworkSurveyConstants.PROPERTY_NS_ANALYTICS_CONNECTION);
-            if (preference != null)
-            {
-                preference.setEnabled(false);
-                preference.setSummary(R.string.ns_analytics_disabled_via_mdm);
-            }
-        }
-
         final boolean mdmOverride = sharedPreferences.getBoolean(NetworkSurveyConstants.PROPERTY_MDM_OVERRIDE_KEY, false);
 
         if (mdmOverride)
@@ -501,7 +454,6 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
         updateBooleanPreferenceForMdm(preferenceScreen, mdmProperties, NetworkSurveyConstants.PROPERTY_AUTO_START_PHONE_STATE_LOGGING);
         updateBooleanPreferenceForMdm(preferenceScreen, mdmProperties, NetworkSurveyConstants.PROPERTY_AUTO_INCLUDE_PHONE_STATE_WITH_CELLULAR);
         updateBooleanPreferenceForMdm(preferenceScreen, mdmProperties, NetworkSurveyConstants.PROPERTY_INCLUDE_NEIGHBOR_CELLS);
-        updateBooleanPreferenceForMdm(preferenceScreen, mdmProperties, NetworkSurveyConstants.PROPERTY_MQTT_WATCHLIST_STREAM_ENABLED);
         updateLogRolloverSizeForMdm(preferenceScreen, mdmProperties);
         updateListProviderPreferenceForMdm(preferenceScreen, mdmProperties, NetworkSurveyConstants.PROPERTY_LOG_FILE_TYPE);
         updateIntPreferenceForMdm(preferenceScreen, mdmProperties, NetworkSurveyConstants.PROPERTY_CELLULAR_SCAN_INTERVAL_SECONDS);
@@ -509,34 +461,11 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
         updateIntPreferenceForMdm(preferenceScreen, mdmProperties, NetworkSurveyConstants.PROPERTY_BLUETOOTH_SCAN_INTERVAL_SECONDS);
         updateIntPreferenceForMdm(preferenceScreen, mdmProperties, NetworkSurveyConstants.PROPERTY_GNSS_SCAN_INTERVAL_SECONDS);
         updateIntPreferenceForMdm(preferenceScreen, mdmProperties, NetworkSurveyConstants.PROPERTY_DEVICE_STATUS_SCAN_INTERVAL_SECONDS);
-        updateBooleanPreferenceForMdm(preferenceScreen, mdmProperties, NetworkSurveyConstants.PROPERTY_MQTT_START_ON_BOOT);
         updateListProviderPreferenceForMdm(preferenceScreen, mdmProperties, NetworkSurveyConstants.PROPERTY_LOCATION_PROVIDER);
         updateBooleanPreferenceForMdm(preferenceScreen, mdmProperties, NetworkSurveyConstants.PROPERTY_ALLOW_INTENT_CONTROL);
         updateBooleanPreferenceForMdm(preferenceScreen, mdmProperties, NetworkSurveyConstants.PROPERTY_OUI_LOOKUP_ENABLED);
         updateIntPreferenceForMdm(preferenceScreen, mdmProperties, NetworkSurveyConstants.PROPERTY_BATTERY_THRESHOLD_PERCENT);
         updateIntPreferenceForMdm(preferenceScreen, mdmProperties, NetworkSurveyConstants.PROPERTY_STREAMING_QUEUE_LIMIT);
-
-        // Auto-upload preferences live in UploadSettingsFragment's XML, so findPreference
-        // returns null here. We still write the MDM values to SharedPreferences so they
-        // take effect even if the user never opens the Upload Settings screen.
-        writeBooleanMdmPreferenceValue(mdmProperties, NetworkSurveyConstants.PROPERTY_AUTO_UPLOAD_ENABLED);
-        writeBooleanMdmPreferenceValue(mdmProperties, NetworkSurveyConstants.PROPERTY_AUTO_UPLOAD_WIFI_ONLY);
-    }
-
-    /**
-     * Writes an MDM boolean value to SharedPreferences without updating any UI preference.
-     * Used for preferences that live in a different fragment's preference XML.
-     */
-    private void writeBooleanMdmPreferenceValue(Bundle mdmProperties, String preferenceKey)
-    {
-        if (mdmProperties.containsKey(preferenceKey))
-        {
-            boolean mdmValue = mdmProperties.getBoolean(preferenceKey);
-            getPreferenceManager().getSharedPreferences()
-                    .edit()
-                    .putBoolean(preferenceKey, mdmValue)
-                    .apply();
-        }
     }
 
     /**
