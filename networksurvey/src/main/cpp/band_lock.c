@@ -122,11 +122,11 @@ static int restore_mask(const char *name, int bytes, uint8_t *mask) {
     return 1;
 }
 
+/* Only an unreadable modem baseline returns 2; local persistence errors return 1. */
 static int backup_mask(const char *path, const char *name, int bytes) {
     uint8_t original[64];
     if (!restore_mask(name, bytes, original)) return 0;
-    if (read_mask(path, bytes, original))
-        return fail("Cannot read the complete original band mask. No band changes were made.");
+    if (read_mask(path, bytes, original)) return 2;
     int fd = openat(state_dir, name, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
     if (fd < 0) return fail("Cannot create the original band backup; no band changes were made.");
     int ok = write(fd, original, (size_t)bytes) == bytes && fsync(fd) == 0;
@@ -183,17 +183,22 @@ static int lte_band_command(const char *bands, int restore) {
         if (restore_mask("lte-original.bin", 8, probe)) {
             /* First lock on this install: keep a copy of the stored item for restore. */
             uint8_t original[8];
-            if (!read_mask(LB_LTE_BANDS, 8, original))
+            if (read_mask(LB_LTE_BANDS, 8, original)) {
+                for (int i = 4; i < 8; i++) if (mask[i])
+                    return fail("Cannot read the original LTE mask. No persistent band changes were made.");
                 puts("Note: the stored LTE band item is not readable; the CM lock works without it. Restore then needs a modem restart.");
-            else {
+            } else {
                 int fd = openat(state_dir, "lte-original.bin",
                     O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
-                if (fd >= 0) {
-                    int ok = write(fd, original, (size_t)8) == 8;
-                    close(fd);
-                    if (!ok) unlinkat(state_dir, "lte-original.bin", 0);
-                    else puts("Original LTE band mask backed up.");
+                if (fd < 0) return fail("Cannot create the original LTE backup. No band changes were made.");
+                int ok = write(fd, original, (size_t)8) == 8 && fsync(fd) == 0;
+                close(fd);
+                if (!ok) {
+                    unlinkat(state_dir, "lte-original.bin", 0);
+                    return fail("Cannot persist the original LTE backup. No band changes were made.");
                 }
+                if (fsync(state_dir)) return fail("Cannot sync the LTE backup directory. No band changes were made.");
+                puts("Original LTE band mask backed up.");
             }
         }
     }
@@ -231,13 +236,23 @@ static int nr_band_command(const char *bands, int restore) {
             return fail("No original NR band mask is available for this device.");
     } else {
         if (!lb_bands(bands, 512, mask, 64)) return fail("Invalid band list.");
-        if (backup_mask(LB_NR_BANDS, "nr-original.bin", 64)) {
+        int backup = backup_mask(LB_NR_BANDS, "nr-original.bin", 64);
+        if (backup == 1) return 1;
+        if (backup == 2) {
             puts("Note: the original NR mask is not readable (lock item not materialised yet). Restoring will remove the lock file instead.");
             int fd = openat(state_dir, "nr-no-original",
                 O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
             if (fd < 0 && errno != EEXIST)
                 return fail("Cannot record the missing baseline; no band changes were made.");
-            if (fd >= 0) close(fd);
+            if (fd >= 0) {
+                int ok = fsync(fd) == 0;
+                close(fd);
+                if (!ok) {
+                    unlinkat(state_dir, "nr-no-original", 0);
+                    return fail("Cannot persist the missing baseline; no band changes were made.");
+                }
+            }
+            if (fsync(state_dir)) return fail("Cannot sync the missing baseline; no band changes were made.");
         }
     }
     if (put_file(LB_MMODE, LB_NR_BANDS, LB_MMODE, mask, 64, 0x7a, 0x7a, 0)) return 1;

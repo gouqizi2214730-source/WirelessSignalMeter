@@ -155,6 +155,9 @@ fun HomeScreen(
                             onOpenBandLock = {
                                 mainNavController.navigate(NavOption.BandLock.name) { launchSingleTop = true }
                             },
+                            onOpenRoadCoverage = {
+                                mainNavController.navigate(NavOption.RoadCoverage.name) { launchSingleTop = true }
+                            },
                             onOpenGnss = {
                                 mainNavController.navigate(NavOption.Gnss.name) { launchSingleTop = true }
                             },

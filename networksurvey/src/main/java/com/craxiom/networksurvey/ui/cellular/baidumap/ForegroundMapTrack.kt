@@ -5,6 +5,8 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Looper
+import android.os.SystemClock
+import android.telephony.SubscriptionManager
 import androidx.preference.PreferenceManager
 import com.craxiom.networksurvey.db.MapPointDbHelper
 import com.craxiom.networksurvey.listeners.ICellularSurveyRecordListener
@@ -90,13 +92,18 @@ internal class ForegroundMapTrack(context: Context, private val scope: Coroutine
                 // The device may lack this provider.
             }
         }
-        val samples = Channel<Pair<MapPointRecord, Long>>(Channel.CONFLATED)
+        val samples = Channel<Pair<MapPointRecord, Long>>(64)
         writer = scope.launch {
-            var lastSaved: MapPointRecord? = null
+            val lastSaved = mutableMapOf<String, MapPointRecord>()
             var savedGeneration: Long? = null
             for ((point, generation) in samples) {
-                val previous = lastSaved
-                if (savedGeneration == generation && previous != null && previous.cellId == point.cellId &&
+                if (savedGeneration != generation) {
+                    lastSaved.clear()
+                    savedGeneration = generation
+                }
+                val source = "${point.simSlot}:${point.plmnDisplay}"
+                val previous = lastSaved[source]
+                if (previous != null && previous.cellId == point.cellId &&
                     previous.netType == point.netType && previous.rsrp == point.rsrp &&
                     previous.sinr == point.sinr && previous.rsrq == point.rsrq &&
                     point.timestamp - previous.timestamp in 0L..14_999L
@@ -107,8 +114,7 @@ internal class ForegroundMapTrack(context: Context, private val scope: Coroutine
                 }
                 try {
                     if (MapTrack.save(app, point, generation)) {
-                        lastSaved = point
-                        savedGeneration = generation
+                        lastSaved[source] = point
                     }
                 } catch (error: android.database.SQLException) {
                     Timber.w(error, "Could not save map point")
@@ -119,8 +125,9 @@ internal class ForegroundMapTrack(context: Context, private val scope: Coroutine
             override fun onCellularBatch(cellularGroup: List<CellularRecordWrapper>, subscriptionId: Int) {
                 val generation = MapTrack.currentGeneration
                 if (!MapTrack.isEnabled(app)) return
+                val now = SystemClock.elapsedRealtimeNanos()
                 val location = listOfNotNull(foregroundFix, service.primaryLocationListener?.latestLocation)
-                    .filter { it.isRecent() &&
+                    .filter { now - it.elapsedRealtimeNanos in 0..10_000_000_000L &&
                         BaiduMapArea.isValid(it.latitude, it.longitude) }
                     .minByOrNull { if (it.hasAccuracy()) it.accuracy else Float.MAX_VALUE } ?: return
                 val station = cellularGroup.mapServingCell()?.toStationInfo() ?: return
@@ -139,6 +146,7 @@ internal class ForegroundMapTrack(context: Context, private val scope: Coroutine
                     mcc = station.mcc
                     mnc = station.mnc
                     tac = station.tac
+                    simSlot = SubscriptionManager.getSlotIndex(subscriptionId)
                     netType = station.networkType
                     remark = "自动打点"
                 } to generation)

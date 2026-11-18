@@ -52,8 +52,9 @@ __declspec(dllexport) int test_band_lock_protocol(void) {
     response[22] = 0x10;
     /* Short reads and non-frames fail. */
     CHECK(!lb_get_data(response, 29, 0x80, 8, mask));
+    lb_u32(response, 0x41);
     CHECK(!lb_get_data(response, 79, 0x80, 8, mask));
-    uint8_t frame[64];
+    uint8_t frame[64] = {0};
     /* Reply search keys on the echoed subsystem command alone. */
     lb_u32(frame, 0x40); lb_u32(frame + 4, 0x96); lb_u32(frame + 8, 3);
     lb_u32(frame + 24, 0x0026134b);
@@ -62,18 +63,18 @@ __declspec(dllexport) int test_band_lock_protocol(void) {
     uint32_t status_out = 99;
     /* STATUS shape: plain u32, EEXIST (6) accepted when allowed. */
     lb_u32(frame + 28, 6);
-    CHECK(lb_ack(frame, 64, 28, LB_ACK_STATUS, 0, 0, 0, &status_out) == 1 && status_out == 6);
-    CHECK(lb_ack(frame, 64, 28, LB_ACK_STATUS, 0, 1, 0, &status_out) == 0);
+    CHECK(lb_ack(frame, 32, 28, LB_ACK_STATUS, 0, 0, 0, &status_out) == 1 && status_out == 6);
+    CHECK(lb_ack(frame, 32, 28, LB_ACK_STATUS, 0, 1, 0, &status_out) == 0);
     lb_u32(frame + 28, 0);
-    CHECK(lb_ack(frame, 64, 28, LB_ACK_STATUS, 0, 0, 0, &status_out) == 0);
+    CHECK(lb_ack(frame, 32, 28, LB_ACK_STATUS, 0, 0, 0, &status_out) == 0);
     /* PUT shape: 2-byte tag echo plus u32 status (on-wire 26 13 = 0x2613). */
     frame[28] = 0x26; frame[29] = 0x13; lb_u32(frame + 30, 0);
-    CHECK(lb_ack(frame, 64, 28, LB_ACK_PUT, 0x2613, 0, 0, &status_out) == 0 && status_out == 0);
+    CHECK(lb_ack(frame, 34, 28, LB_ACK_PUT, 0x2613, 0, 0, &status_out) == 0 && status_out == 0);
     lb_u32(frame + 30, 2);
-    CHECK(lb_ack(frame, 64, 28, LB_ACK_PUT, 0x2613, 0, 0, &status_out) == 1);
-    CHECK(lb_ack(frame, 64, 28, LB_ACK_PUT, 0xff03, 0, 0, &status_out) == -1);
+    CHECK(lb_ack(frame, 34, 28, LB_ACK_PUT, 0x2613, 0, 0, &status_out) == 1);
+    CHECK(lb_ack(frame, 34, 28, LB_ACK_PUT, 0xff03, 0, 0, &status_out) == -1);
     /* Mismatched shape stays unrecognised for the caller to keep waiting. */
-    CHECK(lb_ack(frame, 64, 28, LB_ACK_STATUS, 0, 0, 0, &status_out) == -1);
+    CHECK(lb_ack(frame, 34, 28, LB_ACK_STATUS, 0, 0, 0, &status_out) == -1);
     /* LOOSE accepts the echoed command itself (SYNC / CM replies). */
     CHECK(lb_ack(frame, 64, 28, LB_ACK_LOOSE, 0, 0, 0, &status_out) == 0);
     return 0;
