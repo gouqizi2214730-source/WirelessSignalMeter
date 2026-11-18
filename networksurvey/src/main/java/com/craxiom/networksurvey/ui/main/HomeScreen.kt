@@ -152,6 +152,9 @@ fun HomeScreen(
                         ToolsScreen(
                             bottomPadding = bottomPadding,
                             onOpenMap = openMap,
+                            onOpenBandLock = {
+                                mainNavController.navigate(NavOption.BandLock.name) { launchSingleTop = true }
+                            },
                             onOpenGnss = {
                                 mainNavController.navigate(NavOption.Gnss.name) { launchSingleTop = true }
                             },
