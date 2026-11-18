@@ -279,6 +279,14 @@ static int nr_nsa_present(void) {
     return read_mask_to(LB_NR_NSA_BANDS, 64, mask, sizeof(mask), 1500) == 0;
 }
 
+/* A backup file may exist yet be unusable (short/corrupt/incomplete write).
+ * Distinguishing it from "no backup at all" matters: the no-backup path may
+ * delete the live item, which is not recoverable. */
+static int backup_exists(const char *name) {
+    struct stat st;
+    return fstatat(state_dir, name, &st, AT_SYMLINK_NOFOLLOW) == 0 && S_ISREG(st.st_mode);
+}
+
 /* NR-NSA restore readiness: either a backup exists, or the item is absent on
  * this device (nothing to restore), so restore can proceed either way. */
 static int nsa_backup_possible(void) {
@@ -289,20 +297,24 @@ static int nsa_backup_possible(void) {
 
 static int nr_band_command(const char *bands, int restore) {
     uint8_t mask[64] = {0};
-    int nsa = nr_nsa_present();
     if (restore) {
-        /* NSA item restores ITS OWN backup when we have one; a missing NSA
-         * backup means the item was first materialised by our lock, so
-         * removing it returns the modem default (same rule as the main item).
-         * Never overwrite it with the MAIN item's configuration afterwards. */
-        if (nsa) {
-            uint8_t nsa_mask[64];
-            if (restore_mask("nr-nsa-original.bin", 64, nsa_mask) == 0) {
-                if (put_file(LB_MMODE, LB_NR_NSA_BANDS, LB_MMODE, nsa_mask,
-                    64, 0x7a, 0x7a, 0)) return 1;
-            } else if (remove_file(LB_NR_NSA_BANDS, LB_MMODE)) {
-                return 1;
-            }
+        /* NSA item: an existing local backup is authoritative and must be
+         * restored even when the runtime probe fails right now (a transient
+         * probe failure must never skip a real backup). Only when there is no
+         * backup do we fall back to "it was materialised by our first lock, so
+         * remove it" - and that path itself probes; a probe failure there
+         * leaves the item untouched, which is the safe direction. */
+        uint8_t nsa_mask[64];
+        if (restore_mask("nr-nsa-original.bin", 64, nsa_mask) == 0) {
+            if (put_file(LB_MMODE, LB_NR_NSA_BANDS, LB_MMODE, nsa_mask,
+                64, 0x7a, 0x7a, 0)) return 1;
+        } else if (backup_exists("nr-nsa-original.bin")) {
+            /* A stored-but-unusable backup must not fall through to "remove the
+             * live item": a corrupt backup is recoverable, deleting the modem's
+             * original configuration is not. */
+            return fail("The stored NR-NSA backup is unreadable; refusing to remove the live item.");
+        } else if (nr_nsa_present()) {
+            if (remove_file(LB_NR_NSA_BANDS, LB_MMODE)) return 1;
         }
         /* Main item: no-baseline marker path removes the lock file and lets
          * the modem rebuild defaults; otherwise write the stored mask back. */
@@ -334,15 +346,17 @@ static int nr_band_command(const char *bands, int restore) {
         }
         if (fsync(state_dir)) return fail("Cannot sync the missing baseline; no band changes were made.");
     }
-    if (nsa) {
+    if (nr_nsa_present()) {
+        /* The NSA item answered a read seconds ago, so its original value DOES
+         * exist. Failing to capture it now (transient read or local write
+         * error) would leave the lock with no way back -> refuse to lock
+         * rather than overwrite an ensemble we cannot restore. */
         int nsa_backup = backup_mask(LB_NR_NSA_BANDS, "nr-nsa-original.bin", 64);
-        if (nsa_backup == 1)
-            return fail("Cannot persist the original NR-NSA backup. No band changes were made.");
+        if (nsa_backup == 1) return 1;   /* local persistence error already reported */
         if (nsa_backup == 2)
-            puts("Note: nr_nsa_band_pref found but not readable now; restoring will remove it.");
+            return fail("Cannot capture the original NR-NSA mask. No band changes were made.");
+        if (put_file(LB_MMODE, LB_NR_NSA_BANDS, LB_MMODE, mask, 64, 0x7a, 0x7a, 0)) return 1;
     }
-    /* lock path writes BOTH items with the new mask */
-    if (nsa && put_file(LB_MMODE, LB_NR_NSA_BANDS, LB_MMODE, mask, 64, 0x7a, 0x7a, 0)) return 1;
     if (put_file(LB_MMODE, LB_NR_BANDS, LB_MMODE, mask, 64, 0x7a, 0x7a, 0)) return 1;
     return reboot_modem();
 }
