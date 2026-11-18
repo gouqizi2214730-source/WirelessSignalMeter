@@ -81,22 +81,110 @@ public class LteSinrUtilsTest
     }
 
     @Test
-    public void legacySnapshotRequiresMatchingValidLteRsrp()
+    public void snapshotLegacyAccessorPreservesDbValues()
     {
-        assertEquals(17, LteSinrUtils.readLegacy(new LegacyStrength(-95, 17), -95));
-        assertEquals(UNAVAILABLE, LteSinrUtils.readLegacy(new LegacyStrength(-94, 17), -95));
-        assertEquals(UNAVAILABLE, LteSinrUtils.readLegacy(new LegacyStrength(UNAVAILABLE, 17), UNAVAILABLE));
+        assertEquals(17, LteSinrUtils.readSnapshot(new LegacyStrength(17)));
+        assertEquals(0, LteSinrUtils.readSnapshot(new LegacyStrength(0)));
+        assertEquals(-8, LteSinrUtils.readSnapshot(new LegacyStrength(-8)));
     }
 
     @Test
-    public void legacySnapshotPreservesZeroAndRejectsInvalidValues()
+    public void snapshotRejectsUnavailableAndAmbiguousLegacyUnits()
     {
-        assertEquals(0, LteSinrUtils.readLegacy(new LegacyStrength(-95, 0), -95));
-        assertEquals(-8, LteSinrUtils.readLegacy(new LegacyStrength(-95, -8), -95));
-        assertEquals(UNAVAILABLE, LteSinrUtils.readLegacy(new LegacyStrength(-95, UNAVAILABLE), -95));
-        assertEquals(UNAVAILABLE, LteSinrUtils.readLegacy(new LegacyStrength(-95, 170), -95));
-        assertEquals(UNAVAILABLE, LteSinrUtils.readLegacy(null, -95));
-        assertEquals(UNAVAILABLE, LteSinrUtils.readLegacy(new Object(), -95));
+        assertEquals(UNAVAILABLE, LteSinrUtils.readSnapshot(new LegacyStrength(UNAVAILABLE)));
+        assertEquals(UNAVAILABLE, LteSinrUtils.readSnapshot(new LegacyStrength(170)));
+        assertEquals(UNAVAILABLE, LteSinrUtils.readSnapshot(new FlatLegacyStrength()));
+        assertEquals(UNAVAILABLE, LteSinrUtils.readSnapshot(null));
+        assertEquals(UNAVAILABLE, LteSinrUtils.readSnapshot(new Object()));
+    }
+
+    @Test
+    public void privateAndInheritedLteFieldsAreRead()
+    {
+        assertEquals(19, LteSinrUtils.read(UNAVAILABLE, new FieldStrength()));
+        assertEquals(-5, LteSinrUtils.read(UNAVAILABLE, new InheritedFieldStrength()));
+        assertEquals(4, LteSinrUtils.read(4, new FieldStrength()));
+    }
+
+    @Test
+    public void invalidFieldFallsThroughToText()
+    {
+        assertEquals(11, LteSinrUtils.read(UNAVAILABLE, new InvalidFieldStrength()));
+    }
+
+    @Test
+    public void cellTextSupportsAndroidAndVendorLabels()
+    {
+        assertEquals(16, LteSinrUtils.read(UNAVAILABLE, new TextStrength(
+                "CellSignalStrengthLte: rssi=-69 rsrp=-96 rssnr=16 cqi=12")));
+        assertEquals(0, LteSinrUtils.read(UNAVAILABLE, new TextStrength("{mRssnr=0, cqi=8}")));
+        assertEquals(-9, LteSinrUtils.read(UNAVAILABLE, new TextStrength("CellSignalStrengthLte: sinr=-9")));
+    }
+
+    @Test
+    public void textNeverUsesCqiNrOrPartialNumbers()
+    {
+        for (String text : new String[]{"cqi=15", "ssSinr=20 csiSinr=25", "nrSinr=12",
+                "rssnr=2147483647", "rssnr=180", "rssnr=18.5", "rssnr=18dB",
+                "rssnr=9223372036854775808"})
+        {
+            assertEquals(text, UNAVAILABLE, LteSinrUtils.read(UNAVAILABLE, new TextStrength(text)));
+        }
+    }
+
+    @Test
+    public void malformedTextDoesNotBreakCollection()
+    {
+        assertEquals(UNAVAILABLE, LteSinrUtils.read(UNAVAILABLE, new TextStrength(null)));
+        assertEquals(UNAVAILABLE, LteSinrUtils.read(UNAVAILABLE, new ThrowingTextStrength()));
+    }
+
+    @Test
+    public void nestedModernLteSnapshotIsRead()
+    {
+        assertEquals(19, LteSinrUtils.readSnapshot(new NestedStrength()));
+    }
+
+    @Test
+    public void snapshotTextIsRestrictedToLteBlock()
+    {
+        assertEquals(13, LteSinrUtils.readSnapshot(new TextStrength(
+                "SignalStrength:{mLte=CellSignalStrengthLte: rsrp=-95 rssnr=13 "
+                        + "mNr=CellSignalStrengthNr: ssSinr=25 primary=CellSignalStrengthLte}")));
+        assertEquals(UNAVAILABLE, LteSinrUtils.readSnapshot(new TextStrength(
+                "SignalStrength:{mLte=CellSignalStrengthLte: rssnr=2147483647 "
+                        + "mNr=CellSignalStrengthNr: sinr=25}")));
+        assertEquals(UNAVAILABLE, LteSinrUtils.readSnapshot(new TextStrength(
+                "SignalStrength:{mLte=CellSignalStrengthLte: rssnr=2147483647,"
+                        + "mNr=CellSignalStrengthNr: sinr=25}")));
+        assertEquals(UNAVAILABLE, LteSinrUtils.readSnapshot(new TextStrength("lterssnr=180 sinr=18")));
+    }
+
+    @Test
+    public void freshSnapshotDoesNotRequireIdenticalRsrp()
+    {
+        assertTrue(LteSinrUtils.canUseSnapshot(true, 1, 19_000, 20_000, 21_000));
+        assertTrue(LteSinrUtils.canUseSnapshot(true, 1, 15_000, 20_000, 21_000));
+    }
+
+    @Test
+    public void snapshotCannotFillNeighborsOrAmbiguousServingCells()
+    {
+        assertFalse(LteSinrUtils.canUseSnapshot(false, 1, 19_000, 20_000, 21_000));
+        assertFalse(LteSinrUtils.canUseSnapshot(true, 0, 19_000, 20_000, 21_000));
+        assertFalse(LteSinrUtils.canUseSnapshot(true, 2, 19_000, 20_000, 21_000));
+    }
+
+    @Test
+    public void snapshotAgeAndTimeGapAreBounded()
+    {
+        assertFalse(LteSinrUtils.canUseSnapshot(true, 1, 19_000, 10_000, 21_000));
+        assertFalse(LteSinrUtils.canUseSnapshot(true, 1, 10_000, 19_000, 21_000));
+        assertFalse(LteSinrUtils.canUseSnapshot(true, 1, 14_999, 20_000, 21_000));
+        assertFalse(LteSinrUtils.canUseSnapshot(true, 1, 0, 20_000, 21_000));
+        assertFalse(LteSinrUtils.canUseSnapshot(true, 1, 19_000, 0, 21_000));
+        assertFalse(LteSinrUtils.canUseSnapshot(true, 1, 22_000, 20_000, 21_000));
+        assertFalse(LteSinrUtils.canUseSnapshot(true, 1, 19_000, 22_000, 21_000));
     }
 
     private static class VendorStrength
@@ -154,16 +242,55 @@ public class LteSinrUtilsTest
 
     private static class LegacyStrength
     {
-        private final int rsrp;
         private final int rssnr;
 
-        private LegacyStrength(int rsrp, int rssnr)
+        private LegacyStrength(int rssnr)
         {
-            this.rsrp = rsrp;
             this.rssnr = rssnr;
         }
 
-        private int getLteRsrp() { return rsrp; }
         private int getLteRssnr() { return rssnr; }
+    }
+
+    private static class FieldStrength
+    {
+        private final int mRssnr = 19;
+    }
+
+    private static class ParentFieldStrength
+    {
+        private final int mSinr = -5;
+    }
+
+    private static class InheritedFieldStrength extends ParentFieldStrength
+    {
+    }
+
+    private static class InvalidFieldStrength
+    {
+        private final double mRssnr = 11.5;
+        @Override public String toString() { return "rssnr=11"; }
+    }
+
+    private static class TextStrength
+    {
+        private final String text;
+        private TextStrength(String text) { this.text = text; }
+        @Override public String toString() { return text; }
+    }
+
+    private static class ThrowingTextStrength
+    {
+        @Override public String toString() { throw new IllegalStateException("unavailable"); }
+    }
+
+    private static class NestedStrength
+    {
+        private final Object mLte = new FieldStrength();
+    }
+
+    private static class FlatLegacyStrength
+    {
+        private final int mLteRssnr = 18;
     }
 }

@@ -729,6 +729,10 @@ public class CellularController extends AController
                         @Override
                         public void onCellInfoReceived(@NonNull List<CellInfo> cellInfo)
                         {
+                            synchronized (activeSubscriptionInfoListLock)
+                            {
+                                if (!telephonyManagerList.contains(wrapper)) return;
+                            }
                             // Skip processing if in airplane mode
                             if (airplaneModeActive.get())
                             {
@@ -798,6 +802,7 @@ public class CellularController extends AController
                 Object listener = displayInfoCallbackMap.get(wrapper.getSubscriptionId());
                 if (listener instanceof TelephonyCallback)
                 {
+                    TelephonyCallbackFactory.clearSignalStrength(listener);
                     try
                     {
                         wrapper.getTelephonyManager().registerTelephonyCallback(executorService, (TelephonyCallback) listener);

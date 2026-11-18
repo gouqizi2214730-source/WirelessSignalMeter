@@ -11,9 +11,16 @@
 
 LTE SINR 先读 `CellSignalStrengthLte.getRssnr()`，缺失时依次尝试同一对象的
 `getCellSinr()` / `getSnr()` / `getSinr()`，包含非 public 和继承的方法。
-只有注册服务小区缺失 SINR 时才考虑当前订阅的 `SignalStrength`；要求单个 LTE
-样本且 RSRP 一致。旧接口 `getLteRssnr()` 同时校验 `getLteRsrp()`，允许 LTE
-样本列表为空，但不允许存在多个 LTE 样本或已知 RSRP 不匹配。
+然后尝试 LTE 对象的 `mRssnr` / `mSinr` 等明确字段，以及该对象公开文本中的
+`rssnr=` / `sinr=` 字段。完整 `SignalStrength` 文本只解析明确的 LTE 段。
+
+扫描期间按订阅监听 `SignalStrengthsListener`；单 SIM 也使用订阅专属
+TelephonyManager，停扫、换卡和销毁时注销监听并清空信号快照。
+只有注册主服务小区缺失 SINR、扫描中恰好一个可归属的 LTE 主小区、快照最多包含
+一个 LTE 样本时才借用快照；两份数据须均在 10 秒内且相差不超过 5 秒。
+已明确标记的 LTE CA 辅小区不借用快照；多个角色未知的注册 LTE 小区仍视为歧义。
+不再用 RSRP 完全相等判断归属。支持现代嵌套 `mLte`、`getLteRssnr()` 以及
+明确标识为 `CellSignalStrengthLte` 的文本回退。
 
 有效值仍为 -20 至 30 dB，包含 0；不除以 10，不使用 CQI，不猜测厂商自定义单位。
 接口不存在、受非 SDK 限制、抛出异常或全部返回无效值时保留缺失状态。
@@ -24,10 +31,14 @@ LTE SINR 先读 `CellSignalStrengthLte.getRssnr()`，缺失时依次尝试同一
    分别验证标准接口和厂商接口上报的场景；固件未提供或系统拒绝反射时仍可能缺失。
 3. 双卡切换、LTE CA 和邻区场景下确认没有把主服务小区的 SINR 复制到其它小区。
 4. 核对页面、地图、邻区和导出中的 LTE SINR，缺失时不得出现 MAX_VALUE 或 CQI。
+5. 停扫再开始、切卡或重启服务后确认数值继续更新；超过时效的快照不得复用。
 
 `LteSinrUtilsTest` 为纯 JVM 测试，覆盖主值优先、私有/继承方法、异常回退、缺失 API、
-数值边界、CQI 排除和旧快照 RSRP 匹配。2026-11-18 使用缓存 JDK 与 JUnit 直接
-编译运行，12 项通过；复现脚本为 Git 忽略的 `.temp/test-lte-sinr.ps1`。
+字段和公开文本回退、数值边界、CQI/NR 字段排除、快照时效与多小区限制。
+2026-11-18 使用缓存 JDK 与 JUnit 直接编译运行，22 项通过；
+复现脚本为 Git 忽略的 `.temp/test-lte-sinr.ps1`。
+`SurveyRecordProcessorTest` 新增四项 LTE 主小区计数与 CA 限制测试，需 Robolectric/Mockito；
+本机缺少缓存依赖，尚未运行该 Android 测试套件。
 ADB 当前没有连接设备，尚未进行上述真机验证。
 
 ## 路测回放回归

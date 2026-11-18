@@ -1,6 +1,7 @@
 package com.craxiom.networksurvey.services;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -44,6 +45,41 @@ public class SurveyRecordProcessorTest
         when(cellInfo.isRegistered()).thenReturn(registered);
         when(cellInfo.getCellConnectionStatus()).thenReturn(connectionStatus);
         return cellInfo;
+    }
+
+    @Test
+    public void countFallbackEligibleLteCells_singleLteWithNrAndNeighbors_countsOne()
+    {
+        assertEquals(1, SurveyRecordProcessor.countFallbackEligibleLteCells(List.of(
+                lteCell(true, CellInfo.CONNECTION_PRIMARY_SERVING),
+                lteCell(false, CellInfo.CONNECTION_NONE),
+                nrCell(false, CellInfo.CONNECTION_SECONDARY_SERVING))));
+    }
+
+    @Test
+    public void countFallbackEligibleLteCells_carrierAggregation_onlyPrimaryCanBorrow()
+    {
+        CellInfoLte secondary = lteCell(true, CellInfo.CONNECTION_SECONDARY_SERVING);
+        assertEquals(1, SurveyRecordProcessor.countFallbackEligibleLteCells(List.of(
+                lteCell(true, CellInfo.CONNECTION_PRIMARY_SERVING),
+                secondary)));
+        assertFalse(SurveyRecordProcessor.isLteSinrSnapshotCandidate(secondary));
+    }
+
+    @Test
+    public void countFallbackEligibleLteCells_unknownRolesRemainAmbiguous()
+    {
+        assertEquals(2, SurveyRecordProcessor.countFallbackEligibleLteCells(List.of(
+                lteCell(true, CellInfo.CONNECTION_UNKNOWN),
+                lteCell(true, CellInfo.CONNECTION_UNKNOWN))));
+    }
+
+    @Test
+    public void countFallbackEligibleLteCells_nullAndNeighbors_countZero()
+    {
+        assertEquals(0, SurveyRecordProcessor.countFallbackEligibleLteCells(null));
+        assertEquals(0, SurveyRecordProcessor.countFallbackEligibleLteCells(List.of(
+                lteCell(false, CellInfo.CONNECTION_NONE))));
     }
 
     // countFallbackEligibleNrCells gates the NR signal-strength fallback: the borrowed

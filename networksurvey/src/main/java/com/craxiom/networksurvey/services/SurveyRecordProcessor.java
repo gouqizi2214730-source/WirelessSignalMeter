@@ -568,10 +568,11 @@ public class SurveyRecordProcessor
                     // when the scan contains exactly one connected NR cell (see the fallback in
                     // generateNrSurveyRecord for why).
                     final int fallbackEligibleNrCells = countFallbackEligibleNrCells(allCellInfo);
+                    final int fallbackEligibleLteCells = countFallbackEligibleLteCells(allCellInfo);
 
                     for (CellInfo cellInfo : allCellInfo)
                     {
-                        final CellularRecordWrapper cellularRecord = processCellInfo(cellInfo, subscriptionId, networkOperatorName, signalStrength, includeNeighborCells, scanBandwidthsKhz, fallbackEligibleNrCells);
+                        final CellularRecordWrapper cellularRecord = processCellInfo(cellInfo, subscriptionId, networkOperatorName, signalStrength, includeNeighborCells, scanBandwidthsKhz, fallbackEligibleNrCells, fallbackEligibleLteCells);
                         if (cellularRecord != null) cellularRecords.add(cellularRecord);
                     }
 
@@ -988,7 +989,7 @@ public class SurveyRecordProcessor
      *                                the NR signal-strength fallback.
      * @since 0.0.5
      */
-    private CellularRecordWrapper processCellInfo(CellInfo cellInfo, int subscriptionId, String networkOperatorName, SignalStrength signalStrength, boolean includeNeighborCells, int[] scanBandwidthsKhz, int fallbackEligibleNrCells)
+    private CellularRecordWrapper processCellInfo(CellInfo cellInfo, int subscriptionId, String networkOperatorName, SignalStrength signalStrength, boolean includeNeighborCells, int[] scanBandwidthsKhz, int fallbackEligibleNrCells, int fallbackEligibleLteCells)
     {
         // We only want to take the time to process a record if we are going to do something with it.  Currently, that
         // means logging, sending to a server, or updating the UI with the latest LTE information.
@@ -1024,7 +1025,7 @@ public class SurveyRecordProcessor
 
             if (cellInfo instanceof CellInfoLte)
             {
-                final LteRecord lteSurveyRecord = generateLteSurveyRecord((CellInfoLte) cellInfo, subscriptionId, carrierName, signalStrength, deviceTime, elapsedTimeMillis, scanBandwidthsKhz);
+                final LteRecord lteSurveyRecord = generateLteSurveyRecord((CellInfoLte) cellInfo, subscriptionId, carrierName, signalStrength, deviceTime, elapsedTimeMillis, scanBandwidthsKhz, fallbackEligibleLteCells);
                 if (lteSurveyRecord != null)
                 {
                     notifyLteRecordListeners(lteSurveyRecord);
@@ -1639,7 +1640,7 @@ public class SurveyRecordProcessor
      * @param cellInfoLte The object that contains the LTE Cell info.  This can be a serving cell, or a neighbor cell.
      * @return The survey record.
      */
-    private LteRecord generateLteSurveyRecord(CellInfoLte cellInfoLte, int subscriptionId, String carrierName, SignalStrength signalStrength, ZonedDateTime deviceTime, long elapsedTimeMillis, int[] scanBandwidthsKhz)
+    private LteRecord generateLteSurveyRecord(CellInfoLte cellInfoLte, int subscriptionId, String carrierName, SignalStrength signalStrength, ZonedDateTime deviceTime, long elapsedTimeMillis, int[] scanBandwidthsKhz, int fallbackEligibleLteCells)
     {
         final CellIdentityLte cellIdentity = cellInfoLte.getCellIdentity();
         final int mcc = cellIdentity.getMcc();
@@ -1763,21 +1764,19 @@ public class SurveyRecordProcessor
         }
 
         int rssnr = LteSinrUtils.read(cellSignalStrengthLte.getRssnr(), cellSignalStrengthLte);
-        if (!LteSinrUtils.isValid(rssnr) && cellInfoLte.isRegistered() && signalStrength != null)
+        if (!LteSinrUtils.isValid(rssnr) && signalStrength != null
+                && LteSinrUtils.canUseSnapshot(isLteSinrSnapshotCandidate(cellInfoLte), fallbackEligibleLteCells,
+                cellInfoLte.getTimestampMillis(), signalStrength.getTimestampMillis(), elapsedTimeMillis))
         {
-            // A SignalStrength sample carries no PCI. Use it only when it agrees with this serving cell.
             final List<CellSignalStrengthLte> strengths = signalStrength.getCellSignalStrengths(CellSignalStrengthLte.class);
-            if (strengths.size() == 1)
+            if (strengths.size() <= 1)
             {
-                final CellSignalStrengthLte serving = strengths.get(0);
-                if (serving.getRsrp() == rsrp)
+                if (!strengths.isEmpty())
                 {
+                    final CellSignalStrengthLte serving = strengths.get(0);
                     rssnr = LteSinrUtils.read(serving.getRssnr(), serving);
-                    if (!LteSinrUtils.isValid(rssnr)) rssnr = LteSinrUtils.readLegacy(signalStrength, rsrp);
                 }
-            } else if (strengths.isEmpty())
-            {
-                rssnr = LteSinrUtils.readLegacy(signalStrength, rsrp);
+                if (!LteSinrUtils.isValid(rssnr)) rssnr = LteSinrUtils.readSnapshot(signalStrength);
             }
         }
         if (LteSinrUtils.isValid(rssnr))
@@ -2023,6 +2022,24 @@ public class SurveyRecordProcessor
         {
             bandwidthConsumer.accept(bandwidthKhz);
         }
+    }
+
+    static int countFallbackEligibleLteCells(List<CellInfo> allCellInfo)
+    {
+        if (allCellInfo == null) return 0;
+        int count = 0;
+        for (CellInfo cellInfo : allCellInfo)
+        {
+            if (isLteSinrSnapshotCandidate(cellInfo)) count++;
+        }
+        return count;
+    }
+
+    static boolean isLteSinrSnapshotCandidate(CellInfo cellInfo)
+    {
+        // SignalStrength describes the subscription's LTE primary, not its CA secondary carriers.
+        return cellInfo instanceof CellInfoLte && cellInfo.isRegistered()
+                && !isSecondaryServingCell(cellInfo);
     }
 
     /**
