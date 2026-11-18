@@ -152,6 +152,9 @@ fun HomeScreen(
                         ToolsScreen(
                             bottomPadding = bottomPadding,
                             onOpenMap = openMap,
+                            onOpenRoadCoverage = {
+                                mainNavController.navigate(NavOption.RoadCoverage.name) { launchSingleTop = true }
+                            },
                             onOpenGnss = {
                                 mainNavController.navigate(NavOption.Gnss.name) { launchSingleTop = true }
                             },
