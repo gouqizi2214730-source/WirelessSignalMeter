@@ -1,10 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  android.util.Log
- *  com.wireless.signalmeter.model.SpeedTestInfo
- */
 package com.craxiom.networksurvey.util;
 
 import android.util.Log;

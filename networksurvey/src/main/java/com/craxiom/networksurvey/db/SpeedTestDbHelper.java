@@ -1,14 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  android.content.ContentValues
- *  android.content.Context
- *  android.database.Cursor
- *  android.database.sqlite.SQLiteDatabase
- *  android.database.sqlite.SQLiteOpenHelper
- *  com.wireless.signalmeter.model.SpeedTestRecord
- */
 package com.craxiom.networksurvey.db;
 
 import android.content.ContentValues;

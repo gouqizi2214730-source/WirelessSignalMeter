@@ -1,9 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  com.wireless.signalmeter.util.OperatorUtil
- */
 package com.craxiom.networksurvey.model;
 
 import com.craxiom.networksurvey.model.EngineeringParam;
