@@ -1,7 +1,9 @@
 package com.craxiom.networksurvey.util;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import com.craxiom.messaging.ConnectionStatus;
 import com.craxiom.messaging.NrRecord;
@@ -505,6 +507,23 @@ public class CellularUtilsTest
     {
         assertNull(CellularUtils.selectSecondaryServingNrCell(Collections.emptyList()));
         assertNull(CellularUtils.selectSecondaryServingNrCell(null));
+    }
+
+    @Test
+    public void selectAllSecondaryServingNrCells_keepsEverySecondaryAndIgnoresNeighbors()
+    {
+        NrRecordWrapper firstSecondary = buildNrWrapper(201, -95f, ConnectionStatus.SECONDARY_SERVING);
+        NrRecordWrapper neighbor = buildNrWrapper(102, -80f, ConnectionStatus.NEIGHBOR);
+        NrRecordWrapper secondSecondary = buildNrWrapper(202, -85f, ConnectionStatus.SECONDARY_SERVING);
+
+        assertEquals(Arrays.asList(firstSecondary, secondSecondary),
+                CellularUtils.selectAllSecondaryServingNrCells(
+                        Arrays.asList(firstSecondary, neighbor, secondSecondary)));
+        assertTrue(CellularUtils.selectAllSecondaryServingNrCells(Collections.emptyList()).isEmpty());
+        assertTrue(CellularUtils.selectAllSecondaryServingNrCells(null).isEmpty());
+        assertTrue(CellularUtils.isSecondaryServing(ConnectionStatus.SECONDARY_SERVING));
+        assertFalse(CellularUtils.isSecondaryServing(ConnectionStatus.NEIGHBOR));
+        assertFalse(CellularUtils.isSecondaryServing(ConnectionStatus.PRIMARY_SERVING));
     }
 
     /**
