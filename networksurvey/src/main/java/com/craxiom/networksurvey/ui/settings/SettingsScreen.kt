@@ -275,10 +275,7 @@ private fun DiagCollectionSettings(rootDiag: RootDiagViewModel? = null) {
                 }
                 RootDiagPrefs.setBackgroundEnabled(context, enabled)
                 background = enabled
-                rootDiag?.onBackgroundPreferenceChanged(enabled)
-                if (!enabled) {
-                    RootDiagCollectorService.stop(context)
-                }
+                rootDiag?.onCollectionPreferenceChanged()
             },
         ),
         trailing = { Switch(checked = background, onCheckedChange = null) },
@@ -299,6 +296,7 @@ private fun DiagCollectionSettings(rootDiag: RootDiagViewModel? = null) {
                 } else {
                     RootDiagPrefs.setOverlayWanted(context, enabled)
                     overlay = enabled
+                    rootDiag?.onCollectionPreferenceChanged()
                     RootDiagCollectorService.refreshOverlay(context)
                 }
             },

@@ -7,6 +7,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.io.IOException
 import kotlin.io.path.createTempDirectory
 
 class DiagRecordingPolicyTest {
@@ -146,6 +147,23 @@ class DiagRecordingSessionTest {
         assertEquals(1L, first.length())
         assertEquals(2L, second.length())
         assertEquals(setOf("task-1.qmdl", "task-2.qmdl"), session.recordings().map { it.name }.toSet())
+    }
+
+    @Test
+    fun failedArchiveKeepsCaptureExportableAndPreventsOverwrite() {
+        val session = DiagRecordingSession(temp()) { _, _ -> false }
+        session.start("task-1").writeText("QMDL")
+        assertTrue(runCatching { session.finish() }.exceptionOrNull() is IOException)
+        assertTrue(runCatching { session.start("task-2") }.exceptionOrNull() is IOException)
+        assertEquals("QMDL", session.latestRecording()?.readText())
+    }
+
+    @Test
+    fun taskSwitchMustFinishPreviousWriterFirst() {
+        val session = DiagRecordingSession(temp())
+        session.start("task-1").writeText("QMDL")
+        assertTrue(runCatching { session.start("task-2") }.exceptionOrNull() is IllegalStateException)
+        assertEquals("task-1.qmdl", session.finish()?.name)
     }
 
     @Test

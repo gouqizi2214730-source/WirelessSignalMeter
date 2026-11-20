@@ -47,6 +47,7 @@ class RootDiagCollectorService : Service() {
     private var window: WindowManager? = null
     private var overlay: View? = null
     private var label: TextView? = null
+    private var notificationMode: String? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -55,6 +56,14 @@ class RootDiagCollectorService : Service() {
         Application.createNotificationChannel(this)
         startInForeground()
         runningState.value = true
+        scope.launch {
+            DiagOverlayState.snapshot.collect { snap ->
+                if (snap.status != notificationMode && !foregroundFailed.value) {
+                    notificationMode = snap.status
+                    updateNotification(snap)
+                }
+            }
+        }
         maybeShowOverlay()
     }
 
@@ -79,7 +88,8 @@ class RootDiagCollectorService : Service() {
     }
 
     private fun startInForeground() {
-        val notification = buildNotification(DiagOverlayState.snapshot.value)
+        val snapshot = DiagOverlayState.snapshot.value
+        val notification = buildNotification(snapshot)
         try {
             if (Build.VERSION.SDK_INT >= 29) {
                 ServiceCompat.startForeground(
@@ -89,14 +99,15 @@ class RootDiagCollectorService : Service() {
             } else {
                 startForeground(NOTIFICATION_ID, notification)
             }
+            notificationMode = snapshot.status
         } catch (error: RuntimeException) {
             Timber.w(error, "Unable to start the DIAG foreground service")
             foregroundFailed.value = true
         }
     }
 
-    private fun buildNotification(snap: DiagOverlaySnapshot? = null): Notification {
-        val task = snap?.collecting == true || snap?.status == "task"
+    private fun buildNotification(snap: DiagOverlaySnapshot): Notification {
+        val task = snap.collecting || snap.status == "task"
         val title = if (task) R.string.diag_bg_notification_title_task else R.string.diag_bg_notification_title_listen
         val text = if (task) R.string.diag_bg_notification_text_task else R.string.diag_bg_notification_text_listen
         val open = PendingIntent.getActivity(
@@ -140,6 +151,7 @@ class RootDiagCollectorService : Service() {
             setOnClickListener {
                 RootDiagPrefs.setOverlayWanted(this@RootDiagCollectorService, false)
                 hideOverlay()
+                if (notificationMode != "task") stopSelf()
             }
         }
         val card = LinearLayout(this).apply {
@@ -190,10 +202,7 @@ class RootDiagCollectorService : Service() {
             manager.addView(card, params)
             overlay = card
             overlayJob = scope.launch {
-                DiagOverlayState.snapshot.collect { snap ->
-                    label?.text = formatOverlay(snap)
-                    updateNotification(snap)
-                }
+                DiagOverlayState.snapshot.collect { snap -> label?.text = formatOverlay(snap) }
             }
         } catch (error: RuntimeException) {
             Timber.w(error, "Unable to add the DIAG overlay")
@@ -273,7 +282,12 @@ class RootDiagCollectorService : Service() {
             stopRequested.value = false
             foregroundFailed.value = false
             val intent = Intent(context, RootDiagCollectorService::class.java)
-            if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent) else context.startService(intent)
+            try {
+                if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent) else context.startService(intent)
+            } catch (error: RuntimeException) {
+                Timber.w(error, "Unable to launch the DIAG foreground service")
+                foregroundFailed.value = true
+            }
         }
 
         fun stop(context: Context) {

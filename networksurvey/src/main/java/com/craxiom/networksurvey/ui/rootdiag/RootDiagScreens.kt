@@ -387,7 +387,7 @@ internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
                         DropdownMenuItem(
                             text = { Text(stringResource(if (qmdl.phase == QmdlPhase.Idle) R.string.diag_qmdl_start else R.string.diag_qmdl_stop)) },
                             enabled = qmdl.phase == QmdlPhase.Recording ||
-                                qmdl.phase == QmdlPhase.Idle && status.status == RootDiagStatus.Running &&
+                                qmdl.phase == QmdlPhase.Idle && !qmdl.recovering && status.status == RootDiagStatus.Running &&
                                 collectionMode == DiagRecordingPolicy.Mode.TaskRecording && exportProgress == null,
                             onClick = {
                                 menuOpen = false
@@ -397,7 +397,7 @@ internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
                         if (qmdl.hasRecording) {
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.diag_qmdl_export)) },
-                                enabled = qmdl.phase == QmdlPhase.Idle && exportProgress == null,
+                                enabled = qmdl.phase == QmdlPhase.Idle && !qmdl.recovering && exportProgress == null,
                                 onClick = {
                                     menuOpen = false
                                     val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(Date())

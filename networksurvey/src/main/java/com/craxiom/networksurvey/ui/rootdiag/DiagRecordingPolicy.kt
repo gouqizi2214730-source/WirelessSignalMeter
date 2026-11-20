@@ -1,6 +1,7 @@
 package com.craxiom.networksurvey.ui.rootdiag
 
 import java.io.File
+import java.io.IOException
 
 /**
  * Live viewing and test-task recording are separate.
@@ -44,9 +45,11 @@ internal object DiagRecordingPolicy {
  * Live viewing must not create files in [root]. Writes go to a single
  * active file that is only created in [start] and renamed in [finish].
  */
-internal class DiagRecordingSession(private val root: File) {
+internal class DiagRecordingSession(
+    private val root: File,
+    private val rename: (File, File) -> Boolean = File::renameTo,
+) {
     private var openTaskId: String? = null
-    private var active: File? = null
 
     val activeFile get() = File(root, ACTIVE_NAME)
 
@@ -59,11 +62,9 @@ internal class DiagRecordingSession(private val root: File) {
         ?.sortedBy { it.name }
         ?: emptyList()
 
-    fun latestRecording(): File? {
-        val committed = recordings()
-        val current = active?.takeIf { it.exists() && it.length() > 0 }
-        return (committed + listOfNotNull(current)).maxByOrNull { it.lastModified() }
-    }
+    fun latestRecording(): File? =
+        activeFile.takeIf { it.isFile && it.length() > 0L }
+            ?: recordings().filter { it.length() > 0L }.maxByOrNull { it.lastModified() }
 
     /** Live view or created-but-not-started tasks must leave the directory empty of new session files. */
     fun ensureLiveOnly() {
@@ -74,42 +75,35 @@ internal class DiagRecordingSession(private val root: File) {
     fun start(taskId: String): File {
         val id = taskId.trim()
         require(id.isNotEmpty()) { "task id required" }
-        if (openTaskId == id && active?.exists() == true) return active!!
-        if (openTaskId != null) finish()
-        if (!root.exists()) root.mkdirs()
+        check(openTaskId == null) { "Previous QMDL session is still open" }
+        if (!root.isDirectory && !root.mkdirs()) throw IOException("Unable to create QMDL directory")
         val file = activeFile
-        if (file.exists()) {
-            if (file.length() > 0) {
-                val leftover = uniqueCommitted(openTaskId ?: "orphan")
-                if (!file.renameTo(leftover) && file.exists()) file.delete()
-            } else {
-                file.delete()
-            }
-        }
-        if (!file.createNewFile()) {
-            throw java.io.IOException("Unable to create $file")
-        }
+        archiveActive("orphan")
+        if (!file.createNewFile()) throw IOException("Unable to create $file")
         openTaskId = id
-        active = file
         return file
     }
 
     fun finish(): File? {
-        val id = openTaskId
-        val file = active
+        val id = openTaskId ?: return null
         openTaskId = null
-        active = null
-        if (file == null) return null
-        if (!file.exists()) return null
-        if (file.length() == 0L) {
-            file.delete()
-            return null
-        }
-        val dest = uniqueCommitted(id ?: "orphan")
-        return if (file.renameTo(dest)) dest else file.takeIf { it.exists() }
+        return archiveActive(id)
     }
 
-    fun cannotWrite(): Boolean = openTaskId == null || active?.exists() != true
+    fun cannotWrite(): Boolean = openTaskId == null || !activeFile.isFile
+
+    private fun archiveActive(id: String): File? {
+        val file = activeFile
+        if (!file.exists()) return null
+        if (!file.isFile) throw IOException("Invalid active QMDL path")
+        if (file.length() == 0L) {
+            if (!file.delete()) throw IOException("Unable to remove empty QMDL file")
+            return null
+        }
+        val dest = uniqueCommitted(id)
+        if (!rename(file, dest)) throw IOException("Unable to archive QMDL file")
+        return dest
+    }
 
     private fun uniqueCommitted(taskId: String): File {
         val safe = taskId.replace(Regex("[^A-Za-z0-9._-]"), "_")
