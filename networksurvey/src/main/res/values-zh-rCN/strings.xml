@@ -1067,5 +1067,32 @@
     <string name="diag_reason_no_backend">没有实现对应后端</string>
     <string name="diag_reason_logcat_exited">logcat 读取进程已退出，将重新连接</string>
     <string name="diag_ims_providers">IMS：%1$s</string>
+    <string name="diag_ims_line">IMS · %1$s</string>
+    <string name="diag_ims_headline_unknown_samsung_ready">未知 · 三星日志源已就绪，尚未观测到注册证据</string>
+    <string name="diag_ims_headline_unknown_waiting">未知 · 等待注册证据</string>
+    <string name="diag_ims_headline_unknown_reconnecting">未知 · 三星日志源正在重连</string>
+    <string name="diag_ims_headline_registered">已注册</string>
+    <string name="diag_ims_headline_registered_inferred">已注册（推断）</string>
+    <string name="diag_ims_headline_deregistered">未注册</string>
+    <string name="diag_ims_headline_failed">注册失败</string>
+    <string name="diag_ims_headline_unavailable_privileged">不可用 · 系统 IMS 接口需要特权权限，无法作为注册依据</string>
+    <string name="diag_ims_headline_unavailable_no_source">不可用 · 当前没有可用的 IMS 注册证据来源</string>
+    <string name="diag_ims_pipeline_ready">来源已就绪</string>
+    <string name="diag_ims_pipeline_subscribed">已订阅码流，尚无 IMS 包</string>
+    <string name="diag_ims_pipeline_starting">来源正在启动</string>
+    <string name="diag_ims_pipeline_reconnecting">来源正在重连</string>
+    <string name="diag_ims_pipeline_privileged">系统 IMS 接口需要特权权限，普通电话权限无法读取</string>
+    <string name="diag_ims_pipeline_unavailable">来源不可用</string>
+    <string name="diag_ims_call_calling">正在呼出</string>
+    <string name="diag_ims_call_alerting">振铃中</string>
+    <string name="diag_ims_call_connected">通话中</string>
+    <string name="diag_overlay_task_collecting">采集数据中</string>
+    <string name="diag_overlay_listening">监听</string>
+    <string name="diag_overlay_standby">待机</string>
+    <string name="diag_bg_notification_title_task">测试任务采集中</string>
+    <string name="diag_bg_notification_text_task">正在记录测试任务数据。后台 DIAG 监听仍会继续。</string>
+    <string name="diag_bg_notification_title_listen">DIAG 监听中</string>
+    <string name="diag_bg_notification_text_listen">后台 DIAG 监听已开启，测试任务尚未开始采集。</string>
+
 
 </resources>

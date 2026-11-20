@@ -128,6 +128,8 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
     private var simCount = 0
     private var selectedSubscriptionId: Int? = null
     private val imsProviders = linkedMapOf<String, ImsProviderStatus>()
+    private var lastImsEvidence: ImsEvidence? = null
+    private var overlayTaskRunning = false
     private var bandLockProfile = BandLockProfile(LockSupportLevel.Unsupported, "unknown", reason = "unchecked")
     private val capabilityState = MutableStateFlow(currentCapability())
     internal val capability = capabilityState.asStateFlow()
@@ -159,6 +161,16 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                     RootDiagCollectorService.stopRequested.value = false
                     pause()
                 }
+            }
+        }
+        viewModelScope.launch {
+            val store = withContext(Dispatchers.IO) {
+                runCatching { SurveyTaskStore.get(app) }.getOrNull()
+            } ?: return@launch
+            store.active.collect { task ->
+                overlayTaskRunning = task != null
+                val state = signalState.value
+                publishOverlay(state.status, state.records)
             }
         }
     }
@@ -262,6 +274,11 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 } }))
                 .put("task_association", "captured_at_sample; missing task_id remains unassigned")
                 .put("time_ms", System.currentTimeMillis())
+                .put("ims_status", JSONObject()
+                    .put("headline", currentCapability().imsStatus.headlineKey)
+                    .put("registration", currentCapability().imsStatus.registration.name)
+                    .put("source", currentCapability().imsStatus.evidenceSource ?: JSONObject.NULL)
+                    .put("technical", currentCapability().imsStatus.technical))
                 .put("app_version", BuildConfig.VERSION_NAME)
                 .put("app_version_code", BuildConfig.VERSION_CODE)
                 .put("android", Build.VERSION.SDK_INT)
@@ -460,6 +477,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
             collectorError = signalState.value.errorCode,
             imsProviders = imsProviders.values.toList(),
             bandLock = bandLockProfile,
+            imsEvidence = lastImsEvidence,
         )
     }
 
@@ -469,20 +487,24 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
 
     private fun publishOverlay(status: RootDiagStatus, records: List<DiagRecord>) {
         val serving = records.filter { it.type == "serving" }.maxByOrNull { it.receivedAt }?.data
-        val registration = if (overlayImsAvailable == false) "unavailable" else overlayImsReg
+        val ims = currentCapability().imsStatus
+        val mode = OverlayCollection.mode(overlayTaskRunning, OverlayCollection.diagListening(status))
         DiagOverlayState.publish(
             DiagOverlaySnapshot(
-                collecting = status == RootDiagStatus.Running || status == RootDiagStatus.Starting ||
-                    status == RootDiagStatus.Checking,
-                status = status.name,
+                collecting = mode == OverlayCollection.Mode.TaskCollecting,
+                status = when (mode) {
+                    OverlayCollection.Mode.TaskCollecting -> "task"
+                    OverlayCollection.Mode.Listening -> "listening"
+                    OverlayCollection.Mode.Standby -> "standby"
+                },
                 rat = serving?.optString("rat").orEmpty(),
                 pci = serving?.optInt("pci", -1)?.takeIf { it >= 0 },
                 rsrp = serving?.optDouble("rsrp")?.takeIf { it.isFinite() },
                 sinr = serving?.optDouble("sinr")?.takeIf { it.isFinite() },
-                imsReg = registration,
-                imsRegSource = if (overlayImsAvailable == false) "unavailable" else overlayImsSource,
-                imsAvailable = overlayImsAvailable,
-                imsCall = overlayImsCall,
+                imsReg = ims.headlineKey,
+                imsRegSource = ims.evidenceSource.orEmpty(),
+                imsAvailable = if (ims.registration == ImsRegistrationUi.Unavailable) false else null,
+                imsCall = ims.call ?: overlayImsCall,
                 decodeDropped = overlayDropped,
             )
         )
@@ -736,36 +758,27 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                         imsProviders[name] = ImsProviderStatus(name, statusName, available, value.optString("detail"))
                         publishCapability()
                     }
-                    if (name == "samsung_logcat") {
-                        overlayImsAvailable = when {
-                            available == false || statusName == "unavailable" -> false
-                            available == true || statusName == "available" -> true
-                            else -> overlayImsAvailable
-                        }
-                        if (overlayImsAvailable == false) {
-                            overlayImsReg = "unavailable"
-                            overlayImsSource = "samsung_logcat"
-                        } else if (overlayImsAvailable == true && overlayImsSource.isBlank()) {
-                            overlayImsSource = "samsung_logcat"
-                        }
-                    }
-                    if (name == "qualcomm_diag" && (available == true || statusName == "available")) {
-                        if (overlayImsAvailable != true) overlayImsSource = "qualcomm_diag"
-                    }
                 }
                 "ims_state", "ims_reg", "ims_call" -> {
-                    if (type == "ims_state" || type == "ims_reg") {
-                        val registration = value.optString("reg").ifBlank { value.optString("result") }
-                        if (overlayImsAvailable != false && registration.isNotBlank()) {
-                            overlayImsReg = registration
-                            overlayImsSource = when {
-                                value.optInt("reg_inferred") == 1 -> "inferred"
-                                value.optString("src").isNotBlank() -> value.optString("src")
-                                else -> overlayImsSource.ifBlank { type }
-                            }
-                        }
+                    val registration = value.optString("reg").ifBlank { value.optString("result") }
+                    val inferred = value.optInt("reg_inferred") == 1 || value.optBoolean("reg_inferred")
+                    val source = when {
+                        inferred -> "inferred"
+                        value.optString("why").isNotBlank() -> value.optString("why")
+                        value.optString("call_src").isNotBlank() -> value.optString("call_src")
+                        value.optString("src").isNotBlank() -> value.optString("src")
+                        else -> type
                     }
-                    value.optString("call").takeIf { it.isNotBlank() }?.let { overlayImsCall = it }
+                    val call = value.optString("call").takeIf { it.isNotBlank() } ?: lastImsEvidence?.call
+                    lastImsEvidence = ImsEvidence(
+                        registration = registration.takeIf { it.isNotBlank() && it != "unknown" },
+                        inferred = inferred,
+                        source = source,
+                        call = call,
+                        why = value.optString("why"),
+                    )
+                    overlayImsCall = call ?: overlayImsCall
+                    publishCapability()
                 }
                 "qmdl" -> {
                     if (qmdlCommand == null) return

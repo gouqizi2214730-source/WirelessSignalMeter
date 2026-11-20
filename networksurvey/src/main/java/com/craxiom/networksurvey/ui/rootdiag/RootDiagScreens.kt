@@ -491,8 +491,7 @@ internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
                     if (status.status != RootDiagStatus.Running) Text(
                         status.failureReason?.let { capabilityReasonText(it) } ?: stringResource(status.status.title),
                         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    val ims = capability.imsSources.joinToString(" · ") { "${it.id}:${capabilityReasonText(context, it.reason)}" }
-                    if (ims.isNotBlank()) Text(ims, style = MaterialTheme.typography.labelSmall,
+                    Text(imsStatusLine(capability.imsStatus), style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }

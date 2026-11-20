@@ -64,7 +64,7 @@ import com.craxiom.networksurvey.BuildConfig
 import com.craxiom.networksurvey.R
 import com.craxiom.networksurvey.ui.rootdiag.RootDiagViewModel
 import com.craxiom.networksurvey.ui.rootdiag.capabilityLine
-import com.craxiom.networksurvey.ui.rootdiag.capabilityReasonText
+import com.craxiom.networksurvey.ui.rootdiag.imsStatusLine
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
@@ -246,11 +246,7 @@ private fun DeviceCapabilitySummary(rootDiag: RootDiagViewModel) {
         Text(capabilityLine(capability.root), style = MaterialTheme.typography.bodySmall)
         Text(capabilityLine(capability.qualcommDiag), style = MaterialTheme.typography.bodySmall)
         Text(capabilityLine(capability.bandLock), style = MaterialTheme.typography.bodySmall)
-        val context = LocalContext.current
-        val ims = capability.imsSources.joinToString("；") { "${it.id}: ${capabilityReasonText(context, it.reason)}" }
-        if (ims.isNotBlank()) {
-            Text(stringResource(R.string.diag_ims_providers, ims), style = MaterialTheme.typography.bodySmall)
-        }
+        Text(imsStatusLine(capability.imsStatus), style = MaterialTheme.typography.bodySmall)
     }
 }
 
