@@ -1368,7 +1368,7 @@
     <string name="diag_qmdl_start">Start QMDL recording</string>
     <string name="diag_qmdl_stop">Stop QMDL recording</string>
     <string name="diag_qmdl_export">Export last QMDL</string>
-    <string name="diag_qmdl_description">Records raw cellular DIAG packets. The file contains complete RRC, NAS and possibly SIP messages with identifiers; do not share it. Recording continues in the background if background collection is enabled, and stops at 128 MB. Export the previous recording to keep it.</string>
+    <string name="diag_qmdl_description">Records raw cellular DIAG packets only while a test task is running. The file contains complete RRC, NAS and possibly SIP messages with identifiers; do not share it. If background collection is enabled, a running task can continue after you leave the app. Recording stops at 128 MB. Export the previous recording to keep it.</string>
     <string name="diag_qmdl_starting">Starting QMDL recording…</string>
     <string name="diag_qmdl_recording">Recording QMDL · %1$d packets · %2$s</string>
     <string name="diag_qmdl_stopping">Finishing QMDL recording…</string>
@@ -1399,7 +1399,7 @@
     <string name="diag_bg_notification_text">Collection continues after the screen is off or the app is switched away. Force-stop still ends it.</string>
     <string name="diag_bg_stop">Stop collection</string>
     <string name="diag_bg_title">Background collection</string>
-    <string name="diag_bg_subtitle">Keep DIAG collection running with a notification when you leave the app. It will not survive force-stop.</string>
+    <string name="diag_bg_subtitle">If a test task is already recording, keep it running in the background with a notification when you leave the app. This switch does not start recording by itself. Without a running task, you can only view live data in the app. Force-stop still ends it.</string>
     <string name="diag_overlay_title">Collection overlay</string>
     <string name="diag_overlay_subtitle">Show a small, draggable status window. This needs the system overlay permission; it is not opened automatically.</string>
     <string name="diag_overlay_need_permission">The overlay stays off until you grant “Display over other apps” in system settings. This app will not open that page by itself.</string>
@@ -1472,12 +1472,12 @@
     <string name="diag_ims_call_alerting">Ringing</string>
     <string name="diag_ims_call_connected">In call</string>
     <string name="diag_overlay_task_collecting">Collecting task data</string>
-    <string name="diag_overlay_listening">Listening</string>
+    <string name="diag_overlay_listening">Live view</string>
     <string name="diag_overlay_standby">Standby</string>
     <string name="diag_bg_notification_title_task">Test task collecting</string>
-    <string name="diag_bg_notification_text_task">A test task is recording. Background DIAG listening stays active.</string>
-    <string name="diag_bg_notification_title_listen">DIAG listening</string>
-    <string name="diag_bg_notification_text_listen">Background DIAG listening is on. A test task is not collecting yet.</string>
+    <string name="diag_bg_notification_text_task">A test task is recording DIAG data. Leaving the app continues only if background collection is enabled.</string>
+    <string name="diag_bg_notification_title_listen">Live view</string>
+    <string name="diag_bg_notification_text_listen">Showing live data. No test task is recording.</string>
 
 
 </resources>

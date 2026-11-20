@@ -155,7 +155,7 @@ fun SettingsScreen(
             }
             if (rootDiag != null) item {
                 SettingsGroup(stringResource(R.string.diag_settings_group)) {
-                    DiagCollectionSettings()
+                    DiagCollectionSettings(rootDiag)
                     SettingsDivider()
                     DeviceCapabilitySummary(rootDiag)
                     SettingsDivider()
@@ -251,7 +251,7 @@ private fun DeviceCapabilitySummary(rootDiag: RootDiagViewModel) {
 }
 
 @Composable
-private fun DiagCollectionSettings() {
+private fun DiagCollectionSettings(rootDiag: RootDiagViewModel? = null) {
     val context = LocalContext.current
     var background by remember { mutableStateOf(RootDiagPrefs.backgroundEnabled(context)) }
     var overlay by remember { mutableStateOf(RootDiagPrefs.overlayWanted(context) && Settings.canDrawOverlays(context)) }
@@ -275,9 +275,8 @@ private fun DiagCollectionSettings() {
                 }
                 RootDiagPrefs.setBackgroundEnabled(context, enabled)
                 background = enabled
-                if (enabled && RootDiagCollectorService.running.value) {
-                    RootDiagCollectorService.start(context)
-                } else if (!enabled) {
+                rootDiag?.onBackgroundPreferenceChanged(enabled)
+                if (!enabled) {
                     RootDiagCollectorService.stop(context)
                 }
             },

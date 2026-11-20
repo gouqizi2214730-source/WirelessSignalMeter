@@ -49,8 +49,8 @@ internal class SurveyTaskStore private constructor(context: Context) :
 
     @Synchronized fun ensure(): SurveyTask = activeState.value ?: start()
 
-    @Synchronized fun observationTask(): SurveyTask? =
-        activeState.value ?: if (allowAutomaticStart) start() else null
+    /** Returns the running test task only. Viewing live packets must not open a recording session. */
+    @Synchronized fun observationTask(): SurveyTask? = activeState.value
 
     @Synchronized fun start(name: String = ""): SurveyTask {
         val now = System.currentTimeMillis()
