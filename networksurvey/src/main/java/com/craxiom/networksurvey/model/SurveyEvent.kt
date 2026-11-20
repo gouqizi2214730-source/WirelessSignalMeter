@@ -7,6 +7,7 @@ internal data class SurveyTask(
     val endedAt: Long? = null,
     val startedElapsedMs: Long? = null,
     val clockId: String? = null,
+    val needLog: Boolean = false,
 )
 
 internal data class SurveyEvent(

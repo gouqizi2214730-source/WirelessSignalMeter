@@ -1,5 +1,6 @@
 package com.craxiom.networksurvey.ui.rootdiag
 
+import com.craxiom.networksurvey.model.SurveyTask
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -11,6 +12,20 @@ import java.io.IOException
 import kotlin.io.path.createTempDirectory
 
 class DiagRecordingPolicyTest {
+    @Test
+    fun automaticQmdlRequiresCurrentOptedInTask() {
+        val mode = DiagRecordingPolicy.Mode.TaskRecording
+        val task = SurveyTask("a", "test", 1)
+        val optedIn = task.copy(needLog = true)
+        assertNull(DiagRecordingPolicy.recordingTaskId(mode, task, false, null))
+        assertNull(DiagRecordingPolicy.recordingTaskId(mode, optedIn.copy(endedAt = 2), false, null))
+        assertNull(DiagRecordingPolicy.recordingTaskId(mode, optedIn, false, task.id))
+        assertNull(DiagRecordingPolicy.recordingTaskId(mode, null, false, null))
+        assertNull(DiagRecordingPolicy.recordingTaskId(DiagRecordingPolicy.Mode.LiveView, optedIn, false, null))
+        assertEquals("b", DiagRecordingPolicy.recordingTaskId(mode, optedIn.copy(id = "b"), false, task.id))
+        assertEquals("a", DiagRecordingPolicy.recordingTaskId(mode, task, true, task.id))
+    }
+
     @Test
     fun noTaskInForegroundIsLiveViewNotRecording() {
         val mode = DiagRecordingPolicy.mode(false, true, true, false)

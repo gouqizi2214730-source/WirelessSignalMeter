@@ -230,7 +230,7 @@ private val DiagRecord.isUnknownRrc: Boolean
     get() = type == "rrc" && data.optBoolean("decode_incomplete") &&
         data.optString("ch").let { it == "?" || it.startsWith("pdu", ignoreCase = true) }
 
-private val DiagRecord.isPacket: Boolean get() = type == "rrc" || type == "nas" || type == "sip"
+private val DiagRecord.isPacket: Boolean get() = type == "rrc" || type == "nas" || type == "nas_pdu" || type == "sip"
 private val DiagRecord.isTimelineEvent: Boolean
     get() = protocol == SignalingProtocol.Event || data.optBoolean("timeline_event")
 
@@ -404,7 +404,7 @@ internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
                         if (!searchOpen) search = ""
                     }, active = searchOpen),
                     AppBarAction(R.drawable.ic_filter, R.string.diag_message_options, onClick = { menuOpen = true },
-                        active = !showPaging || showDiagnostics || filter == ProtocolFilter.Ims),
+                        active = !showPaging || showDiagnostics),
                 ))
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -447,8 +447,6 @@ internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
                             text = { Text(stringResource(if (showDiagnostics) R.string.diag_hide_diagnostics else R.string.diag_show_diagnostics)) },
                             onClick = { menuOpen = false; showDiagnostics = !showDiagnostics },
                         )
-                        DropdownMenuItem(text = { Text(stringResource(ProtocolFilter.Ims.label)) },
-                            onClick = { menuOpen = false; filter = ProtocolFilter.Ims })
                     }
             }
             CaptureErrors(status)
@@ -491,10 +489,9 @@ internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
                 }
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                val first = filter.takeIf { it == ProtocolFilter.Ims } ?: ProtocolFilter.All
-                for (option in listOf(first, ProtocolFilter.Nr, ProtocolFilter.Lte, ProtocolFilter.Nas, ProtocolFilter.Event)) {
+                for (option in ProtocolFilter.entries) {
                     SignalListAction(stringResource(option.label), Modifier.weight(1f), selected = filter == option) {
-                        filter = if (option == first && first != ProtocolFilter.All) ProtocolFilter.All else option
+                        filter = option
                     }
                 }
             }
@@ -542,7 +539,12 @@ internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
                 if (visible.isEmpty()) {
                     item("empty") {
                         Text(
-                            stringResource(if (records.isEmpty()) R.string.diag_no_messages else R.string.diag_no_matching_messages),
+                            stringResource(when {
+                                status.status == RootDiagStatus.Running && !status.hasModemPackets &&
+                                    filter != ProtocolFilter.Ims -> R.string.diag_waiting_modem_packets
+                                records.isEmpty() -> R.string.diag_no_messages
+                                else -> R.string.diag_no_matching_messages
+                            }),
                             modifier = Modifier.padding(16.dp),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

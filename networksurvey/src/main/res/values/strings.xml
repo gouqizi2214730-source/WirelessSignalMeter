@@ -208,6 +208,7 @@
     <string name="lock_ready">Root and DIAG channel available</string>
     <string name="lock_channel_caps">Channel %1$s · %2$s</string>
     <string name="lock_checking">Checking Root and DIAG</string>
+    <string name="lock_unchecked">Device not checked</string>
     <string name="lock_unavailable">Root authorization or the supported Qualcomm DIAG channel is unavailable</string>
     <string name="lock_working">Operation in progress</string>
     <string name="lock_scope">Qualcomm diag-router · primary modem stack. SIM selection is unavailable.</string>
@@ -1298,6 +1299,7 @@
     <string name="diag_ims">IMS / VoLTE / VoNR</string>
     <string name="diag_no_metrics">Waiting for supported modem records</string>
     <string name="diag_no_messages">No signaling messages yet</string>
+    <string name="diag_waiting_modem_packets">Connected to DIAG. Waiting for modem packets.</string>
     <string name="diag_estimate">Experimental decode</string>
     <string name="diag_checking">Checking Root access</string>
     <string name="diag_no_root">Root unavailable · Android signal active</string>

@@ -1,5 +1,6 @@
 package com.craxiom.networksurvey.ui.main
 
+import android.os.SystemClock
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -253,10 +254,14 @@ private fun SignalTab(rootDiag: RootDiagViewModel, bottomPadding: Dp, active: Bo
     val androidCells = fragment?.cellularModel?.observeAsState()?.value
     val protocol = androidCells?.servingCellProtocol?.observeAsState()?.value
     val nrBandwidthDiagnostic = androidCells?.nrBandwidthDiagnostic?.observeAsState()?.value
+    val nrServing = androidCells?.nrServingCell?.observeAsState()?.value
     // DIAG has no reliable subscription id, so dual-SIM display stays on Android Telephony.
     // Collection itself is not stopped when more than one SIM is active.
-    val diagLive = signal.status == RootDiagStatus.Running || signal.useRootSignal
-    val useRoot = DeviceCapabilities.displayUsesDiag(simCount, protocol?.name, diagLive)
+    val diagLive = signal.status == RootDiagStatus.Running
+    val now = SystemClock.elapsedRealtime()
+    val diagServing = signal.hasLiveServingCell(protocol?.name, now) ||
+        (protocol == CellularProtocol.LTE && nrServing != null && signal.hasLiveServingCell("NR", now))
+    val useRoot = DeviceCapabilities.displayUsesDiag(simCount, protocol?.name, diagServing)
     LaunchedEffect(active, useRoot, protocol, simCount) {
         if (active) {
             rootDiag.recordSignalMode(useRoot, protocol?.name, simCount)

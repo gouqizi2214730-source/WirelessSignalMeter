@@ -115,6 +115,7 @@ static const struct code_info k_default_codes[] = {
     { 0xB193, "LTE ML1 Serving Cell Meas Response" },
     { 0xB195, "LTE ML1 Connected Neighbor Meas" },
     { 0xB139, "LTE ML1 PUSCH Tx Report" },
+    { 0xB13C, "LTE ML1 PUCCH Tx Report" },
     { 0xB14D, "LTE PHY PUCCH CSI Feedback" },
     { 0xB14E, "LTE PHY PUSCH CSI Feedback" },
     { 0xB16D, "LTE ML1 GM Tx Report" },
@@ -170,7 +171,7 @@ static const struct code_info k_default_codes[] = {
 /* Extra baseband measurements, enabled only during QMDL recording. */
 static uint16_t k_qmdl_codes[] = {
     0xB116,
-    0xB13C, 0xB16C,  /* LTE PUCCH Tx trace and DCI */
+    0xB16C,          /* LTE DCI */
     0xB880, 0xB885, 0xB886,  /* NR MAC TB reports and DCI */
     0xB950, 0xB951,          /* NR ML1 DL common/dedicated configuration */
 };

@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.craxiom.networksurvey.BuildConfig
 import com.craxiom.networksurvey.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -14,14 +15,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
-internal enum class LockAvailability { Checking, Ready, Unavailable }
+internal enum class LockAvailability { Unchecked, Checking, Ready, Unavailable }
 internal data class BandLockState(
-    val availability: LockAvailability = LockAvailability.Checking,
+    val availability: LockAvailability = LockAvailability.Unchecked,
     val busy: Boolean = false,
     val channel: String = "",
     val caps: List<Pair<String, Boolean>> = emptyList(),
@@ -38,9 +40,46 @@ internal class BandLockViewModel(application: Application) : AndroidViewModel(ap
     private val mutableState = MutableStateFlow(BandLockState())
     val state = mutableState.asStateFlow()
     val device = "${Build.MANUFACTURER} ${Build.MODEL} · ${Build.SOC_MODEL}"
+    private val probeCache = app.getSharedPreferences("band_lock_probe", 0)
+    private val probeCacheKey = "probe:${BuildConfig.VERSION_CODE}:${Build.FINGERPRINT}:${Build.SOC_MODEL}"
     @Volatile private var process: Process? = null
 
-    init { refresh() }
+    init {
+        restoreProbe()?.let { mutableState.value = it }
+    }
+
+    private fun restoreProbe(): BandLockState? {
+        val stored = probeCache.getString(probeCacheKey, null) ?: return null
+        return runCatching {
+            val cached = JSONObject(stored)
+            val channel = cached.getString("channel")
+            val rawCaps = cached.getJSONObject("caps")
+            val caps = rawCaps.keys().asSequence().map { it to rawCaps.getBoolean(it) }.toList()
+            val profile = classify(channel.takeIf { cached.getBoolean("ready") }, caps)
+            BandLockState(
+                availability = if (profile.canLock) LockAvailability.Ready else LockAvailability.Unavailable,
+                channel = channel,
+                caps = caps,
+                profile = profile,
+                lteBackup = cached.getBoolean("lte_backup"),
+                nrBackup = cached.getBoolean("nr_backup"),
+            )
+        }.getOrNull()
+    }
+
+    private fun saveProbe(state: BandLockState) {
+        val value = JSONObject()
+            .put("ready", state.availability == LockAvailability.Ready)
+            .put("channel", state.channel)
+            .put("caps", JSONObject(state.caps.toMap()))
+            .put("lte_backup", state.lteBackup)
+            .put("nr_backup", state.nrBackup)
+        probeCache.edit().putString(probeCacheKey, value.toString()).apply()
+    }
+
+    private fun classify(channel: String?, caps: List<Pair<String, Boolean>>) = BandLockProfiles.classify(
+        Build.MANUFACTURER, Build.MODEL, Build.SOC_MODEL, Build.HARDWARE, channel, caps.count { it.second },
+    )
 
     fun refresh() = run(BandLockCommand.probe(Build.MODEL, Build.SOC_MODEL))
     fun clearLog() { if (!mutableState.value.busy) mutableState.value = mutableState.value.copy(log = "") }
@@ -63,11 +102,7 @@ internal class BandLockViewModel(application: Application) : AndroidViewModel(ap
                     .firstOrNull { it.startsWith("CHANNEL ") }
                     ?.removePrefix("CHANNEL ")?.trim().orEmpty() else current.channel
                 val probedCaps = if (probe) parseCaps(outcome.output) else current.caps
-                val profile = if (probe) BandLockProfiles.classify(
-                    Build.MANUFACTURER, Build.MODEL, Build.SOC_MODEL, Build.HARDWARE,
-                    probedChannel.takeIf { ready && it.isNotEmpty() },
-                    probedCaps.count { it.second },
-                ) else current.profile
+                val profile = if (probe) classify(probedChannel.takeIf { ready }, probedCaps) else current.profile
                 mutableState.value = current.copy(
                     busy = false,
                     availability = if (probe) {
@@ -95,6 +130,7 @@ internal class BandLockViewModel(application: Application) : AndroidViewModel(ap
                         else -> R.string.lock_failed
                     },
                 )
+                if (probe || accepted) saveProbe(mutableState.value)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -107,6 +143,7 @@ internal class BandLockViewModel(application: Application) : AndroidViewModel(ap
                     ) else mutableState.value.profile,
                     result = if (fromConsole || probe) null else R.string.lock_failed,
                 )
+                if (probe) probeCache.edit().remove(probeCacheKey).apply()
             } finally {
                 mutableState.value = mutableState.value.copy(busy = false)
             }

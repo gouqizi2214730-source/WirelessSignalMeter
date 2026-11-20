@@ -150,6 +150,7 @@ internal fun BandLockScreen(rootDiag: RootDiagViewModel, onBack: () -> Unit, mod
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(model.device, style = MaterialTheme.typography.titleSmall)
                     Text(stringResource(when {
+                        state.availability == LockAvailability.Unchecked -> R.string.lock_unchecked
                         state.availability == LockAvailability.Checking -> R.string.lock_checking
                         operating -> R.string.lock_working
                         state.availability == LockAvailability.Ready && state.profile.level == LockSupportLevel.Verified -> R.string.lock_ready
@@ -158,7 +159,8 @@ internal fun BandLockScreen(rootDiag: RootDiagViewModel, onBack: () -> Unit, mod
                     }), style = MaterialTheme.typography.bodySmall,
                         color = if (state.availability == LockAvailability.Unavailable) MaterialTheme.colorScheme.error
                         else MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (state.profile.reason.isNotBlank() && state.availability != LockAvailability.Checking) {
+                    if (state.profile.reason.isNotBlank() &&
+                        state.availability in setOf(LockAvailability.Ready, LockAvailability.Unavailable)) {
                         Text(stringResource(when (state.profile.reason) {
                             "mediatek_unsupported" -> R.string.lock_reason_mediatek
                             "exynos_unsupported" -> R.string.lock_reason_exynos

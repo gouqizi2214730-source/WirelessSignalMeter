@@ -156,6 +156,7 @@
     <string name="lock_ready">Root 与 DIAG 通道可用</string>
     <string name="lock_channel_caps">通道 %1$s · %2$s</string>
     <string name="lock_checking">正在检测 Root 与 DIAG</string>
+    <string name="lock_unchecked">尚未检测设备</string>
     <string name="lock_unavailable">未获得 Root 授权，或设备不提供受支持的高通 DIAG 通道</string>
     <string name="lock_working">正在执行操作</string>
     <string name="lock_scope">高通 diag-router · 作用于基带主协议栈，暂不支持指定 SIM 卡。</string>
@@ -888,6 +889,7 @@
     <string name="diag_ims">IMS / VoLTE / VoNR</string>
     <string name="diag_no_metrics">等待设备上报可解析的数据</string>
     <string name="diag_no_messages">暂未收到信令</string>
+    <string name="diag_waiting_modem_packets">已连接 DIAG，正在等待基带数据</string>
     <string name="diag_estimate">试解数据</string>
     <string name="diag_checking">正在检测 Root</string>
     <string name="diag_no_root">未检测到 Root，信号使用 Android 接口</string>

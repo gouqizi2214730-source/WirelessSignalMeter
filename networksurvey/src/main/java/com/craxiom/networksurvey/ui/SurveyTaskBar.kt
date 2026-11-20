@@ -22,6 +22,7 @@ internal fun SurveyTaskBar() {
     var task by remember { mutableStateOf<SurveyTask?>(null) }
     var edit by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("") }
+    var needLog by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf(false) }
     LaunchedEffect(context) {
@@ -39,7 +40,11 @@ internal fun SurveyTaskBar() {
                 task?.let { Text(it.id, style = MaterialTheme.typography.labelSmall, maxLines = 1,
                     overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
-            TextButton(enabled = !busy && store != null, onClick = { name = ""; edit = true }) { Text("新任务") }
+            TextButton(enabled = !busy && store != null, onClick = {
+                name = ""
+                needLog = false
+                edit = true
+            }) { Text("新任务") }
             if (task != null) TextButton(enabled = !busy, onClick = {
                 busy = true
                 scope.launch {
@@ -55,11 +60,23 @@ internal fun SurveyTaskBar() {
     if (edit) AlertDialog(
         onDismissRequest = { if (!busy) edit = false },
         title = { Text("新建采集任务") },
-        text = { OutlinedTextField(name, { name = it.take(80) }, label = { Text("任务名称") }, singleLine = true) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(name, { name = it.take(80) }, label = { Text("任务名称") }, singleLine = true)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text("录制 QMDL")
+                        Text("仅此任务期间录制基带日志", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = needLog, onCheckedChange = { needLog = it })
+                }
+            }
+        },
         confirmButton = { TextButton(enabled = !busy, onClick = {
             busy = true
             scope.launch {
-                try { withContext(Dispatchers.IO) { store?.start(name) }; edit = false }
+                try { withContext(Dispatchers.IO) { store?.start(name, needLog) }; edit = false }
                 catch (_: android.database.SQLException) { error = true }
                 finally { busy = false }
             }

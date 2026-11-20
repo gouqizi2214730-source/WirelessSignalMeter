@@ -1,5 +1,6 @@
 package com.craxiom.networksurvey.ui.rootdiag
 
+import com.craxiom.networksurvey.model.SurveyTask
 import java.io.File
 import java.io.IOException
 
@@ -26,6 +27,10 @@ internal object DiagRecordingPolicy {
     fun shouldListen(mode: Mode): Boolean = mode != Mode.Idle
 
     fun shouldRecord(mode: Mode): Boolean = mode == Mode.TaskRecording
+
+    fun recordingTaskId(mode: Mode, task: SurveyTask?, manual: Boolean, blockedTaskId: String?): String? =
+        task?.takeIf { shouldRecord(mode) && it.endedAt == null &&
+            (manual || (it.needLog && it.id != blockedTaskId)) }?.id
 
     fun shouldHoldService(mode: Mode, overlayWanted: Boolean): Boolean = when (mode) {
         Mode.TaskRecording -> true

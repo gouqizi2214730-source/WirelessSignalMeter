@@ -46,6 +46,35 @@ static void qmdl_request_mask(int enabled) { step(MASK); }
 
 #include "qmdl_stop_under_test.inc"
 
+enum { DIAG_Q_SLOT = 64 };
+static struct { struct { int oversized; } stats; } g_dq;
+static int g_dq_mu, g_dq_cv, decoded, queued;
+static uint16_t seen_codes[3];
+static uint16_t rd16(const uint8_t *buf) { return buf[0] | ((uint16_t)buf[1] << 8); }
+static void handle_record(const uint8_t *data, int size) { decoded++; }
+static void diag_q_push(void *queue, const uint8_t *data, uint16_t size) {
+    if (queued < 3) seen_codes[queued] = rd16(data + 2);
+    queued++;
+}
+static void pthread_cond_signal(int *ignored) {}
+
+#include "diag_live_under_test.inc"
+
+__declspec(dllexport) int test_diag_live_without_recording(void) {
+    static uint8_t packets[36] = {
+        12, 0, 0xc0, 0xb0, 0, 0, 0, 0, 0, 0, 0, 0,
+        12, 0, 0x0a, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0,
+        12, 0, 0x93, 0xb1, 0, 0, 0, 0, 0, 0, 0, 0,
+    };
+    if (g_qmdl_fd != -1) return __LINE__;
+    on_log(packets, sizeof(packets));
+    if (queued != 3 || decoded != 0) return __LINE__;
+    if (seen_codes[0] != 0xb0c0 || seen_codes[1] != 0xb80a || seen_codes[2] != 0xb193) return __LINE__;
+    if (g_qmdl_fd != -1 || file_size || write_calls || g_qmdl_packets || g_qmdl_pending_bytes) return __LINE__;
+    trace = 0;
+    return 0;
+}
+
 __declspec(dllexport) int test_qmdl_stop(void) {
     static const uint8_t record[] = { 12, 0, 0x7d, 0x7e, 0, 1, 2, 3, 4, 5, 6, 7 };
     static const uint8_t expected_frame[] = {

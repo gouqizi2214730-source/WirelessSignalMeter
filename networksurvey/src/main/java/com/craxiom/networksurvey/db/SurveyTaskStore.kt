@@ -17,7 +17,7 @@ import java.util.UUID
 
 /** Tasks survive navigation and process restarts; only explicit finish/new closes them. */
 internal class SurveyTaskStore private constructor(context: Context) :
-    SQLiteOpenHelper(context.applicationContext, "survey_tasks.db", null, 1) {
+    SQLiteOpenHelper(context.applicationContext, "survey_tasks.db", null, 2) {
     private val activeState = MutableStateFlow<SurveyTask?>(null)
     val active = activeState.asStateFlow()
     private val revisionState = MutableStateFlow(0L)
@@ -27,13 +27,13 @@ internal class SurveyTaskStore private constructor(context: Context) :
 
     init {
         readableDatabase.rawQuery(
-            "SELECT id,name,started_at,started_elapsed_ms,clock_id FROM survey_task WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1", null,
+            "SELECT id,name,started_at,started_elapsed_ms,clock_id,need_log FROM survey_task WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1", null,
         ).use { if (it.moveToFirst()) activeState.value = SurveyTask(it.getString(0), it.getString(1), it.getLong(2),
-            startedElapsedMs = it.getLong(3), clockId = it.getString(4)) }
+            startedElapsedMs = it.getLong(3), clockId = it.getString(4), needLog = it.getInt(5) != 0) }
     }
 
     override fun onCreate(db: SQLiteDatabase) {
-        db.execSQL("CREATE TABLE survey_task(id TEXT PRIMARY KEY,name TEXT NOT NULL,started_at INTEGER NOT NULL,ended_at INTEGER,started_elapsed_ms INTEGER NOT NULL,clock_id TEXT NOT NULL)")
+        db.execSQL("CREATE TABLE survey_task(id TEXT PRIMARY KEY,name TEXT NOT NULL,started_at INTEGER NOT NULL,ended_at INTEGER,started_elapsed_ms INTEGER NOT NULL,clock_id TEXT NOT NULL,need_log INTEGER NOT NULL DEFAULT 0)")
         db.execSQL("CREATE TABLE task_mission(task_id TEXT NOT NULL,mission_id TEXT NOT NULL,PRIMARY KEY(task_id,mission_id))")
         db.execSQL("""CREATE TABLE survey_event(id TEXT PRIMARY KEY,task_id TEXT NOT NULL,time INTEGER NOT NULL,
             elapsed_ms INTEGER NOT NULL,clock_id TEXT NOT NULL,source TEXT NOT NULL,kind TEXT NOT NULL,
@@ -41,18 +41,20 @@ internal class SurveyTaskStore private constructor(context: Context) :
         db.execSQL("CREATE INDEX idx_event_task_time ON survey_event(task_id,time)")
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) db.execSQL("ALTER TABLE survey_task ADD COLUMN need_log INTEGER NOT NULL DEFAULT 0")
+    }
 
     @Synchronized fun ensure(): SurveyTask = activeState.value ?: start()
 
     /** Returns the running test task only. Viewing live packets must not open a recording session. */
     @Synchronized fun observationTask(): SurveyTask? = activeState.value
 
-    @Synchronized fun start(name: String = ""): SurveyTask {
+    @Synchronized fun start(name: String = "", needLog: Boolean = false): SurveyTask {
         val now = System.currentTimeMillis()
         val task = SurveyTask(UUID.randomUUID().toString(), name.trim().take(80).ifBlank {
             "采集 " + SimpleDateFormat("MM-dd HH:mm:ss", Locale.getDefault()).format(Date(now))
-        }, now, startedElapsedMs = SystemClock.elapsedRealtime(), clockId = CLOCK_ID)
+        }, now, startedElapsedMs = SystemClock.elapsedRealtime(), clockId = CLOCK_ID, needLog = needLog)
         val db = writableDatabase
         db.beginTransaction()
         try {
@@ -63,6 +65,7 @@ internal class SurveyTaskStore private constructor(context: Context) :
             db.insertOrThrow("survey_task", null, ContentValues().apply {
                 put("id", task.id); put("name", task.name); put("started_at", now)
                 put("started_elapsed_ms", task.startedElapsedMs); put("clock_id", task.clockId)
+                put("need_log", if (task.needLog) 1 else 0)
             })
             insertEvent(db, lifecycle(task, now, "task_start", "任务开始"))
             activeMission?.let { mission ->
@@ -129,10 +132,11 @@ internal class SurveyTaskStore private constructor(context: Context) :
 
     fun taskMetadata(taskId: String): JSONObject {
         val result = JSONObject().put("task_id", taskId)
-        readableDatabase.rawQuery("SELECT name,started_at,ended_at,started_elapsed_ms,clock_id FROM survey_task WHERE id=?", arrayOf(taskId)).use {
+        readableDatabase.rawQuery("SELECT name,started_at,ended_at,started_elapsed_ms,clock_id,need_log FROM survey_task WHERE id=?", arrayOf(taskId)).use {
             if (it.moveToFirst()) result.put("name", it.getString(0)).put("started_at", it.getLong(1))
                 .put("ended_at", if (it.isNull(2)) JSONObject.NULL else it.getLong(2))
                 .put("started_elapsed_ms", it.getLong(3)).put("clock_id", it.getString(4))
+                .put("need_log", it.getInt(5) != 0)
         }
         val missions = org.json.JSONArray()
         readableDatabase.rawQuery("SELECT mission_id FROM task_mission WHERE task_id=? ORDER BY mission_id", arrayOf(taskId))
@@ -141,10 +145,10 @@ internal class SurveyTaskStore private constructor(context: Context) :
     }
 
     fun recentTasks(): List<SurveyTask> = readableDatabase.rawQuery(
-        "SELECT id,name,started_at,ended_at,started_elapsed_ms,clock_id FROM survey_task ORDER BY started_at DESC LIMIT 200", null,
+        "SELECT id,name,started_at,ended_at,started_elapsed_ms,clock_id,need_log FROM survey_task ORDER BY started_at DESC LIMIT 200", null,
     ).use { c -> buildList {
         while (c.moveToNext()) add(SurveyTask(c.getString(0), c.getString(1), c.getLong(2),
-            if (c.isNull(3)) null else c.getLong(3), c.getLong(4), c.getString(5)))
+            if (c.isNull(3)) null else c.getLong(3), c.getLong(4), c.getString(5), c.getInt(6) != 0))
     } }
 
     private fun lifecycle(task: SurveyTask, now: Long, kind: String, title: String) =

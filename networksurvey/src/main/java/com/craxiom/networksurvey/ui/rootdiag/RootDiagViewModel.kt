@@ -11,6 +11,7 @@ import com.craxiom.networksurvey.BuildConfig
 import com.craxiom.networksurvey.db.SurveyTaskStore
 import com.craxiom.networksurvey.db.toJson
 import com.craxiom.networksurvey.model.SurveyEvent
+import com.craxiom.networksurvey.model.SurveyTask
 import com.craxiom.networksurvey.model.ownsDiagnostic
 import com.craxiom.networksurvey.R
 import com.craxiom.networksurvey.fragments.model.CellularViewModel
@@ -69,14 +70,18 @@ internal data class RootSignalState(
     val cachedMeasureIds: Set<Long> = emptySet(),
     val failureReason: String? = null,
     val nrCarriers: List<NrCarrier> = emptyList(),
+    val hasModemPackets: Boolean = false,
 ) {
-    val useRootSignal: Boolean
-        get() = (status == RootDiagStatus.Running || status == RootDiagStatus.Checking ||
-            status == RootDiagStatus.Starting || status == RootDiagStatus.Stopped) &&
-            records.any { record ->
-                record.type == "serving" && record.data.optInt("pci", -1) >= 0 &&
-                    record.data.optInt("arfcn", -1) >= 0
-            }
+    fun hasLiveServingCell(protocol: String?, now: Long): Boolean =
+        status == RootDiagStatus.Running && records.any { record ->
+            if (record.type != "serving" || record.id in cachedMeasureIds) return@any false
+            val rat = record.data.optString("rat")
+            val age = record.data.optLong("seen_age_ms", -1)
+            (protocol == null || protocol == rat) &&
+                (rat == "LTE" || rat == "NR") && record.data.optInt("pci", -1) >= 0 &&
+                record.data.optInt("arfcn", -1) >= 0 && age >= 0 &&
+                now - record.receivedAt + age in 0..15_000L
+        }
 }
 
 internal enum class QmdlPhase { Idle, Starting, Recording, Stopping }
@@ -138,7 +143,8 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
     private var selectedSubscriptionId: Int? = null
     private val imsProviders = linkedMapOf<String, ImsProviderStatus>()
     private var lastImsEvidence: ImsEvidence? = null
-    private var overlayTaskId: String? = null
+    private var taskStore: SurveyTaskStore? = null
+    private var activeTask: SurveyTask? = null
     private var bandLockProfile = BandLockProfile(LockSupportLevel.Unsupported, "unknown", reason = "unchecked")
     private val capabilityState = MutableStateFlow(currentCapability())
     internal val capability = capabilityState.asStateFlow()
@@ -176,11 +182,14 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
         }
         viewModelScope.launch {
             val store = withContext(Dispatchers.IO) {
-                runCatching { SurveyTaskStore.get(app) }.getOrNull()
+                runCatching { SurveyTaskStore.get(app) }.onFailure {
+                    timber.log.Timber.w(it, "Could not open diagnostic task store")
+                }.getOrNull()
             } ?: return@launch
+            taskStore = store
             store.active.collect { task ->
-                overlayTaskId = task?.id
-                if (qmdlAutoStartBlockedTask != overlayTaskId) qmdlAutoStartBlockedTask = null
+                activeTask = task
+                if (qmdlAutoStartBlockedTask != task?.id) qmdlAutoStartBlockedTask = null
                 applyCollectionPolicy()
             }
         }
@@ -191,13 +200,13 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
     }
 
     private fun eligibleQmdlTask(): String? =
-        overlayTaskId?.takeIf { DiagRecordingPolicy.shouldRecord(currentMode()) }
+        DiagRecordingPolicy.recordingTaskId(currentMode(), activeTask, manual = true, blockedTaskId = null)
 
     private fun requestQmdlStart(manual: Boolean) {
-        val taskId = eligibleQmdlTask() ?: return
+        val taskId = DiagRecordingPolicy.recordingTaskId(currentMode(), activeTask, manual, qmdlAutoStartBlockedTask)
+            ?: return
         if (signalState.value.status != RootDiagStatus.Running ||
             qmdlState.value.phase != QmdlPhase.Idle || qmdlState.value.recovering || qmdlExport.value != null) return
-        if (!manual && qmdlAutoStartBlockedTask == taskId) return
         qmdlTaskId = taskId
         lastQmdlStatus = null
         qmdlState.value = qmdlState.value.copy(phase = QmdlPhase.Starting, packets = 0, bytes = 0,
@@ -211,7 +220,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
     }
 
     private fun blockQmdlAutoStart() {
-        if (qmdlTaskId != null && qmdlTaskId == overlayTaskId) qmdlAutoStartBlockedTask = qmdlTaskId
+        if (qmdlTaskId != null && qmdlTaskId == activeTask?.id) qmdlAutoStartBlockedTask = qmdlTaskId
     }
 
     private fun requestQmdlStop() {
@@ -244,7 +253,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
             }
             Triple(outcome, recordingSession.latestRecording() != null, bytes)
         }
-        if (saved.first == QmdlResult.Limited || saved.first == QmdlResult.Error) blockQmdlAutoStart()
+        if (saved.first in setOf(QmdlResult.Empty, QmdlResult.Limited, QmdlResult.Error)) blockQmdlAutoStart()
         qmdlTaskId = null
         qmdlState.value = qmdlState.value.copy(
             phase = QmdlPhase.Idle, result = saved.first, hasRecording = saved.second, recovering = false,
@@ -426,17 +435,13 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
     private var nextId = 0L
     private var firstVisibleMessageId = 0L
     private var capture: Job? = null
-    private var authorized = false
     private var foreground = false
-    private var attempted = false
     private var pausedByUser = false
     private var restartAfterStop = false
 
     internal fun enterForeground() {
         foreground = true
-        if (pausedByUser || (attempted && !authorized)) return
         applyCollectionPolicy()
-        if (capture != null && capture?.isCancelled == true) restartAfterStop = true
     }
 
     internal fun leaveForeground() {
@@ -448,7 +453,8 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
 
     internal fun retry() {
         pausedByUser = false
-        if (capture == null) start() else if (capture?.isCancelled == true) restartAfterStop = true
+        restartAttempt = 0
+        applyCollectionPolicy(explicitRetry = true)
     }
 
     internal fun pause() {
@@ -457,18 +463,21 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
     }
 
     private fun currentMode(): DiagRecordingPolicy.Mode = DiagRecordingPolicy.mode(
-        taskRunning = overlayTaskId != null,
+        taskRunning = activeTask != null,
         foreground = foreground,
         backgroundAllowed = RootDiagPrefs.backgroundEnabled(app),
         paused = pausedByUser,
     )
 
-    private fun applyCollectionPolicy() {
+    private fun applyCollectionPolicy(explicitRetry: Boolean = false) {
         val mode = currentMode()
         collectionModeState.value = mode
         if (qmdlTaskId != eligibleQmdlTask()) requestQmdlStop()
         if (DiagRecordingPolicy.shouldListen(mode)) {
-            if (capture == null && !pausedByUser) start()
+            if (capture?.isCancelled == true) restartAfterStop = true
+            if (capture == null && (explicitRetry || signalState.value.status !in setOf(
+                    RootDiagStatus.Denied, RootDiagStatus.Unavailable, RootDiagStatus.Unsupported,
+                ))) start()
         } else {
             restartAfterStop = false
             capture?.cancel()
@@ -485,7 +494,6 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
     private fun start() {
         if (capture != null) return
         if (!DiagRecordingPolicy.shouldListen(currentMode())) return
-        attempted = true
         signalState.value = RootSignalState(
             RootDiagStatus.Checking, lastMeasurements.values.toList() + lastConfiguration.values,
             cachedMeasureIds = lastMeasurements.values.mapTo(mutableSetOf()) { it.id },
@@ -592,11 +600,6 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
     }
 
     private suspend fun captureRecords() {
-        val tasks = try { withContext(Dispatchers.IO) { SurveyTaskStore.get(app) } }
-        catch (error: android.database.SQLException) {
-            timber.log.Timber.w(error, "Could not open diagnostic task store")
-            null
-        }
         val helper = File(app.applicationInfo.nativeLibraryDir, "libwireless_root_diag.so")
         val run = JSONObject().put("type", "collector_run").put("id", nextCollectorRun++)
             .put("started_ms", System.currentTimeMillis()).put("clock_id", SurveyTaskStore.CLOCK_ID)
@@ -606,6 +609,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
         var process: Process? = null
         var status = RootDiagStatus.Checking
         var errorCode: Int? = null
+        var hasModemPackets = false
         val metrics = mutableMapOf<String, DiagRecord>()
         val cached = lastMeasurements.toMutableMap()
         val nrCarriers = RootNrCarriers()
@@ -667,6 +671,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                         status == RootDiagStatus.Unavailable
                 },
                 nrCarriers = carriers,
+                hasModemPackets = hasModemPackets,
             )
             publishOverlay(status, signalState.value.records)
             publishCapability()
@@ -756,12 +761,11 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
             val now = SystemClock.elapsedRealtime()
             val receivedTime = System.currentTimeMillis()
             val type = value.optString("type")
-            val task = try {
-                tasks?.active?.value ?: if (type in signalingTypes || type == "serving") tasks?.observationTask() else null
-            } catch (error: android.database.SQLException) {
-                timber.log.Timber.w(error, "Could not associate diagnostic task")
-                null
-            }?.takeIf { it.ownsDiagnostic(value.optLong("t"), receivedTime, now, SurveyTaskStore.CLOCK_ID) }
+            // Task ownership is metadata for replay; it never gates the live stream.
+            val tasks = taskStore
+            val task = tasks?.active?.value?.takeIf {
+                it.ownsDiagnostic(value.optLong("t"), receivedTime, now, SurveyTaskStore.CLOCK_ID)
+            }
             value.put("task_id", task?.id ?: JSONObject.NULL).put("received_time_ms", receivedTime)
                 .put("received_elapsed_ms", now).put("clock_id", SurveyTaskStore.CLOCK_ID)
                 .put("collector_run", run.optLong("id"))
@@ -840,11 +844,10 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                         "denied" -> RootDiagStatus.Denied
                         else -> return
                     }
-                    if (next == RootDiagStatus.Starting) authorized = true
-                    if (next == RootDiagStatus.Denied) authorized = false
                     if (next == RootDiagStatus.Running && readyAt == null) readyAt = now
                     status = next
                     errorCode = value.optInt("rc").takeIf { it != 0 }
+                    hasModemPackets = value.optLong("pkts") > 0
                     lastHeartbeat = now
                     overlayDropped = value.optLong("decode_dropped")
                 }
@@ -877,6 +880,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                     )
                     overlayImsCall = call ?: overlayImsCall
                     publishCapability()
+                    if (isStateChange) queueSignaling(pending, DiagRecord(nextId++, now, value))
                 }
                 "qmdl" -> {
                     if (qmdlCommand == null) return
@@ -1203,8 +1207,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                         }
                     }
                     if (record.type in signalingTypes) {
-                        if (pending.size == MAX_MESSAGES) pending.removeFirst()
-                        pending.addLast(record)
+                        queueSignaling(pending, record)
                     }
                 }
             }
@@ -1213,7 +1216,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
         try {
             if (!withContext(Dispatchers.IO) { helper.isFile }) {
                 status = RootDiagStatus.Unsupported
-                signalState.value = RootSignalState(status)
+                publish(SystemClock.elapsedRealtime())
                 return
             }
             val running = withContext(Dispatchers.IO) {
@@ -1338,6 +1341,11 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 }
             }
         }
+    }
+
+    private fun queueSignaling(pending: ArrayDeque<DiagRecord>, record: DiagRecord) {
+        if (pending.size == MAX_MESSAGES) pending.removeFirst()
+        pending.addLast(record)
     }
 
     private fun collectorCommand(helper: File): String {
