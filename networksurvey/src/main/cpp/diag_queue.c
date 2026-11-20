@@ -1,0 +1,32 @@
+#include "diag_queue.h"
+#include <string.h>
+
+void diag_q_init(struct diag_queue *q) { memset(q, 0, sizeof(*q)); }
+int diag_q_empty(const struct diag_queue *q) { return q->count == 0; }
+unsigned diag_q_count(const struct diag_queue *q) { return q->count; }
+
+int diag_q_push(struct diag_queue *q, const uint8_t *data, uint16_t len) {
+    if (!data || !len) return 0;
+    if (q->count >= DIAG_Q_SLOTS) {
+        q->stats.dropped++;
+        q->stats.dropped_bytes += len;
+        return 0;
+    }
+    memcpy(q->bytes[q->head], data, len);
+    q->len[q->head] = len;
+    q->head = (q->head + 1) % DIAG_Q_SLOTS;
+    q->count++;
+    q->stats.pushed++;
+    if (q->count > q->stats.high_water) q->stats.high_water = q->count;
+    return 1;
+}
+
+int diag_q_pop(struct diag_queue *q, struct diag_q_item *item) {
+    if (!q->count) return 0;
+    item->data = q->bytes[q->tail];
+    item->len = q->len[q->tail];
+    q->tail = (q->tail + 1) % DIAG_Q_SLOTS;
+    q->count--;
+    q->stats.popped++;
+    return 1;
+}

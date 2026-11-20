@@ -24,6 +24,7 @@ internal data class BandLockState(
     val busy: Boolean = false,
     val channel: String = "",
     val caps: List<Pair<String, Boolean>> = emptyList(),
+    val profile: BandLockProfile = BandLockProfile(LockSupportLevel.Unsupported, "unknown", reason = "unchecked"),
     val lteBackup: Boolean = false,
     val nrBackup: Boolean = false,
     val result: Int? = null,
@@ -55,21 +56,30 @@ internal class BandLockViewModel(application: Application) : AndroidViewModel(ap
                 val accepted = outcome.exit == 0 && outcome.output.lineSequence().any {
                     it == "RESULT accepted" || it == "RESULT restart_sent"
                 }
+                val probedChannel = if (probe) outcome.output.lineSequence()
+                    .firstOrNull { it.startsWith("CHANNEL ") }
+                    ?.removePrefix("CHANNEL ")?.trim().orEmpty() else current.channel
+                val probedCaps = if (probe) parseCaps(outcome.output) else current.caps
+                val profile = if (probe) BandLockProfiles.classify(
+                    Build.MANUFACTURER, Build.MODEL, Build.SOC_MODEL, Build.HARDWARE,
+                    probedChannel.takeIf { ready && it.isNotEmpty() },
+                    probedCaps.count { it.second },
+                ) else current.profile
                 mutableState.value = current.copy(
                     availability = if (probe) {
-                        if (ready) LockAvailability.Ready else LockAvailability.Unavailable
+                        if (ready && profile.canLock) LockAvailability.Ready else LockAvailability.Unavailable
                     } else current.availability,
-                    channel = if (probe) outcome.output.lineSequence()
-                        .firstOrNull { it.startsWith("CHANNEL ") }
-                        ?.removePrefix("CHANNEL ")?.trim().orEmpty() else current.channel,
-                    caps = if (probe) parseCaps(outcome.output) else current.caps,
+                    channel = if (probe) probedChannel else current.channel,
+                    caps = if (probe) probedCaps else current.caps,
+                    profile = profile,
                     lteBackup = if (probe && ready) outcome.output.contains("BACKUP lte 1") else
                         current.lteBackup || (accepted && command.arguments.first() == "lte-band"),
                     nrBackup = if (probe && ready) outcome.output.contains("BACKUP nr 1") else
                         current.nrBackup || (accepted && command.arguments.first() == "nr-band"),
                     result = when {
                         fromConsole -> null
-                        probe && ready -> R.string.lock_ready
+                        probe && ready && profile.canLock && profile.level == LockSupportLevel.Verified -> R.string.lock_ready
+                        probe && ready && profile.canLock -> R.string.lock_probe_only
                         probe -> R.string.lock_unavailable
                         accepted && command.restartsModem -> R.string.lock_restart_sent
                         accepted -> R.string.lock_accepted
@@ -82,6 +92,9 @@ internal class BandLockViewModel(application: Application) : AndroidViewModel(ap
                 appendLog(error.message ?: error.javaClass.simpleName)
                 mutableState.value = mutableState.value.copy(
                     availability = if (probe) LockAvailability.Unavailable else mutableState.value.availability,
+                    profile = if (probe) BandLockProfiles.classify(
+                        Build.MANUFACTURER, Build.MODEL, Build.SOC_MODEL, Build.HARDWARE, null, 0,
+                    ) else mutableState.value.profile,
                     result = if (probe) R.string.lock_unavailable else R.string.lock_failed,
                 )
             } finally {

@@ -21,6 +21,8 @@
 #include <dlfcn.h>
 #include <poll.h>
 #include <pthread.h>
+#include <sys/wait.h>
+#include <sys/types.h>
 #ifdef __ANDROID__
 #include <android/log.h>
 #endif
@@ -189,6 +191,23 @@ static void on_sig(int signo) {
     (void)signo;
     g_stop = 1;
 }
+
+#include "diag_queue.c"
+#include "ims_logcat.c"
+
+static struct diag_queue g_dq;
+static pthread_mutex_t g_dq_mu = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t g_dq_cv = PTHREAD_COND_INITIALIZER;
+static pthread_t g_dq_th;
+static int g_dq_started;
+
+static pid_t g_lc_pid = -1;
+static pthread_t g_lc_th;
+static int g_lc_started, g_lc_fmt, g_lc_alive;
+static unsigned long g_lc_read, g_lc_lines, g_lc_sip, g_lc_rcs;
+static int64_t g_lc_start;
+static int g_diag_ims_pkts;
+static void handle_record(const uint8_t *rec, int len);
 
 static void emit_locked(const char *json) {
     if (!g_stop && fprintf(stdout, "%s\n", json) < 0) g_stop = 1;
@@ -3880,6 +3899,7 @@ static void ims_rrc_hook(int nr, const char *msg) {
         ims_state_emit("eps_fallback");
     }
 }
+static void uc_sip(int64_t t, int tx, const char *method, int code, const char *cseq_m, long cseq);
 static void parse_ims_sip(const uint8_t *b, int n) {
     if (n < 16) return;
     layout_seen(0x156E, b[0], b, n < 16 ? n : 16);   /* header only: never dump SIP text into JSON */
@@ -3907,7 +3927,9 @@ static void parse_ims_sip(const uint8_t *b, int n) {
         method[k] = 0;
     }
     const char *v; int vl;
+    long cseqn = -1;
     if ((vl = sip_hdr(t, tn, "CSeq", NULL, &v)) > 0) {
+        cseqn = strtol(v, NULL, 10);
         int k = 0; while (k < vl && v[k] != ' ') k++;
         while (k < vl && v[k] == ' ') k++;
         int m = 0; while (k < vl && m < 20 && v[k] >= 'A' && v[k] <= 'Z') cseqm[m++] = v[k++];
@@ -3935,6 +3957,8 @@ static void parse_ims_sip(const uint8_t *b, int n) {
     if (expires >= 0) jb_add(&j, ",\"expires\":%d", expires);
     if (rsn[0]) jb_add(&j, ",\"reason_hdr\":\"%s\"", rsn);
     jb_emit(&j);
+    uc_sip(ev_ms(), dir == 1, method, code, cseqm, cseqn);
+    g_diag_ims_pkts++;
 
     int64_t now = mono_ms();
     /* registration */
@@ -4260,6 +4284,213 @@ static void uc_sip(int64_t t, int tx, const char *method, int code, const char *
         else if (code >= 300 && !g_uc.t_200) { g_uc.final_code = code; g_uc.final_tx = tx; uc_dialog_end(t); }
     } else if ((!strcmp(cseq_m, "BYE") || !strcmp(cseq_m, "CANCEL")) && code >= 200) uc_dialog_end(t);
 }
+
+static void emit_ims_provider(const char *name, const char *status, const char *available, const char *detail) {
+    struct jb j; jb_init(&j, "ims_provider");
+    jb_add(&j, ",\"name\":\"%s\",\"status\":\"%s\"", name, status);
+    if (available) jb_add(&j, ",\"available\":%s", available);
+    if (detail && detail[0]) jb_add(&j, ",\"detail\":\"%s\"", detail);
+    jb_emit(&j);
+}
+
+static void apply_lc_event(const struct lc_event *e) {
+    if (!e) return;
+    switch (e->kind) {
+    case LC_SIP_SAMSUNG: {
+        struct jb j; jb_init(&j, "sip");
+        jb_add(&j, ",\"src\":\"logcat\",\"fmt\":\"samsung\",\"dir\":\"%s\"", e->tx ? "UL" : "DL");
+        if (e->code) jb_add(&j, ",\"status\":%d,\"reason\":\"%s\"", e->code, e->reason);
+        else jb_add(&j, ",\"method\":\"%s\"", e->method);
+        if (e->cseq >= 0) jb_add(&j, ",\"cseq\":\"%ld %s\"", e->cseq, e->cseq_m);
+        if (g_uc.active && g_uc.have_sip && !g_uc.ended) jb_add(&j, ",\"call_n\":%d", g_uc.n);
+        jb_emit(&j);
+        uc_sip(e->t_ms, e->tx == 1, e->method, e->code, e->cseq_m, e->cseq);
+        g_lc_sip++;
+        break;
+    }
+    case LC_SIP_GENERIC: {
+        struct jb j; jb_init(&j, "sip");
+        jb_add(&j, ",\"src\":\"logcat\",\"tentative\":1");
+        if (e->code) jb_add(&j, ",\"status\":%d", e->code); else jb_add(&j, ",\"method\":\"%s\"", e->method);
+        jb_emit(&j);
+        g_lc_sip++;
+        break;
+    }
+    case LC_RCS_SKIP:
+        g_lc_rcs++;
+        break;
+    case LC_CODEC:
+        if (e->codec[0] && g_uc.active && strcmp(e->codec, g_uc.codec)) {
+            snprintf(g_uc.codec, sizeof(g_uc.codec), "%s", e->codec);
+            ims_state_emit("codec");
+        }
+        break;
+    case LC_CALL_STATE:
+        if (!g_uc.active) break;
+        if (e->reason[0]) snprintf(g_uc.reason, sizeof(g_uc.reason), "%s", e->reason);
+        if (e->err) g_uc.err = e->err;
+        if (e->crbt_video) g_uc.crbt_video = 1;
+        if (!g_uc.dir && e->dir) {
+            g_uc.dir = e->dir;
+            snprintf(g_uc.dir_src, sizeof(g_uc.dir_src), "csm");
+        }
+        break;
+    case LC_IMS_CAUSE:
+        if (g_uc.active) g_uc.sip_cause = e->sip_cause;
+        break;
+    case LC_BEARER_LOST_QCI2:
+        if (g_uc.active) g_uc.video_lost = 1;
+        break;
+    case LC_DEREG_CSEQ:
+        g_reg.dereg_cseq = e->dereg_cseq;
+        break;
+    case LC_IMS_REASON:
+        if (g_uc.active) g_uc.ims_reason = e->ims_reason;
+        break;
+    case LC_KPI_SIP: g_reg.kpi_sip = e->kpi; break;
+    case LC_KPI_TOTAL: g_reg.kpi_total = e->kpi; break;
+    case LC_KPI_PDN: g_reg.kpi_pdn = e->kpi; break;
+    case LC_IMSREGI_REGISTERED:
+        g_reg.lc_imsregi = 1;
+        reg_set("registered", "register_ap");
+        reg_record("registered", -1);
+        break;
+    case LC_IMSREGI_DEREGISTERED:
+        g_reg.lc_imsregi = 1;
+        reg_set("deregistered", "deregister_ap");
+        reg_record("deregistered", e->reg_reason);
+        break;
+    case LC_AIRPLANE: {
+        if (!e->airplane_on) g_reg.t_air_off = e->t_ms;
+        struct jb j; jb_init(&j, "event");
+        jb_add(&j, ",\"rat\":\"IMS\",\"event\":\"%s\",\"msg\":\"\"", e->airplane_on ? "airplane_on" : "airplane_off");
+        jb_emit(&j);
+        break;
+    }
+    case LC_REGISTER_AP:
+        if (strcmp(g_ims_reg, "registered") || g_reg_inferred) {
+            snprintf(g_ims_reg, sizeof(g_ims_reg), "registered");
+            g_reg_inferred = 0;
+            ims_state_emit("register_ap");
+        }
+        break;
+    case LC_DEREGISTER_AP:
+        if (strcmp(g_ims_reg, "deregistered")) {
+            snprintf(g_ims_reg, sizeof(g_ims_reg), "deregistered");
+            g_reg_inferred = 0;
+            ims_state_emit("register_ap");
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+static void *logcat_thread(void *arg) {
+    (void)arg;
+    int pfd[2];
+    if (pipe(pfd) != 0) {
+        pthread_mutex_lock(&g_mu);
+        emit_ims_provider("samsung_logcat", "unavailable", "false", "pipe_failed");
+        pthread_mutex_unlock(&g_mu);
+        return NULL;
+    }
+    pid_t pid = fork();
+    if (pid == 0) {
+        dup2(pfd[1], 1);
+        int dn = open("/dev/null", O_WRONLY);
+        if (dn >= 0) { dup2(dn, 2); close(dn); }
+        close(pfd[0]); close(pfd[1]);
+        execlp("logcat", "logcat", "-b", "radio", "-b", "main", "-v", "epoch", "-T", "1", (char *)NULL);
+        _exit(127);
+    }
+    close(pfd[1]);
+    if (pid < 0) {
+        close(pfd[0]);
+        pthread_mutex_lock(&g_mu);
+        emit_ims_provider("samsung_logcat", "unavailable", "false", "fork_failed");
+        pthread_mutex_unlock(&g_mu);
+        return NULL;
+    }
+    g_lc_pid = pid;
+    g_lc_alive = 1;
+    FILE *in = fdopen(pfd[0], "r");
+    if (!in) {
+        close(pfd[0]);
+        kill(pid, SIGTERM);
+        waitpid(pid, NULL, 0);
+        g_lc_pid = -1;
+        g_lc_alive = 0;
+        return NULL;
+    }
+    elog("IMS logcat reader started (pid %d); raw lines are not stored", (int)pid);
+    pthread_mutex_lock(&g_mu);
+    emit_ims_provider("samsung_logcat", "starting", NULL, "");
+    pthread_mutex_unlock(&g_mu);
+    char line[4096], red[4200];
+    while (!g_stop && fgets(line, sizeof(line), in)) {
+        g_lc_read++;
+        if (!lc_keep_line(line) || lc_is_noisy(line)) continue;
+        g_lc_lines++;
+        lc_redact_line(line, red, sizeof(red));
+        struct lc_event ev;
+        int fmt = g_lc_fmt;
+        if (!lc_parse_line(red, fmt, &fmt, &ev)) continue;
+        pthread_mutex_lock(&g_mu);
+        if (fmt) g_lc_fmt = 1;
+        apply_lc_event(&ev);
+        pthread_mutex_unlock(&g_mu);
+    }
+    fclose(in);
+    g_lc_alive = 0;
+    elog("IMS logcat ended: read %lu, kept %lu, sip %lu, rcs skipped %lu, fmt %s",
+         g_lc_read, g_lc_lines, g_lc_sip, g_lc_rcs, g_lc_fmt ? "samsung" : "none");
+    return NULL;
+}
+
+static void logcat_start(void) {
+    if (g_lc_started) return;
+    g_lc_start = now_ms();
+    if (pthread_create(&g_lc_th, NULL, logcat_thread, NULL) == 0) g_lc_started = 1;
+    else {
+        emit_ims_provider("samsung_logcat", "unavailable", "false", "thread_failed");
+    }
+}
+
+static void logcat_stop(void) {
+    if (g_lc_pid > 0) {
+        kill(g_lc_pid, SIGTERM);
+        waitpid(g_lc_pid, NULL, 0);
+        g_lc_pid = -1;
+    }
+    if (g_lc_started) {
+        pthread_join(g_lc_th, NULL);
+        g_lc_started = 0;
+    }
+}
+
+static void *decode_worker(void *arg) {
+    (void)arg;
+    uint8_t tmp[DIAG_Q_SLOT];
+    for (;;) {
+        pthread_mutex_lock(&g_dq_mu);
+        while (!g_stop && diag_q_empty(&g_dq)) pthread_cond_wait(&g_dq_cv, &g_dq_mu);
+        if (diag_q_empty(&g_dq)) {
+            pthread_mutex_unlock(&g_dq_mu);
+            break;
+        }
+        struct diag_q_item it;
+        diag_q_pop(&g_dq, &it);
+        uint16_t n = it.len;
+        memcpy(tmp, it.data, n);
+        pthread_mutex_unlock(&g_dq_mu);
+        pthread_mutex_lock(&g_mu);
+        handle_record(tmp, n);
+        pthread_mutex_unlock(&g_mu);
+    }
+    return NULL;
+}
+
 static void voice_update(const char *rat, int on, int q, const char *why) {
     char ex[96];
     int64_t now = mono_ms();
@@ -4705,16 +4936,28 @@ static void handle_record(const uint8_t *rec, int len) {
 /* DCI log callback (libdiag read thread). One or more log records per call. */
 static void on_log(unsigned char *ptr, int len) {
     if (!ptr || len <= 0) return;
-    pthread_mutex_lock(&g_mu);
     int pos = 0;
     while (pos + 12 <= len) {
         int rl = rd16(ptr + pos);
         if (rl < 12 || rl > len - pos) break;
+        pthread_mutex_lock(&g_mu);
         qmdl_write_locked(ptr + pos, (uint16_t)rl);
-        handle_record(ptr + pos, rl);
+        pthread_mutex_unlock(&g_mu);
+        if (rl > DIAG_Q_SLOT) {
+            pthread_mutex_lock(&g_mu);
+            handle_record(ptr + pos, rl);
+            pthread_mutex_unlock(&g_mu);
+            pthread_mutex_lock(&g_dq_mu);
+            g_dq.stats.oversized++;
+            pthread_mutex_unlock(&g_dq_mu);
+        } else {
+            pthread_mutex_lock(&g_dq_mu);
+            diag_q_push(&g_dq, ptr + pos, (uint16_t)rl);
+            pthread_cond_signal(&g_dq_cv);
+            pthread_mutex_unlock(&g_dq_mu);
+        }
         pos += rl;
     }
-    pthread_mutex_unlock(&g_mu);
 }
 static void on_event(unsigned char *data, int len) {
     (void)data;
@@ -4753,6 +4996,10 @@ static void emit_status_locked(const char *state, int rc) {
     int64_t now = mono_ms();
     jb_add(&j, ",\"state\":\"%s\",\"rc\":%d,\"uptime_s\":%lld,\"pkts\":%lu",
            state, rc, (long long)((mono_ms() - g_start_mono) / 1000), g_total_pkts);
+    jb_add(&j, ",\"decode_queued\":%u,\"decode_dropped\":%lu,\"decode_high_water\":%u,\"decode_oversized\":%lu",
+           diag_q_count(&g_dq), g_dq.stats.dropped, g_dq.stats.high_water, g_dq.stats.oversized);
+    jb_add(&j, ",\"logcat_alive\":%d,\"logcat_fmt\":%s,\"logcat_sip\":%lu,\"logcat_rcs_skipped\":%lu,\"diag_ims_pkts\":%d",
+           g_lc_alive, g_lc_fmt ? "true" : "false", g_lc_sip, g_lc_rcs, g_diag_ims_pkts);
     if (g_last_pkt_mono) jb_add(&j, ",\"last_pkt_age_s\":%lld",
                                 (long long)((mono_ms() - g_last_pkt_mono) / 1000));
     jb_add(&j, ",\"log_counts\":{");
@@ -4934,6 +5181,7 @@ int main(int argc, char **argv) {
     sigaction(SIGTERM, &stop, NULL);
     sigaction(SIGINT, &stop, NULL);
     sigaction(SIGHUP, &stop, NULL);
+    sigaction(SIGALRM, &stop, NULL);
 
     g_start_mono = mono_ms();
     if (geteuid() != 0) {
@@ -4944,6 +5192,11 @@ int main(int argc, char **argv) {
     for (int i = 0; i < N_DEFAULT; i++) g_codes[i] = k_default_codes[i].code;
     g_ncodes = N_DEFAULT;
     emit_status_locked("authorized", 0);
+    emit_ims_provider("qualcomm_diag", "subscribed", NULL, "");
+    emit_ims_provider("mediatek", "unsupported", "false", "no_backend");
+    diag_q_init(&g_dq);
+    if (pthread_create(&g_dq_th, NULL, decode_worker, NULL) == 0) g_dq_started = 1;
+    logcat_start();
     alarm(12);
     int rc = dci_start();
     alarm(0);
@@ -4975,12 +5228,25 @@ int main(int argc, char **argv) {
         emit_serving_locked(&g_nr);
         emit_status_locked("running", 0);
         uc_tick(ev_ms());
+        if (g_lc_start && now_ms() - g_lc_start >= 20000 && !g_lc_fmt && !g_reg.lc_imsregi) {
+            emit_ims_provider("samsung_logcat", "unavailable", "false", "no_samsung_ims_tags");
+            g_lc_start = 0;
+        } else if (g_lc_fmt || g_reg.lc_imsregi) {
+            emit_ims_provider("samsung_logcat", "available", "true", g_lc_fmt ? "sipmsg" : "imsregi");
+        }
+        if (g_diag_ims_pkts) emit_ims_provider("qualcomm_diag", "available", "true", "0x156E");
         pthread_mutex_unlock(&g_mu);
         if (finish_qmdl) qmdl_stop();
         last_snapshot = now;
     }
 
     // If vendor cleanup blocks, the process still exits promptly.
+    g_stop = 1;
+    pthread_mutex_lock(&g_dq_mu);
+    pthread_cond_signal(&g_dq_cv);
+    pthread_mutex_unlock(&g_dq_mu);
+    if (g_dq_started) pthread_join(g_dq_th, NULL);
+    logcat_stop();
     alarm(3);
     qmdl_stop();
     dci_stop();
