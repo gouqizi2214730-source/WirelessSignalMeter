@@ -71,6 +71,7 @@ internal data class RootSignalState(
     val failureReason: String? = null,
     val nrCarriers: List<NrCarrier> = emptyList(),
     val hasModemPackets: Boolean = false,
+    val modemWaitTimedOut: Boolean = false,
 ) {
     fun hasLiveServingCell(protocol: String?, now: Long): Boolean =
         status == RootDiagStatus.Running && records.any { record ->
@@ -457,6 +458,15 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
         applyCollectionPolicy(explicitRetry = true)
     }
 
+    internal fun reconnectSilentCollector() {
+        if (!signalState.value.modemWaitTimedOut || qmdlState.value.phase != QmdlPhase.Idle ||
+            qmdlState.value.recovering) return
+        val job = capture?.takeIf { it.isActive } ?: return
+        restartAttempt = 0
+        restartAfterStop = true
+        job.cancel()
+    }
+
     internal fun pause() {
         pausedByUser = true
         applyCollectionPolicy()
@@ -672,6 +682,8 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 },
                 nrCarriers = carriers,
                 hasModemPackets = hasModemPackets,
+                modemWaitTimedOut = status == RootDiagStatus.Running && !hasModemPackets &&
+                    readyAt?.let { now - it >= MODEM_WAIT_TIMEOUT } == true,
             )
             publishOverlay(status, signalState.value.records)
             publishCapability()
@@ -1382,6 +1394,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
     private companion object {
         const val MAX_MESSAGES = 4_000
         const val MEASUREMENT_TIMEOUT = 30_000L
+        const val MODEM_WAIT_TIMEOUT = 20_000L
         const val QMDL_ACK_TIMEOUT = 8_000L
         const val MAX_DIAGNOSTIC_MESSAGES = 400
         const val MAX_COLLECTOR_RUNS = 8

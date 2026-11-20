@@ -1300,6 +1300,8 @@
     <string name="diag_no_metrics">Waiting for supported modem records</string>
     <string name="diag_no_messages">No signaling messages yet</string>
     <string name="diag_waiting_modem_packets">Connected to DIAG. Waiting for modem packets.</string>
+    <string name="diag_modem_wait_timed_out">DIAG connected, but no modem data was received.</string>
+    <string name="diag_reconnect">Reconnect DIAG</string>
     <string name="diag_estimate">Experimental decode</string>
     <string name="diag_checking">Checking Root access</string>
     <string name="diag_no_root">Root unavailable · Android signal active</string>

@@ -125,6 +125,14 @@ $qmdl = @(
 [IO.File]::WriteAllText((Join-Path $target 'qmdl_stop_under_test.inc'), $qmdl)
 $live = Block 'static void on_log(unsigned char *ptr, int len) {' 'static void on_event('
 [IO.File]::WriteAllText((Join-Path $target 'diag_live_under_test.inc'), $live)
+$liveMask = @(
+    (Block 'struct code_info {' '#define MAX_CODES '),
+    (Block 'static uint16_t k_qmdl_codes[]' '/* Optional live subscription'),
+    (Block 'struct dci_mask_result {' "`n"),
+    (Block 'static int dci_enable_logs(' 'static int dci_start('),
+    (Block 'enum live_mask_action {' 'static void dci_enable_live_details(')
+) -join "`n"
+[IO.File]::WriteAllText((Join-Path $target 'diag_live_mask_under_test.inc'), $liveMask)
 $obj = Join-Path $target 'qmdl_stop_test.obj'
 $dll = Join-Path $target 'qmdl_stop_test.dll'
 & "$bin/clang.exe" --target=x86_64-pc-windows-msvc -ffreestanding -fno-stack-protector -fno-builtin -c -I $target (Join-Path $PSScriptRoot 'qmdl_stop_test.c') -o $obj
@@ -137,12 +145,17 @@ public static class QmdlStopTest {
     [DllImport(@"$dll", CallingConvention = CallingConvention.Cdecl)]
     public static extern int test_diag_live_without_recording();
     [DllImport(@"$dll", CallingConvention = CallingConvention.Cdecl)]
+    public static extern int test_diag_live_masks();
+    [DllImport(@"$dll", CallingConvention = CallingConvention.Cdecl)]
     public static extern int test_qmdl_stop();
 }
 "@
 $result = [QmdlStopTest]::test_diag_live_without_recording()
 if ($result) { throw "Live DIAG without QMDL test failed at line $result" }
 Write-Output 'PASS live DIAG: RRC, NAS and LTE measurement records are queued without recording or file writes'
+$result = [QmdlStopTest]::test_diag_live_masks()
+if ($result) { throw "Live DIAG mask test failed at line $result" }
+Write-Output 'PASS DIAG startup: validated 15-code base mask, separate live/QMDL codes, stepwise expansion and per-code fallback'
 $result = [QmdlStopTest]::test_qmdl_stop()
 if ($result) { throw "QMDL stop ordering test failed at line $result" }
 Write-Output 'PASS QMDL: valid escaped HDLC frame, flush/close before ACK, asynchronous mask request, repeated stop, recovery on shutdown, short writes, full disk and open errors'

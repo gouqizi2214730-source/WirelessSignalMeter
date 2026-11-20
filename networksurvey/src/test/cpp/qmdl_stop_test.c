@@ -48,7 +48,12 @@ static void qmdl_request_mask(int enabled) { step(MASK); }
 
 enum { DIAG_Q_SLOT = 64 };
 static struct { struct { int oversized; } stats; } g_dq;
-static int g_dq_mu, g_dq_cv, decoded, queued;
+static int g_dq_mu, g_dq_cv, decoded, queued, g_dq_started = 1;
+/* The freestanding Windows harness has no system headers for stdatomic.h. */
+typedef _Atomic(unsigned long) atomic_ulong;
+#define memory_order_relaxed __ATOMIC_RELAXED
+#define atomic_fetch_add_explicit __c11_atomic_fetch_add
+static atomic_ulong g_dci_callbacks, g_dci_bad_frames;
 static uint16_t seen_codes[3];
 static uint16_t rd16(const uint8_t *buf) { return buf[0] | ((uint16_t)buf[1] << 8); }
 static void handle_record(const uint8_t *data, int size) { decoded++; }
@@ -59,6 +64,18 @@ static void diag_q_push(void *queue, const uint8_t *data, uint16_t size) {
 static void pthread_cond_signal(int *ignored) {}
 
 #include "diag_live_under_test.inc"
+
+#define DCI_OK 1001
+static int g_client = 7, g_stop, cfg_calls, cfg_reject_batch;
+static int p_logcfg(int client, int enabled, uint16_t *codes, int count) {
+    cfg_calls++;
+    if (client != 7 || !enabled || !count) return 1008;
+    return cfg_reject_batch && (count > 1 || codes[0] == 0xB195) ? 1008 : DCI_OK;
+}
+static void record_subscriptions(const uint16_t *codes, int count, int result) {}
+static void elog(const char *fmt, ...) {}
+
+#include "diag_live_mask_under_test.inc"
 
 __declspec(dllexport) int test_diag_live_without_recording(void) {
     static uint8_t packets[36] = {
@@ -71,6 +88,44 @@ __declspec(dllexport) int test_diag_live_without_recording(void) {
     if (queued != 3 || decoded != 0) return __LINE__;
     if (seen_codes[0] != 0xb0c0 || seen_codes[1] != 0xb80a || seen_codes[2] != 0xb193) return __LINE__;
     if (g_qmdl_fd != -1 || file_size || write_calls || g_qmdl_packets || g_qmdl_pending_bytes) return __LINE__;
+    on_log(packets, 11);
+    on_log(packets, 13);
+    if (g_dci_callbacks != 3 || g_dci_bad_frames != 2 || queued != 4) return __LINE__;
+    g_dq_started = 0;
+    on_log(packets, sizeof(packets));
+    if (decoded != 3 || queued != 4 || g_dci_callbacks != 4 || g_dci_bad_frames != 2) return __LINE__;
+
+    trace = 0;
+    return 0;
+}
+
+__declspec(dllexport) int test_diag_live_masks(void) {
+    uint16_t base[] = {
+        0xB0C0, 0xB0C1, 0xB0C2, 0xB0EC, 0xB0ED, 0xB17F, 0xB193, 0xB195,
+        0xB80A, 0xB80B, 0xB821, 0xB822, 0xB823, 0xB825, 0xB97F
+    };
+    if (N_LIVE_BASE != sizeof(base) / sizeof(base[0]) || N_DEFAULT <= N_LIVE_BASE) return __LINE__;
+    for (int i = 0; i < N_DEFAULT; i++) {
+        if (i < N_LIVE_BASE && k_default_codes[i].code != base[i]) return __LINE__;
+        for (int j = 0; j < i; j++) if (k_default_codes[i].code == k_default_codes[j].code) return __LINE__;
+        for (int j = 0; j < N_QMDL_CODES; j++) if (k_default_codes[i].code == k_qmdl_codes[j]) return __LINE__;
+    }
+    const unsigned all = LIVE_MASK_ADD_DETAILS | LIVE_MASK_ADD_OPTIONAL;
+    if (live_mask_actions(9999, 0, 0) != LIVE_MASK_NONE ||
+        live_mask_actions(10000, 0, 0) != LIVE_MASK_ADD_DETAILS ||
+        live_mask_actions(15000, 0, LIVE_MASK_ADD_DETAILS) != LIVE_MASK_NONE ||
+        live_mask_actions(200, 1, 0) != all ||
+        live_mask_actions(15000, 1, LIVE_MASK_ADD_DETAILS) != LIVE_MASK_ADD_OPTIONAL ||
+        live_mask_actions(15000, 1, all) != LIVE_MASK_NONE) return __LINE__;
+
+    struct dci_mask_result status;
+    if (dci_enable_logs(base, N_LIVE_BASE, &status) != N_LIVE_BASE ||
+        status.count != N_LIVE_BASE || status.batch_rc != DCI_OK || status.accepted != N_LIVE_BASE ||
+        cfg_calls != 1) return __LINE__;
+    cfg_reject_batch = 1;
+    if (dci_enable_logs(base, N_LIVE_BASE, &status) != N_LIVE_BASE - 1 ||
+        status.count != N_LIVE_BASE || status.batch_rc != 1008 || status.accepted != N_LIVE_BASE - 1 ||
+        cfg_calls != N_LIVE_BASE + 2) return __LINE__;
     trace = 0;
     return 0;
 }

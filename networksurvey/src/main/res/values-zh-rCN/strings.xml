@@ -890,6 +890,8 @@
     <string name="diag_no_metrics">等待设备上报可解析的数据</string>
     <string name="diag_no_messages">暂未收到信令</string>
     <string name="diag_waiting_modem_packets">已连接 DIAG，正在等待基带数据</string>
+    <string name="diag_modem_wait_timed_out">DIAG 已连接，暂未收到可用的基带数据。</string>
+    <string name="diag_reconnect">重新连接 DIAG</string>
     <string name="diag_estimate">试解数据</string>
     <string name="diag_checking">正在检测 Root</string>
     <string name="diag_no_root">未检测到 Root，信号使用 Android 接口</string>

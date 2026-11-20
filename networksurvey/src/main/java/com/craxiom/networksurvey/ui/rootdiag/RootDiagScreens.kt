@@ -538,16 +538,25 @@ internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
             ) {
                 if (visible.isEmpty()) {
                     item("empty") {
-                        Text(
-                            stringResource(when {
-                                status.status == RootDiagStatus.Running && !status.hasModemPackets &&
-                                    filter != ProtocolFilter.Ims -> R.string.diag_waiting_modem_packets
-                                records.isEmpty() -> R.string.diag_no_messages
-                                else -> R.string.diag_no_matching_messages
-                            }),
-                            modifier = Modifier.padding(16.dp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        val waitingForModem = status.status == RootDiagStatus.Running &&
+                            !status.hasModemPackets && filter != ProtocolFilter.Ims
+                        Column(Modifier.padding(16.dp)) {
+                            Text(
+                                stringResource(when {
+                                    waitingForModem && status.modemWaitTimedOut -> R.string.diag_modem_wait_timed_out
+                                    waitingForModem -> R.string.diag_waiting_modem_packets
+                                    records.isEmpty() -> R.string.diag_no_messages
+                                    else -> R.string.diag_no_matching_messages
+                                }),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (waitingForModem && status.modemWaitTimedOut) {
+                                TextButton(
+                                    onClick = viewModel::reconnectSilentCollector,
+                                    enabled = qmdl.phase == QmdlPhase.Idle && !qmdl.recovering,
+                                ) { Text(stringResource(R.string.diag_reconnect)) }
+                            }
+                        }
                     }
                 }
                 items(visible, key = { it.id }) { record ->

@@ -8,6 +8,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdatomic.h>
 #include <stdarg.h>
 #include <string.h>
 #include <strings.h>
@@ -21,6 +22,7 @@
 #include <dlfcn.h>
 #include <poll.h>
 #include <pthread.h>
+#include <sys/syscall.h>
 #include <sys/wait.h>
 #include <sys/types.h>
 #ifdef __ANDROID__
@@ -100,20 +102,30 @@ static int msbbits(const uint8_t *buf, int len, int start, int n) {
 /* configuration                                                       */
 /* ------------------------------------------------------------------ */
 struct code_info { uint16_t code; const char *name; };
+/* First 15 codes match the DiagCap mask verified on SM-S9370. */
+#define N_LIVE_BASE 15
 static const struct code_info k_default_codes[] = {
     { 0xB0C0, "LTE RRC OTA" },
     { 0xB0C1, "LTE RRC MIB" },
     { 0xB0C2, "LTE RRC Serving Cell Info" },
     { 0xB0EC, "LTE NAS EMM Plain OTA Incoming" },
     { 0xB0ED, "LTE NAS EMM Plain OTA Outgoing" },
-    { 0xB0E2, "LTE NAS ESM Plain OTA Incoming" },   /* 2.0: VoLTE / EPSFB dedicated bearer (QCI 1) */
-    { 0xB0E3, "LTE NAS ESM Plain OTA Outgoing" },
     { 0xB17F, "LTE ML1 Serving Cell Meas and Eval" },
+    { 0xB193, "LTE ML1 Serving Cell Meas Response" },
+    { 0xB195, "LTE ML1 Connected Neighbor Meas" },
+    { 0xB80A, "NR NAS 5GMM Plain OTA Incoming" },
+    { 0xB80B, "NR NAS 5GMM Plain OTA Outgoing" },
+    { 0xB821, "NR RRC OTA" },
+    { 0xB822, "NR RRC MIB Info" },
+    { 0xB823, "NR RRC Serving Cell Info" },
+    { 0xB825, "NR RRC Configuration Info" },
+    { 0xB97F, "NR ML1 Meas Database Update" },
+    /* Extended live logs. */
+    { 0xB0E2, "LTE NAS ESM Plain OTA Incoming" },
+    { 0xB0E3, "LTE NAS ESM Plain OTA Outgoing" },
     { 0xB179, "LTE ML1 Intra-frequency Neighbor Meas" },
     { 0xB180, "LTE ML1 Neighbor Measurements" },
     { 0xB192, "LTE ML1 Neighbor Cell Meas" },
-    { 0xB193, "LTE ML1 Serving Cell Meas Response" },
-    { 0xB195, "LTE ML1 Connected Neighbor Meas" },
     { 0xB139, "LTE ML1 PUSCH Tx Report" },
     { 0xB13C, "LTE ML1 PUCCH Tx Report" },
     { 0xB14D, "LTE PHY PUCCH CSI Feedback" },
@@ -130,13 +142,6 @@ static const struct code_info k_default_codes[] = {
     { 0xB064, "LTE MAC UL Transport Block" },
     { 0xB800, "NR NAS 5GSM Plain OTA Incoming" },
     { 0xB801, "NR NAS 5GSM Plain OTA Outgoing" },
-    { 0xB80A, "NR NAS 5GMM Plain OTA Incoming" },
-    { 0xB80B, "NR NAS 5GMM Plain OTA Outgoing" },
-    { 0xB821, "NR RRC OTA" },
-    { 0xB822, "NR RRC MIB Info" },
-    { 0xB823, "NR RRC Serving Cell Info" },
-    { 0xB825, "NR RRC Configuration Info" },
-    { 0xB97F, "NR ML1 Meas Database Update" },
     /* 1.3: NR SINR / PDSCH log codes */
     { 0xB975, "NR ML1 Serving Cell Beam Mgmt" },
     { 0xB8D8, "NR LL1 LOG Serving SNR" },
@@ -186,8 +191,7 @@ static int g_nr_ca_subscribe_attempted, g_nr_ca_subscribe_rc;
 static uint16_t k_neighbor_probe_codes[] = { 0xB119, 0xB123, 0xB96D, 0xB96E, 0xB96F, 0xB992 };
 #define N_NEIGHBOR_PROBES ((int)(sizeof(k_neighbor_probe_codes) / sizeof(k_neighbor_probe_codes[0])))
 
-static uint16_t g_codes[MAX_CODES];
-static int g_ncodes;
+static uint16_t g_codes[N_DEFAULT];
 static const int g_proc = 0; /* DIAG_PROC_MSM */
 
 static pthread_mutex_t g_mu = PTHREAD_MUTEX_INITIALIZER;
@@ -223,6 +227,7 @@ struct code_stat { uint16_t code; unsigned long count; unsigned long bytes; uint
 static struct code_stat g_stats[MAX_CODES];
 static int g_nstats;
 static unsigned long g_total_pkts;
+static atomic_ulong g_dci_callbacks, g_dci_bad_frames;
 static int64_t g_last_pkt_mono;
 
 struct neighbor_stat {
@@ -4486,9 +4491,10 @@ static void lc_wait_ms(int ms) {
 static void *logcat_thread(void *arg) {
     (void)arg;
     int backoff = 2000;
+    long fd_limit = sysconf(_SC_OPEN_MAX);
     while (!g_stop) {
         int pfd[2];
-        if (pipe(pfd) != 0) {
+        if (pipe2(pfd, O_CLOEXEC) != 0) {
             pthread_mutex_lock(&g_mu);
             emit_ims_provider("samsung_logcat", "unavailable", "false", "pipe_failed");
             pthread_mutex_unlock(&g_mu);
@@ -4498,11 +4504,16 @@ static void *logcat_thread(void *arg) {
         }
         pid_t pid = fork();
         if (pid == 0) {
-            dup2(pfd[1], 1);
-            int dn = open("/dev/null", O_WRONLY);
-            if (dn >= 0) { dup2(dn, 2); close(dn); }
-            close(pfd[0]); close(pfd[1]);
-            execlp("logcat", "logcat", "-b", "radio", "-b", "main", "-v", "epoch", "-T", "1", (char *)NULL);
+            if (dup2(pfd[1], STDOUT_FILENO) < 0) _exit(127);
+            int dn = open("/dev/null", O_RDWR);
+            if (dn < 0 || dup2(dn, STDIN_FILENO) < 0 || dup2(dn, STDERR_FILENO) < 0) _exit(127);
+            // Vendor libdiag may open its router connection without CLOEXEC.
+#ifdef __NR_close_range
+            if (syscall(__NR_close_range, 3U, ~0U, 0U) != 0)
+#endif
+                for (long fd = 3; fd < (fd_limit > 0 ? fd_limit : 1024); fd++) close((int)fd);
+            char *argv[] = { "logcat", "-b", "radio", "-b", "main", "-v", "epoch", "-T", "1", NULL };
+            execv("/system/bin/logcat", argv);
             _exit(127);
         }
         close(pfd[1]);
@@ -5051,21 +5062,27 @@ static void handle_record(const uint8_t *rec, int len) {
 
 /* DCI log callback (libdiag read thread). One or more log records per call. */
 static void on_log(unsigned char *ptr, int len) {
-    if (!ptr || len <= 0) return;
+    atomic_fetch_add_explicit(&g_dci_callbacks, 1, memory_order_relaxed);
+    if (!ptr || len < 12) {
+        atomic_fetch_add_explicit(&g_dci_bad_frames, 1, memory_order_relaxed);
+        return;
+    }
     int pos = 0;
-    while (pos + 12 <= len) {
+    while (len - pos >= 12) {
         int rl = rd16(ptr + pos);
         if (rl < 12 || rl > len - pos) break;
         pthread_mutex_lock(&g_mu);
         qmdl_write_locked(ptr + pos, (uint16_t)rl);
         pthread_mutex_unlock(&g_mu);
-        if (rl > DIAG_Q_SLOT) {
+        if (!g_dq_started || rl > DIAG_Q_SLOT) {
             pthread_mutex_lock(&g_mu);
             handle_record(ptr + pos, rl);
             pthread_mutex_unlock(&g_mu);
-            pthread_mutex_lock(&g_dq_mu);
-            g_dq.stats.oversized++;
-            pthread_mutex_unlock(&g_dq_mu);
+            if (rl > DIAG_Q_SLOT) {
+                pthread_mutex_lock(&g_dq_mu);
+                g_dq.stats.oversized++;
+                pthread_mutex_unlock(&g_dq_mu);
+            }
         } else {
             pthread_mutex_lock(&g_dq_mu);
             diag_q_push(&g_dq, ptr + pos, (uint16_t)rl);
@@ -5074,6 +5091,7 @@ static void on_log(unsigned char *ptr, int len) {
         }
         pos += rl;
     }
+    if (pos != len) atomic_fetch_add_explicit(&g_dci_bad_frames, 1, memory_order_relaxed);
 }
 static void on_event(unsigned char *data, int len) {
     (void)data;
@@ -5107,11 +5125,35 @@ static void emit_serving_locked(const struct serving *s) {
 
 static int64_t g_start_mono;
 
+struct dci_mask_result { int count, batch_rc, accepted; };
+static struct dci_mask_result g_base_mask, g_details_mask;
+static int g_dci_init_rc = -1, g_dci_init_errno;
+static int g_dci_client_rc = -1, g_dci_support_rc = -1, g_dci_stream_rc = -1, g_dci_stream_per_client;
+static int g_live_details_before_first_packet;
+
 static void emit_status_locked(const char *state, int rc) {
     struct jb j; jb_init(&j, "status");
     int64_t now = mono_ms();
     jb_add(&j, ",\"state\":\"%s\",\"rc\":%d,\"uptime_s\":%lld,\"pkts\":%lu",
            state, rc, (long long)((mono_ms() - g_start_mono) / 1000), g_total_pkts);
+    jb_add(&j, ",\"dci_callbacks\":%lu,\"dci_bad_frames\":%lu",
+           atomic_load_explicit(&g_dci_callbacks, memory_order_relaxed),
+           atomic_load_explicit(&g_dci_bad_frames, memory_order_relaxed));
+    if (g_dci_init_rc >= 0) jb_i(&j, "dci_init_rc", g_dci_init_rc);
+    if (g_dci_init_errno) jb_i(&j, "dci_init_errno", g_dci_init_errno);
+    if (g_dci_client_rc >= 0) jb_i(&j, "dci_client_rc", g_dci_client_rc);
+    if (g_dci_support_rc >= 0) jb_i(&j, "dci_support_rc", g_dci_support_rc);
+    if (g_dci_stream_rc >= 0) {
+        jb_i(&j, "dci_stream_rc", g_dci_stream_rc);
+        jb_add(&j, ",\"dci_stream_per_client\":%s", g_dci_stream_per_client ? "true" : "false");
+    }
+    if (g_base_mask.count)
+        jb_add(&j, ",\"dci_base_mask\":{\"requested\":%d,\"batch_rc\":%d,\"accepted\":%d}",
+               g_base_mask.count, g_base_mask.batch_rc, g_base_mask.accepted);
+    if (g_details_mask.count)
+        jb_add(&j, ",\"dci_details_mask\":{\"requested\":%d,\"batch_rc\":%d,\"accepted\":%d,\"before_first_packet\":%s}",
+               g_details_mask.count, g_details_mask.batch_rc, g_details_mask.accepted,
+               g_live_details_before_first_packet ? "true" : "false");
     jb_add(&j, ",\"decode_queued\":%u,\"decode_dropped\":%lu,\"decode_high_water\":%u,\"decode_oversized\":%lu",
            diag_q_count(&g_dq), g_dq.stats.dropped, g_dq.stats.high_water, g_dq.stats.oversized);
     jb_add(&j, ",\"logcat_alive\":%d,\"logcat_fmt\":%s,\"logcat_sip\":%lu,\"logcat_rcs_skipped\":%lu,\"diag_ims_pkts\":%d",
@@ -5163,7 +5205,7 @@ typedef int (*fn_support)(int, uint16_t *);
 static void *g_lib;
 static fn_init p_init; static fn_deinit p_deinit; static fn_reg_client p_reg; static fn_rel_client p_rel;
 static fn_reg_stream p_stream; static fn_reg_stream_proc p_stream_proc; static fn_log_cfg p_logcfg; static fn_support p_support;
-static int g_client = -1, g_inited, g_enabled, g_neighbor_probes_enabled;
+static int g_client = -1, g_inited, g_enabled_count, g_neighbor_probes_enabled;
 
 static void record_subscriptions(const uint16_t *codes, int count, int result) {
     pthread_mutex_lock(&g_mu);
@@ -5172,6 +5214,27 @@ static void record_subscriptions(const uint16_t *codes, int count, int result) {
         if (s) { s->subscription_attempted = 1; s->subscription_rc = result; }
     }
     pthread_mutex_unlock(&g_mu);
+}
+
+static int dci_enable_logs(uint16_t *codes, int count, struct dci_mask_result *status) {
+    int batch_rc = p_logcfg(g_client, 1, codes, count);
+    int accepted = batch_rc == DCI_OK ? count : 0;
+    record_subscriptions(codes, count, batch_rc);
+    if (batch_rc != DCI_OK) {
+        for (int i = 0; i < count && !g_stop; i++) {
+            int rc = count == 1 ? batch_rc : p_logcfg(g_client, 1, &codes[i], 1);
+            record_subscriptions(&codes[i], 1, rc);
+            if (rc == DCI_OK) accepted++;
+            else elog("code 0x%04X rejected (%d)", codes[i], rc);
+        }
+    }
+    if (status) {
+        pthread_mutex_lock(&g_mu);
+        *status = (struct dci_mask_result){ count, batch_rc, accepted };
+        pthread_mutex_unlock(&g_mu);
+    }
+    elog("diag_log_stream_config(ENABLE, %d codes) -> %d; accepted %d", count, batch_rc, accepted);
+    return accepted;
 }
 
 static int dci_start(void) {
@@ -5192,49 +5255,56 @@ static int dci_start(void) {
     p_support = (fn_support)dlsym(g_lib, "diag_get_dci_support_list_proc");
     if (!p_init || !p_deinit || !p_reg || !p_rel || !p_logcfg || (!p_stream && !p_stream_proc)) { elog("required libdiag symbols missing"); return 3; }
     errno = 0;
-    if (!p_init(NULL)) { elog("Diag_LSM_Init failed errno=%d %s", errno, strerror(errno)); return 4; }
+    g_dci_init_rc = p_init(NULL);
+    if (!g_dci_init_rc) {
+        g_dci_init_errno = errno;
+        elog("Diag_LSM_Init failed errno=%d %s", g_dci_init_errno, strerror(g_dci_init_errno));
+        return 4;
+    }
     g_inited = 1;
     elog("Diag_LSM_Init ok");
     int sigtype = SIGCONT; uint16_t list = 0xFFFF; int cid = -1;
-    int r = p_reg(&cid, &list, g_proc, &sigtype);
+    int r = g_dci_client_rc = p_reg(&cid, &list, g_proc, &sigtype);
     elog("diag_register_dci_client -> %d client=%d", r, cid);
     if (r != DCI_OK) return 5;
     g_client = cid;
     if (p_support) {
         uint16_t support = 0;
-        int rc = p_support(g_proc, &support);
+        int rc = g_dci_support_rc = p_support(g_proc, &support);
         if (rc == DCI_OK) elog("dci support list -> %d mask=0x%04x", rc, support);
         else elog("dci support list unavailable -> %d", rc);
     }
-    if (p_stream_proc) r = p_stream_proc(cid, on_log, on_event);
-    else r = p_stream(on_log, on_event);
+    g_dci_stream_per_client = p_stream_proc != NULL;
+    r = g_dci_stream_rc = p_stream_proc ? p_stream_proc(cid, on_log, on_event) : p_stream(on_log, on_event);
     elog("register dci stream -> %d", r);
     if (r != DCI_OK) return 6;
-    r = p_logcfg(cid, 1, g_codes, g_ncodes);
-    record_subscriptions(g_codes, g_ncodes, r);
-    elog("diag_log_stream_config(ENABLE, %d codes) -> %d", g_ncodes, r);
-    g_enabled = 1;
-    if (r != DCI_OK) {
-        /* some codes may be unsupported: enable one by one so the good ones still work */
-        int ok = 0;
-        for (int i = 0; i < g_ncodes; i++) {
-            int rr = p_logcfg(cid, 1, &g_codes[i], 1);
-            record_subscriptions(&g_codes[i], 1, rr);
-            if (rr == DCI_OK) ok++; else elog("  code 0x%04X rejected (%d)", g_codes[i], rr);
-        }
-        elog("enabled %d/%d codes individually", ok, g_ncodes);
-        if (!ok) return 6;
-    }
-    int probe_rc = p_logcfg(cid, 1, k_neighbor_probe_codes, N_NEIGHBOR_PROBES);
-    record_subscriptions(k_neighbor_probe_codes, N_NEIGHBOR_PROBES, probe_rc);
+    g_enabled_count = N_LIVE_BASE;
+    return dci_enable_logs(g_codes, N_LIVE_BASE, &g_base_mask) ? 0 : 6;
+}
+
+static void dci_enable_optional_live(void) {
     g_neighbor_probes_enabled = 1;
-    if (probe_rc != DCI_OK) {
-        for (int i = 0; i < N_NEIGHBOR_PROBES; i++) {
-            int result = p_logcfg(cid, 1, &k_neighbor_probe_codes[i], 1);
-            record_subscriptions(&k_neighbor_probe_codes[i], 1, result);
-        }
-    }
-    return 0;
+    dci_enable_logs(k_neighbor_probe_codes, N_NEIGHBOR_PROBES, NULL);
+    if (g_stop) return;
+    int ca_rc = p_logcfg(g_client, 1, &g_nr_ca_state_code, 1);
+    pthread_mutex_lock(&g_mu);
+    g_nr_ca_subscribe_rc = ca_rc;
+    g_nr_ca_subscribe_attempted = 1;
+    pthread_mutex_unlock(&g_mu);
+    elog("optional live B9A7 subscription -> %d", ca_rc);
+}
+
+enum live_mask_action { LIVE_MASK_NONE = 0, LIVE_MASK_ADD_DETAILS = 1, LIVE_MASK_ADD_OPTIONAL = 2 };
+
+static unsigned live_mask_actions(int64_t elapsed_ms, unsigned long packets, unsigned requested) {
+    unsigned ready = packets ? LIVE_MASK_ADD_DETAILS | LIVE_MASK_ADD_OPTIONAL :
+            elapsed_ms >= 10000 ? LIVE_MASK_ADD_DETAILS : LIVE_MASK_NONE;
+    return ready & ~requested;
+}
+
+static void dci_enable_live_details(void) {
+    g_enabled_count = N_DEFAULT;
+    dci_enable_logs(g_codes + N_LIVE_BASE, N_DEFAULT - N_LIVE_BASE, &g_details_mask);
 }
 
 static void dci_stop(void) {
@@ -5242,10 +5312,10 @@ static void dci_stop(void) {
         p_logcfg(g_client, 0, &g_nr_ca_state_code, 1);
     if (g_neighbor_probes_enabled && p_logcfg && g_client >= 0)
         p_logcfg(g_client, 0, k_neighbor_probe_codes, N_NEIGHBOR_PROBES);
-    if (g_enabled && p_logcfg && g_client >= 0) {
-        int r = p_logcfg(g_client, 0, g_codes, g_ncodes);
+    if (g_enabled_count && p_logcfg && g_client >= 0) {
+        int r = p_logcfg(g_client, 0, g_codes, g_enabled_count);
         elog("diag_log_stream_config(DISABLE) -> %d", r);
-        g_enabled = 0;
+        g_enabled_count = 0;
     }
     if (g_client >= 0 && p_rel) { int id = g_client; int r = p_rel(&id); elog("diag_release_dci_client -> %d", r); g_client = -1; }
     if (g_inited && p_deinit) { boolean ok = p_deinit(); elog("Diag_LSM_DeInit -> %d", (int)ok); g_inited = 0; }
@@ -5256,21 +5326,25 @@ static pthread_mutex_t g_qmdl_mask_mu = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t g_qmdl_mask_cond = PTHREAD_COND_INITIALIZER;
 static pthread_t g_qmdl_mask_thread;
 static int g_qmdl_mask_started, g_qmdl_mask_wanted, g_qmdl_mask_exit;
+static unsigned g_pending_live_mask;
 
 static void *qmdl_mask_worker(void *unused) {
     (void)unused;
-    int ca_rc = p_logcfg(g_client, 1, &g_nr_ca_state_code, 1);
-    pthread_mutex_lock(&g_mu);
-    g_nr_ca_subscribe_rc = ca_rc;
-    g_nr_ca_subscribe_attempted = 1;
-    pthread_mutex_unlock(&g_mu);
-    elog("optional live B9A7 subscription -> %d", ca_rc);
     int enabled = 0;
     pthread_mutex_lock(&g_qmdl_mask_mu);
     while (!g_qmdl_mask_exit) {
-        while (!g_qmdl_mask_exit && enabled == g_qmdl_mask_wanted)
+        while (!g_qmdl_mask_exit && enabled == g_qmdl_mask_wanted && g_pending_live_mask == LIVE_MASK_NONE)
             pthread_cond_wait(&g_qmdl_mask_cond, &g_qmdl_mask_mu);
         if (g_qmdl_mask_exit) break;
+        if (enabled == g_qmdl_mask_wanted) {
+            unsigned actions = g_pending_live_mask;
+            g_pending_live_mask = LIVE_MASK_NONE;
+            pthread_mutex_unlock(&g_qmdl_mask_mu);
+            if ((actions & LIVE_MASK_ADD_DETAILS) && !g_stop) dci_enable_live_details();
+            if ((actions & LIVE_MASK_ADD_OPTIONAL) && !g_stop) dci_enable_optional_live();
+            pthread_mutex_lock(&g_qmdl_mask_mu);
+            continue;
+        }
         enabled = g_qmdl_mask_wanted;
         pthread_mutex_unlock(&g_qmdl_mask_mu);
         int result = p_logcfg(g_client, enabled, k_qmdl_codes, N_QMDL_CODES);
@@ -5290,20 +5364,25 @@ static void *qmdl_mask_worker(void *unused) {
     return NULL;
 }
 
-static void qmdl_request_mask(int enabled) {
+static int request_mask_work(int qmdl_enabled, unsigned live_actions) {
     if (!g_qmdl_mask_started) {
         int rc = pthread_create(&g_qmdl_mask_thread, NULL, qmdl_mask_worker, NULL);
         if (rc != 0) {
             elog("QMDL optional mask worker unavailable (%d)", rc);
-            return;
+            return 0;
         }
         g_qmdl_mask_started = 1;
     }
-    if (!g_qmdl_mask_started) return;
     pthread_mutex_lock(&g_qmdl_mask_mu);
-    g_qmdl_mask_wanted = enabled;
+    if (live_actions != LIVE_MASK_NONE) g_pending_live_mask |= live_actions;
+    else g_qmdl_mask_wanted = qmdl_enabled;
     pthread_cond_signal(&g_qmdl_mask_cond);
     pthread_mutex_unlock(&g_qmdl_mask_mu);
+    return 1;
+}
+
+static void qmdl_request_mask(int enabled) {
+    request_mask_work(enabled, LIVE_MASK_NONE);
 }
 
 static void qmdl_stop_mask_worker(void) {
@@ -5358,7 +5437,7 @@ int main(int argc, char **argv) {
     sigaction(SIGTERM, &stop, NULL);
     sigaction(SIGINT, &stop, NULL);
     sigaction(SIGHUP, &stop, NULL);
-    sigaction(SIGALRM, &stop, NULL);
+    signal(SIGALRM, SIG_DFL);
 
     g_start_mono = mono_ms();
     if (geteuid() != 0) {
@@ -5367,22 +5446,20 @@ int main(int argc, char **argv) {
     }
 
     for (int i = 0; i < N_DEFAULT; i++) g_codes[i] = k_default_codes[i].code;
-    g_ncodes = N_DEFAULT;
     emit_status_locked("authorized", 0);
-    emit_ims_provider("qualcomm_diag", "subscribed", NULL, "");
     emit_ims_provider("mediatek", "unsupported", "false", "no_backend");
     diag_q_init(&g_dq);
     if (pthread_create(&g_dq_th, NULL, decode_worker, NULL) == 0) g_dq_started = 1;
-    logcat_start();
     alarm(12);
     int rc = dci_start();
     alarm(0);
     pthread_mutex_lock(&g_mu);
     emit_status_locked(rc == 0 ? "running" : "error", rc);
+    if (rc == 0) emit_ims_provider("qualcomm_diag", "subscribed", NULL, "");
     pthread_mutex_unlock(&g_mu);
-    if (rc == 0) qmdl_request_mask(0);
-
-    int64_t last_snapshot = mono_ms();
+    if (rc == 0 && !g_stop) logcat_start();
+    int64_t connected_at = mono_ms(), last_snapshot = connected_at;
+    unsigned live_requested = LIVE_MASK_NONE;
     while (!g_stop && rc == 0) {
         struct pollfd input = { .fd = STDIN_FILENO, .events = POLLIN };
         int ready = poll(&input, 1, 250);
@@ -5401,6 +5478,8 @@ int main(int argc, char **argv) {
         pthread_mutex_lock(&g_mu);
         if (g_qmdl_fd >= 0 && !g_qmdl_error) qmdl_flush(g_qmdl_fd);
         int finish_qmdl = g_qmdl_fd >= 0 && (g_qmdl_limit || g_qmdl_error);
+        unsigned actions = live_mask_actions(now - connected_at, g_total_pkts, live_requested);
+        if (actions & LIVE_MASK_ADD_DETAILS) g_live_details_before_first_packet = g_total_pkts == 0;
         if (g_qmdl_fd >= 0 && !finish_qmdl) qmdl_status_locked("recording");
         emit_serving_locked(&g_lte);
         emit_serving_locked(&g_nr);
@@ -5415,18 +5494,19 @@ int main(int argc, char **argv) {
         if (g_diag_ims_pkts) emit_ims_provider("qualcomm_diag", "available", "true", "0x156E");
         pthread_mutex_unlock(&g_mu);
         if (finish_qmdl) qmdl_stop(1);
+        if (actions != LIVE_MASK_NONE && request_mask_work(0, actions)) live_requested |= actions;
         last_snapshot = now;
     }
 
     // If vendor cleanup blocks, the process still exits promptly.
     g_stop = 1;
+    alarm(3);
+    qmdl_stop(0);
     pthread_mutex_lock(&g_dq_mu);
     pthread_cond_signal(&g_dq_cv);
     pthread_mutex_unlock(&g_dq_mu);
     if (g_dq_started) pthread_join(g_dq_th, NULL);
     logcat_stop();
-    alarm(3);
-    qmdl_stop(0);
     qmdl_stop_mask_worker();
     dci_stop();
     if (g_lib) dlclose(g_lib);
