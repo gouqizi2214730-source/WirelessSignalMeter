@@ -983,7 +983,7 @@
     <string name="diag_qmdl_start">开始录制 QMDL</string>
     <string name="diag_qmdl_stop">停止录制 QMDL</string>
     <string name="diag_qmdl_export">导出上次 QMDL</string>
-    <string name="diag_qmdl_description">录制基带 DIAG 原始包。文件含完整 RRC、NAS 以及可能的 SIP 报文和标识，请勿分享。若已开启后台采集，切到后台仍会继续录制；达到 128 MB 时停止。需要保留上一份录制时，请先导出。</string>
+    <string name="diag_qmdl_description">仅在测试任务运行时录制基带 DIAG 原始包。文件含完整 RRC、NAS 以及可能的 SIP 报文和标识，请勿分享。若已开启后台采集，正在运行的任务离开应用后仍可继续录制；达到 128 MB 时停止。需要保留上一份录制时，请先导出。</string>
     <string name="diag_qmdl_starting">正在开始录制 QMDL…</string>
     <string name="diag_qmdl_recording">正在录制 QMDL · %1$d 包 · %2$s</string>
     <string name="diag_qmdl_stopping">正在结束 QMDL 录制…</string>
@@ -1014,7 +1014,7 @@
     <string name="diag_bg_notification_text">熄屏或切到其他应用后仍会继续采集。强制停止应用后采集会结束。</string>
     <string name="diag_bg_stop">停止采集</string>
     <string name="diag_bg_title">后台采集</string>
-    <string name="diag_bg_subtitle">离开应用后通过通知继续采集 DIAG。强制停止应用后无法保持。</string>
+    <string name="diag_bg_subtitle">仅当测试任务正在采集时，离开应用后才可通过通知在后台继续录制。此开关不会单独开始采集。没有运行中的任务时，只能在应用内查看当前数据。强制停止应用后无法保持。</string>
     <string name="diag_overlay_title">采集悬浮窗</string>
     <string name="diag_overlay_subtitle">显示可拖动的小型状态窗。需要系统“显示在其他应用上层”权限，应用不会自动跳转设置页。</string>
     <string name="diag_overlay_need_permission">在系统设置中允许“显示在其他应用上层”之前，悬浮窗不会开启。本应用不会自动打开该页面。</string>
@@ -1067,5 +1067,32 @@
     <string name="diag_reason_no_backend">没有实现对应后端</string>
     <string name="diag_reason_logcat_exited">logcat 读取进程已退出，将重新连接</string>
     <string name="diag_ims_providers">IMS：%1$s</string>
+    <string name="diag_ims_line">IMS · %1$s</string>
+    <string name="diag_ims_headline_unknown_samsung_ready">未知 · 三星日志源已就绪，尚未观测到注册证据</string>
+    <string name="diag_ims_headline_unknown_waiting">未知 · 等待注册证据</string>
+    <string name="diag_ims_headline_unknown_reconnecting">未知 · 三星日志源正在重连</string>
+    <string name="diag_ims_headline_registered">已注册</string>
+    <string name="diag_ims_headline_registered_inferred">已注册（推断）</string>
+    <string name="diag_ims_headline_deregistered">未注册</string>
+    <string name="diag_ims_headline_failed">注册失败</string>
+    <string name="diag_ims_headline_unavailable_privileged">不可用 · 系统 IMS 接口需要特权权限，无法作为注册依据</string>
+    <string name="diag_ims_headline_unavailable_no_source">不可用 · 当前没有可用的 IMS 注册证据来源</string>
+    <string name="diag_ims_pipeline_ready">来源已就绪</string>
+    <string name="diag_ims_pipeline_subscribed">已订阅码流，尚无 IMS 包</string>
+    <string name="diag_ims_pipeline_starting">来源正在启动</string>
+    <string name="diag_ims_pipeline_reconnecting">来源正在重连</string>
+    <string name="diag_ims_pipeline_privileged">系统 IMS 接口需要特权权限，普通电话权限无法读取</string>
+    <string name="diag_ims_pipeline_unavailable">来源不可用</string>
+    <string name="diag_ims_call_calling">正在呼出</string>
+    <string name="diag_ims_call_alerting">振铃中</string>
+    <string name="diag_ims_call_connected">通话中</string>
+    <string name="diag_overlay_task_collecting">采集数据中</string>
+    <string name="diag_overlay_listening">实时查看</string>
+    <string name="diag_overlay_standby">待机</string>
+    <string name="diag_bg_notification_title_task">测试任务采集中</string>
+    <string name="diag_bg_notification_text_task">正在录制测试任务的 DIAG 数据。仅在开启后台采集时，离开应用后才会继续。</string>
+    <string name="diag_bg_notification_title_listen">实时查看</string>
+    <string name="diag_bg_notification_text_listen">当前仅查看实时数据，没有测试任务在录制。</string>
+
 
 </resources>

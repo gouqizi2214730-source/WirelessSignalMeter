@@ -35,6 +35,7 @@ internal data class DeviceCapabilitySnapshot(
     val qualcommDiag: CapabilityItem,
     val imsSources: List<CapabilityItem>,
     val bandLock: CapabilityItem,
+    val imsStatus: ImsStatusSummary,
 ) {
     val basicSignalAvailable get() = telephony.state != CapabilityState.Unavailable
 }
@@ -75,6 +76,7 @@ internal object DeviceCapabilities {
         collectorError: Int?,
         imsProviders: List<ImsProviderStatus>,
         bandLock: BandLockProfile,
+        imsEvidence: ImsEvidence? = null,
     ): DeviceCapabilitySnapshot {
         val abi = supportedAbis.firstOrNull().orEmpty()
         val arm64 = abiSupported(supportedAbis)
@@ -121,6 +123,9 @@ internal object DeviceCapabilities {
             qualcommDiag = diag,
             imsSources = imsItems(imsProviders, sdk),
             bandLock = lock,
+            imsStatus = ImsStatus.summarize(
+                imsProviders, imsEvidence, manufacturer, soc, hardware, simCount,
+            ),
         )
     }
 
@@ -136,7 +141,8 @@ internal object DeviceCapabilities {
                 else -> CapabilityState.Degraded
             }
             val reason = when {
-                state == CapabilityState.Available -> "ok"
+                state == CapabilityState.Available ->
+                    provider.detail.ifBlank { ImsStatus.pipelineReason(provider).ifBlank { "ims_pipeline_ready" } }
                 provider.detail.isNotBlank() -> provider.detail
                 provider.status.isNotBlank() -> provider.status
                 else -> "unknown"
