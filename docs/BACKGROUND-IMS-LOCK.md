@@ -107,3 +107,8 @@ clang --target=aarch64-linux-android33 -std=gnu17 -O2 -fPIE -pie \
 ## 许可证
 
 沿用仓库现有 Apache 2.0 / 来源声明。本轮不复制参考商用 APK 的受保护源码，也不涉及授权、DRM 或加固绕过。
+
+
+## 2026-11-20 多设备能力跟进
+
+在同一 PR 上补充了运行时能力矩阵、双卡显示与 subscriptionId、采集/logcat 有限退避重连、Android IMS 注册 API 降级，以及失败原因展示。默认设置未改。详细清单、合成测试与剩余真机项见提交说明；独立报告在开发机 `/workspace/out/WirelessSignalMeter_optimization_followup.md`。

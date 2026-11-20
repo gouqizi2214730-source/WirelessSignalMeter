@@ -63,6 +63,7 @@ import com.craxiom.networksurvey.ui.main.appbar.TitleBar
 import com.craxiom.networksurvey.ui.settings.SettingsScreen
 import com.craxiom.networksurvey.ui.rootdiag.RootDiagStatus
 import com.craxiom.networksurvey.ui.rootdiag.RootDiagViewModel
+import com.craxiom.networksurvey.ui.rootdiag.DeviceCapabilities
 import com.craxiom.networksurvey.ui.rootdiag.RootSignalScreen
 import com.craxiom.networksurvey.model.CellularProtocol
 import com.craxiom.networksurvey.update.UpdateChecker
@@ -252,14 +253,15 @@ private fun SignalTab(rootDiag: RootDiagViewModel, bottomPadding: Dp, active: Bo
     val androidCells = fragment?.cellularModel?.observeAsState()?.value
     val protocol = androidCells?.servingCellProtocol?.observeAsState()?.value
     val nrBandwidthDiagnostic = androidCells?.nrBandwidthDiagnostic?.observeAsState()?.value
-    // The DIAG stream has no reliable subscription identifier across modem generations.
-    val useRoot = simCount <= 1 && when (protocol) {
-        CellularProtocol.GSM, CellularProtocol.UMTS, CellularProtocol.CDMA -> false
-        CellularProtocol.LTE, CellularProtocol.NR -> signal.status == RootDiagStatus.Running || signal.useRootSignal
-        else -> signal.useRootSignal
-    }
+    // DIAG has no reliable subscription id, so dual-SIM display stays on Android Telephony.
+    // Collection itself is not stopped when more than one SIM is active.
+    val diagLive = signal.status == RootDiagStatus.Running || signal.useRootSignal
+    val useRoot = DeviceCapabilities.displayUsesDiag(simCount, protocol?.name, diagLive)
     LaunchedEffect(active, useRoot, protocol, simCount) {
-        if (active) rootDiag.recordSignalMode(useRoot, protocol?.name, simCount)
+        if (active) {
+            rootDiag.recordSignalMode(useRoot, protocol?.name, simCount)
+            rootDiag.updateSimContext(simCount, fragment?.currentSubscriptionId?.takeIf { it >= 0 })
+        }
     }
     LaunchedEffect(active, useRoot, nrBandwidthDiagnostic) {
         if (active) rootDiag.recordAndroidNrBandwidth(nrBandwidthDiagnostic.takeUnless { useRoot })
@@ -289,6 +291,13 @@ private fun SignalTab(rootDiag: RootDiagViewModel, bottomPadding: Dp, active: Bo
             }
             if (useRoot) {
                 RootSignalScreen(signal, rootDiag::chartFor, bottomPadding, androidCells, active)
+            } else if (diagLive && simCount > 1) {
+                Text(
+                    stringResource(R.string.diag_dual_sim_unmapped),
+                    Modifier.align(Alignment.TopCenter).padding(top = 8.dp, start = 16.dp, end = 16.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

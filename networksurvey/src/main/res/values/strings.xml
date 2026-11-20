@@ -1421,4 +1421,36 @@
     <string name="lock_reason_no_channel">No supported Qualcomm DIAG channel was found.</string>
     <string name="lock_reason_unknown">This device is unsupported until a live DIAG probe succeeds.</string>
 
+
+    <string name="diag_dual_sim_unmapped">DIAG is still collecting on the modem stack, but those measurements cannot be mapped to the selected SIM. The view below is Android Telephony for the current subscription.</string>
+    <string name="diag_capability_title">Device capabilities</string>
+    <string name="diag_capability_telephony">Android signal</string>
+    <string name="diag_capability_root">Root</string>
+    <string name="diag_capability_diag">Qualcomm DIAG</string>
+    <string name="diag_capability_ims">IMS sources</string>
+    <string name="diag_capability_lock">Band lock</string>
+    <string name="diag_cap_available">Available</string>
+    <string name="diag_cap_degraded">Limited</string>
+    <string name="diag_cap_unavailable">Unavailable</string>
+    <string name="diag_cap_unsupported">Unsupported</string>
+    <string name="diag_reason_ok">Ready</string>
+    <string name="diag_reason_checking">Checking</string>
+    <string name="diag_reason_no_su">No root shell</string>
+    <string name="diag_reason_root_denied">Root access denied</string>
+    <string name="diag_reason_no_libdiag">libdiag was not found (this is common on non-Qualcomm devices)</string>
+    <string name="diag_reason_missing_libdiag_symbols">libdiag is missing required symbols</string>
+    <string name="diag_reason_diag_lsm_init_failed">DIAG initialization failed; will retry with backoff</string>
+    <string name="diag_reason_dci_register_failed">DCI registration failed; the channel may be busy</string>
+    <string name="diag_reason_dci_stream_or_mask_failed">DCI stream or log mask was rejected</string>
+    <string name="diag_reason_collector_stopped">The collector stopped after a successful start</string>
+    <string name="diag_reason_abi_unsupported">This build only includes arm64-v8a native helpers</string>
+    <string name="diag_reason_permission_denied">Permission denied</string>
+    <string name="diag_reason_api_too_low">Needs Android 11 or later</string>
+    <string name="diag_reason_no_subscription">No active SIM subscription</string>
+    <string name="diag_reason_ims_unavailable">Android IMS is not available for this subscription</string>
+    <string name="diag_reason_no_samsung_ims_tags">Samsung IMS log tags were not observed</string>
+    <string name="diag_reason_no_backend">No backend is implemented</string>
+    <string name="diag_reason_logcat_exited">The logcat reader exited and will reconnect</string>
+    <string name="diag_ims_providers">IMS: %1$s</string>
+
 </resources>

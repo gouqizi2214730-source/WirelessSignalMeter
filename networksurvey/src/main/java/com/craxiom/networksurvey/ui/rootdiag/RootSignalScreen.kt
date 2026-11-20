@@ -214,7 +214,7 @@ internal fun RootSignalScreen(
             R.string.diag_cached_measurement, DateFormat.format("HH:mm:ss", lastCachedReading).toString(),
         )
         state.status == RootDiagStatus.Running -> ""
-        else -> stringResource(state.status.title)
+        else -> state.failureReason?.let { capabilityReasonText(it) } ?: stringResource(state.status.title)
     }
     val identity = rat?.let { ServingIdentity(it, servingData) }
     val operator = rememberRegisteredOperator(isSignalTab)

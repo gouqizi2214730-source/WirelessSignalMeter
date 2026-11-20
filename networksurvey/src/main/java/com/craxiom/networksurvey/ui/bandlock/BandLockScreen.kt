@@ -47,6 +47,7 @@ import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -73,6 +74,7 @@ import kotlinx.coroutines.delay
 internal fun BandLockScreen(rootDiag: RootDiagViewModel, onBack: () -> Unit, model: BandLockViewModel = viewModel()) {
     val state by model.state.collectAsStateWithLifecycle()
     val signal by rootDiag.signal.collectAsStateWithLifecycle()
+    LaunchedEffect(state.profile) { rootDiag.updateBandLockProfile(state.profile) }
     val now by produceState(SystemClock.elapsedRealtime()) {
         while (true) {
             delay(1_000)

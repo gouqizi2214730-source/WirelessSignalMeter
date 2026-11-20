@@ -19,6 +19,11 @@ import com.craxiom.networksurvey.ui.cellular.CellularChartViewModel
 import com.craxiom.networksurvey.util.AndroidLteSinrReader
 import com.craxiom.networksurvey.util.LteSinrUtils
 import com.craxiom.networksurvey.services.RootDiagCollectorService
+import com.craxiom.networksurvey.ui.bandlock.BandLockProfile
+import com.craxiom.networksurvey.ui.bandlock.LockSupportLevel
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineStart
@@ -59,6 +64,7 @@ internal data class RootSignalState(
     val errorCode: Int? = null,
     val errorDetails: List<String> = emptyList(),
     val cachedMeasureIds: Set<Long> = emptySet(),
+    val failureReason: String? = null,
 ) {
     val useRootSignal: Boolean
         get() = (status == RootDiagStatus.Running || status == RootDiagStatus.Checking ||
@@ -115,6 +121,16 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
     private var overlayImsAvailable: Boolean? = null
     private var overlayImsCall = "idle"
     private var overlayDropped = 0L
+    private var lastEndStatus = RootDiagStatus.Checking
+    private var lastEndError: Int? = null
+    private var hadBeenRunning = false
+    private var restartAttempt = 0
+    private var simCount = 0
+    private var selectedSubscriptionId: Int? = null
+    private val imsProviders = linkedMapOf<String, ImsProviderStatus>()
+    private var bandLockProfile = BandLockProfile(LockSupportLevel.Unsupported, "unknown", reason = "unchecked")
+    private val capabilityState = MutableStateFlow(currentCapability())
+    internal val capability = capabilityState.asStateFlow()
 
     internal fun recordSignalMode(root: Boolean, androidProtocol: String?, simCount: Int) {
         lastSignalMode = JSONObject().put("type", "signal_mode").put("t", System.currentTimeMillis())
@@ -383,15 +399,72 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 captureRecords()
             } finally {
                 capture = null
-                if (restartAfterStop && !pausedByUser &&
-                    (foreground || RootDiagPrefs.backgroundEnabled(app))) {
+                val keep = !pausedByUser && (foreground || RootDiagPrefs.backgroundEnabled(app))
+                val retry = CollectorRestartPolicy.shouldRetry(
+                    lastEndStatus, lastEndError, hadBeenRunning, restartAttempt,
+                )
+                if (keep && (restartAfterStop || retry)) {
                     restartAfterStop = false
-                    start()
+                    if (retry) {
+                        val wait = CollectorRestartPolicy.delayMs(restartAttempt)
+                        restartAttempt++
+                        delay(wait)
+                    }
+                    if (!pausedByUser && (foreground || RootDiagPrefs.backgroundEnabled(app))) start()
+                    else syncCollectorService(lastEndStatus)
+                } else {
+                    syncCollectorService(lastEndStatus)
                 }
             }
         }
         capture?.start()
-        if (RootDiagPrefs.backgroundEnabled(app)) RootDiagCollectorService.start(app)
+        syncCollectorService(RootDiagStatus.Checking)
+    }
+
+    internal fun updateSimContext(count: Int, subscriptionId: Int?) {
+        simCount = count
+        selectedSubscriptionId = subscriptionId
+        publishCapability()
+        viewModelScope.launch(Dispatchers.IO) {
+            imsProviders["android_telephony"] = readAndroidIms(app)
+            withContext(Dispatchers.Main) { publishCapability() }
+        }
+    }
+
+    internal fun updateBandLockProfile(profile: BandLockProfile) {
+        bandLockProfile = profile
+        publishCapability()
+    }
+
+    private fun syncCollectorService(status: RootDiagStatus) {
+        val active = status == RootDiagStatus.Checking || status == RootDiagStatus.Starting ||
+            status == RootDiagStatus.Running
+        if (active && RootDiagPrefs.backgroundEnabled(app)) RootDiagCollectorService.start(app)
+        else if (!active) RootDiagCollectorService.stop(app)
+    }
+
+    private fun currentCapability(): DeviceCapabilitySnapshot {
+        val permission = ContextCompat.checkSelfPermission(app, Manifest.permission.READ_PHONE_STATE) ==
+            PackageManager.PERMISSION_GRANTED
+        return DeviceCapabilities.snapshot(
+            sdk = Build.VERSION.SDK_INT,
+            supportedAbis = Build.SUPPORTED_ABIS,
+            manufacturer = Build.MANUFACTURER,
+            model = Build.MODEL,
+            soc = Build.SOC_MODEL,
+            hardware = Build.HARDWARE,
+            simCount = simCount,
+            selectedSubscriptionId = selectedSubscriptionId,
+            telephonyPermission = permission,
+            collectorStatus = signalState.value.status,
+            collectorError = signalState.value.errorCode,
+            imsProviders = imsProviders.values.toList(),
+            bandLock = bandLockProfile,
+        )
+    }
+
+    private fun publishCapability() {
+        capabilityState.value = currentCapability()
     }
 
     private fun publishOverlay(status: RootDiagStatus, records: List<DiagRecord>) {
@@ -463,11 +536,22 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
             val errorDetails = if (status == RootDiagStatus.Unsupported) startupLog.toList() else emptyList()
             val cachedIds = (if (status == RootDiagStatus.Stopped) lastMeasurements else cached)
                 .values.mapTo(mutableSetOf()) { it.id }
+            lastEndStatus = status
+            lastEndError = errorCode
+            if (status == RootDiagStatus.Running) {
+                hadBeenRunning = true
+                restartAttempt = 0
+            }
             signalState.value = RootSignalState(
                 status, lastMeasurements.values.toList() + lastConfiguration.values,
                 errorCode, errorDetails, cachedIds,
+                failureReason = CollectorRestartPolicy.collectorReason(status, errorCode).takeIf {
+                    status == RootDiagStatus.Unsupported || status == RootDiagStatus.Denied ||
+                        status == RootDiagStatus.Unavailable
+                },
             )
             publishOverlay(status, signalState.value.records)
+            publishCapability()
             if (status == RootDiagStatus.Running) {
                 for (rat in listOf("NR", "LTE")) {
                     val record = metrics["serving:$rat"] ?: continue
@@ -648,6 +732,10 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                     val name = value.optString("name")
                     val statusName = value.optString("status")
                     val available = if (value.has("available")) value.optBoolean("available") else null
+                    if (name.isNotBlank()) {
+                        imsProviders[name] = ImsProviderStatus(name, statusName, available, value.optString("detail"))
+                        publishCapability()
+                    }
                     if (name == "samsung_logcat") {
                         overlayImsAvailable = when {
                             available == false || statusName == "unavailable" -> false

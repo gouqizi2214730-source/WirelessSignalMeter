@@ -4386,65 +4386,94 @@ static void apply_lc_event(const struct lc_event *e) {
     }
 }
 
+static void lc_wait_ms(int ms) {
+    int64_t end = now_ms() + ms;
+    while (!g_stop) {
+        int64_t left = end - now_ms();
+        if (left <= 0) return;
+        if (left > 200) left = 200;
+        struct timespec ts = { 0, (long)left * 1000000L };
+        nanosleep(&ts, NULL);
+    }
+}
+
 static void *logcat_thread(void *arg) {
     (void)arg;
-    int pfd[2];
-    if (pipe(pfd) != 0) {
+    int backoff = 2000;
+    while (!g_stop) {
+        int pfd[2];
+        if (pipe(pfd) != 0) {
+            pthread_mutex_lock(&g_mu);
+            emit_ims_provider("samsung_logcat", "unavailable", "false", "pipe_failed");
+            pthread_mutex_unlock(&g_mu);
+            lc_wait_ms(backoff);
+            if (backoff < 30000) backoff *= 2;
+            continue;
+        }
+        pid_t pid = fork();
+        if (pid == 0) {
+            dup2(pfd[1], 1);
+            int dn = open("/dev/null", O_WRONLY);
+            if (dn >= 0) { dup2(dn, 2); close(dn); }
+            close(pfd[0]); close(pfd[1]);
+            execlp("logcat", "logcat", "-b", "radio", "-b", "main", "-v", "epoch", "-T", "1", (char *)NULL);
+            _exit(127);
+        }
+        close(pfd[1]);
+        if (pid < 0) {
+            close(pfd[0]);
+            pthread_mutex_lock(&g_mu);
+            emit_ims_provider("samsung_logcat", "unavailable", "false", "fork_failed");
+            pthread_mutex_unlock(&g_mu);
+            lc_wait_ms(backoff);
+            if (backoff < 30000) backoff *= 2;
+            continue;
+        }
+        g_lc_pid = pid;
+        g_lc_alive = 1;
+        FILE *in = fdopen(pfd[0], "r");
+        if (!in) {
+            close(pfd[0]);
+            kill(pid, SIGTERM);
+            waitpid(pid, NULL, 0);
+            g_lc_pid = -1;
+            g_lc_alive = 0;
+            lc_wait_ms(backoff);
+            if (backoff < 30000) backoff *= 2;
+            continue;
+        }
+        elog("IMS logcat reader started (pid %d); raw lines are not stored", (int)pid);
         pthread_mutex_lock(&g_mu);
-        emit_ims_provider("samsung_logcat", "unavailable", "false", "pipe_failed");
+        emit_ims_provider("samsung_logcat", "starting", NULL, "");
+        if (!g_lc_fmt && !g_reg.lc_imsregi) g_lc_start = now_ms();
         pthread_mutex_unlock(&g_mu);
-        return NULL;
-    }
-    pid_t pid = fork();
-    if (pid == 0) {
-        dup2(pfd[1], 1);
-        int dn = open("/dev/null", O_WRONLY);
-        if (dn >= 0) { dup2(dn, 2); close(dn); }
-        close(pfd[0]); close(pfd[1]);
-        execlp("logcat", "logcat", "-b", "radio", "-b", "main", "-v", "epoch", "-T", "1", (char *)NULL);
-        _exit(127);
-    }
-    close(pfd[1]);
-    if (pid < 0) {
-        close(pfd[0]);
-        pthread_mutex_lock(&g_mu);
-        emit_ims_provider("samsung_logcat", "unavailable", "false", "fork_failed");
-        pthread_mutex_unlock(&g_mu);
-        return NULL;
-    }
-    g_lc_pid = pid;
-    g_lc_alive = 1;
-    FILE *in = fdopen(pfd[0], "r");
-    if (!in) {
-        close(pfd[0]);
-        kill(pid, SIGTERM);
+        char line[4096], red[4200];
+        while (!g_stop && fgets(line, sizeof(line), in)) {
+            g_lc_read++;
+            if (!lc_keep_line(line) || lc_is_noisy(line)) continue;
+            g_lc_lines++;
+            lc_redact_line(line, red, sizeof(red));
+            struct lc_event ev;
+            int fmt = g_lc_fmt;
+            if (!lc_parse_line(red, fmt, &fmt, &ev)) continue;
+            pthread_mutex_lock(&g_mu);
+            if (fmt) g_lc_fmt = 1;
+            apply_lc_event(&ev);
+            pthread_mutex_unlock(&g_mu);
+        }
+        fclose(in);
         waitpid(pid, NULL, 0);
-        g_lc_pid = -1;
+        if (g_lc_pid == pid) g_lc_pid = -1;
         g_lc_alive = 0;
-        return NULL;
-    }
-    elog("IMS logcat reader started (pid %d); raw lines are not stored", (int)pid);
-    pthread_mutex_lock(&g_mu);
-    emit_ims_provider("samsung_logcat", "starting", NULL, "");
-    pthread_mutex_unlock(&g_mu);
-    char line[4096], red[4200];
-    while (!g_stop && fgets(line, sizeof(line), in)) {
-        g_lc_read++;
-        if (!lc_keep_line(line) || lc_is_noisy(line)) continue;
-        g_lc_lines++;
-        lc_redact_line(line, red, sizeof(red));
-        struct lc_event ev;
-        int fmt = g_lc_fmt;
-        if (!lc_parse_line(red, fmt, &fmt, &ev)) continue;
+        elog("IMS logcat ended: read %lu, kept %lu, sip %lu, rcs skipped %lu, fmt %s",
+             g_lc_read, g_lc_lines, g_lc_sip, g_lc_rcs, g_lc_fmt ? "samsung" : "none");
+        if (g_stop) break;
         pthread_mutex_lock(&g_mu);
-        if (fmt) g_lc_fmt = 1;
-        apply_lc_event(&ev);
+        emit_ims_provider("samsung_logcat", "reconnecting", NULL, "logcat_exited");
         pthread_mutex_unlock(&g_mu);
+        lc_wait_ms(backoff);
+        if (backoff < 30000) backoff *= 2;
     }
-    fclose(in);
-    g_lc_alive = 0;
-    elog("IMS logcat ended: read %lu, kept %lu, sip %lu, rcs skipped %lu, fmt %s",
-         g_lc_read, g_lc_lines, g_lc_sip, g_lc_rcs, g_lc_fmt ? "samsung" : "none");
     return NULL;
 }
 

@@ -1036,4 +1036,36 @@
     <string name="lock_reason_no_channel">未发现受支持的高通 DIAG 通道。</string>
     <string name="lock_reason_unknown">在现场 DIAG 探测成功之前，该设备视为不支持。</string>
 
+
+    <string name="diag_dual_sim_unmapped">DIAG 仍在基带侧采集，但这些测量无法对应到当前选择的 SIM。下方显示的是当前订阅的 Android 电话信息。</string>
+    <string name="diag_capability_title">设备能力</string>
+    <string name="diag_capability_telephony">Android 信号</string>
+    <string name="diag_capability_root">Root</string>
+    <string name="diag_capability_diag">高通 DIAG</string>
+    <string name="diag_capability_ims">IMS 来源</string>
+    <string name="diag_capability_lock">锁频</string>
+    <string name="diag_cap_available">可用</string>
+    <string name="diag_cap_degraded">受限</string>
+    <string name="diag_cap_unavailable">不可用</string>
+    <string name="diag_cap_unsupported">不支持</string>
+    <string name="diag_reason_ok">就绪</string>
+    <string name="diag_reason_checking">正在检测</string>
+    <string name="diag_reason_no_su">没有 root shell</string>
+    <string name="diag_reason_root_denied">Root 授权被拒绝</string>
+    <string name="diag_reason_no_libdiag">未找到 libdiag（非高通设备上常见）</string>
+    <string name="diag_reason_missing_libdiag_symbols">libdiag 缺少所需符号</string>
+    <string name="diag_reason_diag_lsm_init_failed">DIAG 初始化失败，将按退避间隔重试</string>
+    <string name="diag_reason_dci_register_failed">DCI 注册失败，通道可能被占用</string>
+    <string name="diag_reason_dci_stream_or_mask_failed">DCI 数据流或日志掩码被拒绝</string>
+    <string name="diag_reason_collector_stopped">采集曾成功启动后停止</string>
+    <string name="diag_reason_abi_unsupported">当前安装包只包含 arm64-v8a 原生程序</string>
+    <string name="diag_reason_permission_denied">权限被拒绝</string>
+    <string name="diag_reason_api_too_low">需要 Android 11 或更高版本</string>
+    <string name="diag_reason_no_subscription">没有已激活的 SIM 订阅</string>
+    <string name="diag_reason_ims_unavailable">该订阅没有可用的 Android IMS</string>
+    <string name="diag_reason_no_samsung_ims_tags">未观察到三星 IMS 日志标签</string>
+    <string name="diag_reason_no_backend">没有实现对应后端</string>
+    <string name="diag_reason_logcat_exited">logcat 读取进程已退出，将重新连接</string>
+    <string name="diag_ims_providers">IMS：%1$s</string>
+
 </resources>

@@ -46,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -62,6 +63,8 @@ import androidx.preference.PreferenceManager
 import com.craxiom.networksurvey.BuildConfig
 import com.craxiom.networksurvey.R
 import com.craxiom.networksurvey.ui.rootdiag.RootDiagViewModel
+import com.craxiom.networksurvey.ui.rootdiag.capabilityLine
+import com.craxiom.networksurvey.ui.rootdiag.capabilityReasonText
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
@@ -154,6 +157,8 @@ fun SettingsScreen(
                 SettingsGroup(stringResource(R.string.diag_settings_group)) {
                     DiagCollectionSettings()
                     SettingsDivider()
+                    DeviceCapabilitySummary(rootDiag)
+                    SettingsDivider()
                     DiagnosticLogExport(rootDiag)
                 }
             }
@@ -226,6 +231,28 @@ private fun DiagnosticLogExport(rootDiag: RootDiagViewModel) {
     }
 }
 
+
+@Composable
+private fun DeviceCapabilitySummary(rootDiag: RootDiagViewModel) {
+    val capability by rootDiag.capability.collectAsStateWithLifecycle()
+    Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(stringResource(R.string.diag_capability_title), style = MaterialTheme.typography.titleSmall)
+        Text(
+            listOf(capability.manufacturer, capability.model, capability.soc, "API ${capability.sdk}").filter { it.isNotBlank() }.joinToString(" · "),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(capabilityLine(capability.telephony), style = MaterialTheme.typography.bodySmall)
+        Text(capabilityLine(capability.root), style = MaterialTheme.typography.bodySmall)
+        Text(capabilityLine(capability.qualcommDiag), style = MaterialTheme.typography.bodySmall)
+        Text(capabilityLine(capability.bandLock), style = MaterialTheme.typography.bodySmall)
+        val context = LocalContext.current
+        val ims = capability.imsSources.joinToString("；") { "${it.id}: ${capabilityReasonText(context, it.reason)}" }
+        if (ims.isNotBlank()) {
+            Text(stringResource(R.string.diag_ims_providers, ims), style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
 
 @Composable
 private fun DiagCollectionSettings() {
