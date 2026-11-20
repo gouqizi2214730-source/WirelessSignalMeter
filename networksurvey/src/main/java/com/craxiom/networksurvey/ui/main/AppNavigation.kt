@@ -36,6 +36,7 @@ import com.craxiom.networksurvey.ui.cellular.CalculatorScreen
 import com.craxiom.networksurvey.ui.cellular.baidumap.BaiduTowerMapScreen
 import com.craxiom.networksurvey.ui.cellular.baidumap.RoadCoverageScreen
 import com.craxiom.networksurvey.ui.bandlock.BandLockScreen
+import com.craxiom.networksurvey.ui.bandlock.BandLockViewModel
 import com.craxiom.networksurvey.ui.cellular.model.ServingCellInfo
 import com.craxiom.networksurvey.ui.cellular.towermap.ProviderColorOverrideScreen
 import com.craxiom.networksurvey.ui.cellular.towermap.ProviderColorOverrideViewModel
@@ -232,8 +233,10 @@ fun NavGraphBuilder.mainGraph(
             RoadCoverageScreen(onBack = { mainNavController.navigateUp() })
         }
 
-        composable(NavOption.BandLock.name) {
-            BandLockScreen(rootDiag = rootDiag, onBack = { mainNavController.navigateUp() })
+        composable(NavOption.BandLock.name) { entry ->
+            val mainEntry = remember(entry) { mainNavController.getBackStackEntry(NavRoutes.MainRoute.name) }
+            val bandLock = viewModel<BandLockViewModel>(viewModelStoreOwner = mainEntry)
+            BandLockScreen(rootDiag = rootDiag, onBack = { mainNavController.navigateUp() }, model = bandLock)
         }
 
         composable(NavOption.Signaling.name) {

@@ -1,7 +1,6 @@
 package com.craxiom.networksurvey.ui.rootdiag
 
 import android.Manifest
-import android.text.format.DateFormat
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationListener
@@ -59,12 +58,16 @@ import androidx.compose.ui.unit.dp
 import com.craxiom.messaging.LteRecordData
 import com.craxiom.messaging.NrRecordData
 import com.craxiom.networksurvey.R
+import com.craxiom.networksurvey.fragments.model.CarrierAggregationViewState
+import com.craxiom.networksurvey.util.CarrierAggregation
 import com.craxiom.networksurvey.constants.LteMessageConstants
 import com.craxiom.networksurvey.db.EngineeringParamDbHelper
 import com.craxiom.networksurvey.fragments.model.CellularViewModel
 import com.craxiom.networksurvey.constants.NetworkSurveyConstants.UNSET_VALUE
 import com.craxiom.networksurvey.model.StationInfo
 import com.craxiom.networksurvey.ui.cellular.baidumap.MapNeighborCell
+import com.craxiom.networksurvey.model.NrCarrier
+import com.craxiom.networksurvey.ui.cellular.NrCarrierSection
 import com.craxiom.networksurvey.ui.cellular.NrBandwidthCell
 import com.craxiom.networksurvey.ui.cellular.saveMeasuredNrBandwidth
 import com.craxiom.networksurvey.model.CellularProtocol
@@ -208,15 +211,19 @@ internal fun RootSignalScreen(
             servingData != null && it.data.channel("pci") == servingData.channel("pci") &&
             it.data.channel("arfcn") == servingData.channel("arfcn")
     }?.data?.neighborMetric("sinr_index", "LTE", singleReading = true)?.value
-    val lastCachedReading = diagServing?.takeIf { it.id in state.cachedMeasureIds }?.time ?: 0
-    val status = when {
-        lastCachedReading > 0 -> stringResource(
-            R.string.diag_cached_measurement, DateFormat.format("HH:mm:ss", lastCachedReading).toString(),
-        )
-        state.status == RootDiagStatus.Running -> ""
-        else -> state.failureReason?.let { capabilityReasonText(it) } ?: stringResource(state.status.title)
-    }
+    val status = if (state.status == RootDiagStatus.Running) "" else
+        state.failureReason?.let { capabilityReasonText(it) } ?: stringResource(state.status.title)
     val identity = rat?.let { ServingIdentity(it, servingData) }
+    val lteSecondaries = if (identity?.rat == "LTE" && state.status == RootDiagStatus.Running &&
+        servingCell != null && servingCell.id !in state.cachedMeasureIds) {
+        val samples = records["lte_meas"].orEmpty().mapNotNull { record ->
+            if (record.source != "B193" || record.id in state.cachedMeasureIds || record.isEstimated()) return@mapNotNull null
+            val data = record.data
+            CarrierAggregation.B193Sample(data.optLong("ca_report", -1), data.optInt("cc", -1),
+                data.optInt("pci", -1), data.optInt("earfcn", -1), data.optInt("is_serving") == 1, record.receivedAt)
+        }
+        CarrierAggregation.b193Secondaries(samples, identity.pci, identity.arfcn, now)
+    } else emptyList()
     val operator = rememberRegisteredOperator(isSignalTab)
     fun matchesServing(record: DiagRecord) = identity != null && record.data.optString("rat") == identity.rat &&
         record.data.channel("pci") == identity.pci && record.data.channel("arfcn") == identity.arfcn
@@ -234,20 +241,33 @@ internal fun RootSignalScreen(
         contentPadding = PaddingValues(top = 4.dp, bottom = bottomPadding),
     ) {
         item("network") {
+            val lteCa = lteSecondaries.takeIf { it.isNotEmpty() }?.let { rows ->
+                CarrierAggregationViewState(rows.map { row ->
+                    CarrierAggregation.chipLabel(CarrierAggregation.Component(CarrierAggregation.LTE,
+                        row.pci, row.earfcn, CellularUtils.downlinkEarfcnToBand(row.earfcn), 0))
+                }, stringResource(R.string.ca_lte_b193, rows.size))
+            }
             RootNetworkHeader(identity, nrMode, status,
-                operator?.name.orEmpty().ifBlank { registeredPlmn?.displayPlmn().orEmpty() })
+                operator?.name.orEmpty().ifBlank { registeredPlmn?.displayPlmn().orEmpty() }, lteCa)
         }
-        if (rat == null || fields == null) {
-            return@LazyColumn
+        if (rat != null && fields != null &&
+            (rat != "NR" || state.nrCarriers.count { !it.lastObservation() } < 2)) {
+            item("metrics:$rat") {
+                ServingSignalMetrics(
+                    if (rat == "NR") CellularProtocol.NR else CellularProtocol.LTE,
+                    servingData?.number("rsrp"), servingData?.number("rsrq"), servingData?.number("sinr") ?: lteRrcSinr,
+                )
+            }
         }
-        item("metrics:$rat") {
-            ServingSignalMetrics(
-                if (rat == "NR") CellularProtocol.NR else CellularProtocol.LTE,
-                servingData?.number("rsrp"), servingData?.number("rsrq"), servingData?.number("sinr") ?: lteRrcSinr,
-            )
+        if (state.nrCarriers.size >= 2) item("nr-carriers") {
+            NrCarrierSection(state.nrCarriers, fromDiag = true)
         }
+        if (rat == null || fields == null) return@LazyColumn
         item("serving:$rat") { SignalParameterCard(stringResource(R.string.serving_cell_parameters), fields.primary) }
-        item("neighbors:$rat") { NeighborMeasurements(rat, servingData, state.records, null, isSignalTab) }
+        item("neighbors:$rat") {
+            NeighborMeasurements(rat, servingData, state.records, null, isSignalTab, state.nrCarriers,
+                lteSecondaries.map { it.earfcn to it.pci }.toSet())
+        }
         item("trend:$rat") {
             SignalSectionCard(contentPadding = 0.dp) { CellularChartComponent(viewModel = chartFor(rat)) }
         }
@@ -670,7 +690,9 @@ private fun SignalSelection(selected: String, options: List<String>, prefix: Str
 }
 
 @Composable
-private fun RootNetworkHeader(identity: ServingIdentity?, nrMode: NrMode?, status: String, operator: String) {
+private fun RootNetworkHeader(
+    identity: ServingIdentity?, nrMode: NrMode?, status: String, operator: String, lteCa: CarrierAggregationViewState?,
+) {
     val context = LocalContext.current.applicationContext
     val cellName by produceState("", identity, context) {
         value = ""
@@ -701,7 +723,7 @@ private fun RootNetworkHeader(identity: ServingIdentity?, nrMode: NrMode?, statu
             voicePill = null,
             dataPill = null,
             brandingPill = status,
-            carrierAggregation = null,
+            carrierAggregation = lteCa,
         )
         if (identity == null) WaitingForDiagData()
     }
@@ -832,6 +854,10 @@ private fun servingCellFields(
         "DL ${cyclicPrefix(downlinkCp)} / UL ${cyclicPrefix(uplinkCp)}"
     } else cyclicPrefix(downlinkCp ?: uplinkCp)
     val lteCqi = scheduled("csf")?.channel("cqi") ?: data?.channel("cqi")
+    val lteTdd = records.cellConfig("lte_tdd_config", data)
+    val lteAssignment = lteTdd?.channel("assignment")
+    val ltePattern = lteAssignment?.let { lteTddPattern(it, lteTdd.channel("special") ?: -1) }
+    val tddScs = broadcast?.channel("tdd_scs_khz")
     val tddPatterns = listOf(1, 2).mapNotNull { index ->
         val pattern = broadcast?.optJSONObject("tdd_pattern$index") ?: return@mapNotNull null
         val period = pattern.channel("period_us")?.takeIf { it > 0 } ?: return@mapNotNull null
@@ -840,8 +866,15 @@ private fun servingCellFields(
         val ulSlots = pattern.channel("ul_slots") ?: return@mapNotNull null
         val ulSymbols = pattern.channel("ul_symbols") ?: return@mapNotNull null
         val periodMs = (period / 1000.0).toString().removeSuffix(".0")
-        DiagField(stringResource(R.string.diag_tdd_pattern, index, periodMs),
-            stringResource(R.string.diag_tdd_pattern_value, dlSlots, dlSymbols, ulSlots, ulSymbols))
+        val base = stringResource(R.string.diag_tdd_pattern_value, dlSlots, dlSymbols, ulSlots, ulSymbols)
+        val split = tddScs?.let { scs ->
+            // Extended CP uses 60 kHz. If the initial BWPs disagree, keep the raw broadcast values.
+            if (scs == 60 && (downlinkCp == null || downlinkCp != uplinkCp)) null
+            else nrTddAllocation(scs, scs == 60 && downlinkCp == 1, period, dlSlots, dlSymbols, ulSlots, ulSymbols)
+        }
+        val value = if (split == null) base else "$base\n" +
+            stringResource(R.string.diag_tdd_symbol_ratio, split.downlink, split.uplink, split.flexible)
+        DiagField(stringResource(R.string.diag_tdd_pattern, index, periodMs), value)
     }
     val commonAccessFields = listOf(
         Triple("p_max_dbm", R.string.diag_broadcast_p_max, "dBm"),
@@ -916,7 +949,7 @@ private fun servingCellFields(
         pusch?.number("pusch_pcmax")?.let { DiagField("PUSCH P-CMAX", String.format(Locale.ROOT, "%.1f dBm", it)) },
     ) +
         nrMeasurement.fixedSignalFields(listOf("rsrp_rx0", "rsrp_rx1")) +
-        listOfNotNull(broadcast?.channel("tdd_scs_khz")?.let { DiagField("TDD SCS", "$it kHz") }) + tddPatterns else
+        listOfNotNull(tddScs?.let { DiagField("TDD SCS", "$it kHz") }) + tddPatterns else
         listOf(DiagField("RRC", rrcState.signalDisplayValue()),
             DiagField(stringResource(R.string.diag_duplex_mode), lteDuplexMode(frequencyBand).signalDisplayValue()),
             DiagField("UL CP Type", cyclicPrefix(access?.channel("ul_cp_type"))),
@@ -925,20 +958,11 @@ private fun servingCellFields(
         lteMeasurement.fixedSignalFields(listOf("rsrp_rx0", "rsrp_rx1", "rsrq_rx0", "rsrq_rx1", "sinr_rx0", "sinr_rx1")) +
         (if (lteCell?.has("dl_bw_prb") == true) lteCell else lteMib).fixedSignalFields(listOf("dl_bw_prb")) +
         lteCell.fixedSignalFields(listOf("ul_bw_prb")) + lteMib.fixedSignalFields(listOf("tx_antennas")) +
-        transmitPower + commonAccessFields + lteAccessFields + lteMacFields
-    val observation = records["serving"].orEmpty().firstOrNull {
-        it.data.optString("rat") == identity.rat && it.data.channel("pci") == identity.pci &&
-            it.data.channel("arfcn") == identity.arfcn
-    }
-    return ServingParameterFields(summary, engineering + listOf(
-        DiagField("RSRP 来源", data?.optString("rsrp_src")?.ifBlank { data.optString("meas_src") }.signalDisplayValue()),
-        DiagField("RSRQ 来源", data?.optString("rsrq_src")?.ifBlank { data.optString("meas_src") }.signalDisplayValue()),
-        DiagField("SINR 来源", data?.optString("sinr_src").signalDisplayValue()),
-        DiagField("服务小区观测龄期", observation?.let {
-            val age = it.data.optLong("seen_age_ms", -1)
-            if (age >= 0) "${age + (SystemClock.elapsedRealtime() - it.receivedAt).coerceAtLeast(0)} ms" else null
-        }.signalDisplayValue()),
-    ))
+        transmitPower + commonAccessFields + lteAccessFields + lteMacFields + listOfNotNull(ltePattern?.let {
+            DiagField(stringResource(R.string.diag_lte_tdd_assignment, lteAssignment),
+                stringResource(R.string.diag_lte_tdd_value, it.frames, it.downlink, it.uplink, it.switching, it.special))
+        })
+    return ServingParameterFields(summary, engineering)
 }
 
 private fun lteDuplexMode(band: Int?): String? = when (band ?: 0) {
@@ -1217,6 +1241,8 @@ internal fun NeighborMeasurements(
     records: List<DiagRecord>,
     androidCells: CellularViewModel?,
     isSignalTab: Boolean,
+    nrCarriers: List<NrCarrier> = emptyList(),
+    lteSecondaries: Set<Pair<Int, Int>> = emptySet(),
 ) {
     val androidNr = if (rat == "NR") androidCells?.nrNeighbors?.observeAsState()?.value.orEmpty() else emptyList()
     val androidLte = if (rat == "LTE") androidCells?.lteNeighbors?.observeAsState()?.value.orEmpty() else emptyList()
@@ -1242,8 +1268,13 @@ internal fun NeighborMeasurements(
     val keys = remember(neighbors) { neighbors.map { it.matchKey }.toSet() }
     val matches = rememberNeighborMatches(keys, isSignalTab)
 
-    val ordered = remember(neighbors, serving) {
-        neighbors.filterNot { it.sinrOnly || it.isServingNeighbor(serving) }
+    val ordered = remember(neighbors, serving, nrCarriers, lteSecondaries) {
+        val nrServing = nrCarriers.filterNot { it.lastObservation() }.mapTo(mutableSetOf()) { it.identity() }
+        neighbors.filterNot {
+            it.sinrOnly || it.isServingNeighbor(serving) ||
+                (rat == "LTE" && (it.channel to it.pci) in lteSecondaries) ||
+                (rat == "NR" && NrCarrier.Identity(it.pci, it.channel) in nrServing)
+        }
             .sortedWith(compareByDescending<NeighborReading> { it.rsrp?.value ?: Double.NEGATIVE_INFINITY }
                 .thenBy { it.channel }.thenBy { it.pci })
     }

@@ -60,7 +60,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.craxiom.networksurvey.R
 import com.craxiom.networksurvey.ui.main.appbar.TitleBar
 import com.craxiom.networksurvey.ui.rootdiag.DiagRecord
@@ -71,7 +70,7 @@ import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun BandLockScreen(rootDiag: RootDiagViewModel, onBack: () -> Unit, model: BandLockViewModel = viewModel()) {
+internal fun BandLockScreen(rootDiag: RootDiagViewModel, onBack: () -> Unit, model: BandLockViewModel) {
     val state by model.state.collectAsStateWithLifecycle()
     val signal by rootDiag.signal.collectAsStateWithLifecycle()
     LaunchedEffect(state.profile) { rootDiag.updateBandLockProfile(state.profile) }
@@ -83,7 +82,8 @@ internal fun BandLockScreen(rootDiag: RootDiagViewModel, onBack: () -> Unit, mod
     }
     var radio by rememberSaveable { mutableStateOf(LockRadio.Lte) }
     var target by rememberSaveable { mutableStateOf(LockTarget.Bands) }
-    var networkMode by rememberSaveable { mutableStateOf(LockNetworkMode.Auto) }
+    var networkMode by rememberSaveable { mutableStateOf(state.appliedMode ?: LockNetworkMode.Auto) }
+    LaunchedEffect(state.appliedMode) { state.appliedMode?.let { networkMode = it } }
     var lteBands by rememberSaveable { mutableStateOf("") }
     var nrBands by rememberSaveable { mutableStateOf("") }
     var lteChannel by rememberSaveable { mutableStateOf("") }
@@ -131,13 +131,14 @@ internal fun BandLockScreen(rootDiag: RootDiagViewModel, onBack: () -> Unit, mod
         LockTarget.Cell -> "$radioLabel · ARFCN $channel · PCI $pci" +
             if (radio == LockRadio.Nr) " · n$nrBand · $scs kHz" else ""
     }
-    BackHandler(state.busy) { /* Keep the active operation attached until the helper exits. */ }
+    val operating = state.busy && state.availability != LockAvailability.Checking
+    BackHandler(operating) { /* Keep the active operation attached until the helper exits. */ }
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TitleBar(stringResource(R.string.tool_band_lock_title), compact = true,
-                onBackClick = onBack.takeUnless { state.busy })
+                onBackClick = onBack.takeUnless { operating })
         },
     ) { padding ->
         Column(
@@ -149,10 +150,10 @@ internal fun BandLockScreen(rootDiag: RootDiagViewModel, onBack: () -> Unit, mod
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(model.device, style = MaterialTheme.typography.titleSmall)
                     Text(stringResource(when {
-                        state.busy -> R.string.lock_working
+                        state.availability == LockAvailability.Checking -> R.string.lock_checking
+                        operating -> R.string.lock_working
                         state.availability == LockAvailability.Ready && state.profile.level == LockSupportLevel.Verified -> R.string.lock_ready
                         state.availability == LockAvailability.Ready -> R.string.lock_probe_only
-                        state.availability == LockAvailability.Checking -> R.string.lock_checking
                         else -> R.string.lock_unavailable
                     }), style = MaterialTheme.typography.bodySmall,
                         color = if (state.availability == LockAvailability.Unavailable) MaterialTheme.colorScheme.error
@@ -182,7 +183,8 @@ internal fun BandLockScreen(rootDiag: RootDiagViewModel, onBack: () -> Unit, mod
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (operating) LinearProgressIndicator(Modifier.fillMaxWidth())
+            state.result?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium) }
             Text(stringResource(R.string.lock_scope), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             HorizontalDivider()
@@ -275,7 +277,6 @@ internal fun BandLockScreen(rootDiag: RootDiagViewModel, onBack: () -> Unit, mod
                 }
             }
             val applyLabel = stringResource(R.string.lock_apply)
-    val consoleRunLabel = stringResource(R.string.lock_console_run)
             Button(
                 onClick = { pending = command; confirmation = "$applyLabel · $targetLabel\n$summary" },
                 enabled = enabled && command != null, modifier = Modifier.fillMaxWidth(),
@@ -319,6 +320,7 @@ internal fun BandLockScreen(rootDiag: RootDiagViewModel, onBack: () -> Unit, mod
             ) { Text(modeLabel) }
             HorizontalDivider()
             Text(stringResource(R.string.lock_console_title), style = MaterialTheme.typography.titleSmall)
+            val consoleRunLabel = stringResource(R.string.lock_console_run)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     consoleText, { consoleText = it }, Modifier.weight(1f), enabled = !state.busy,
@@ -334,7 +336,6 @@ internal fun BandLockScreen(rootDiag: RootDiagViewModel, onBack: () -> Unit, mod
                     }
                 }
             }
-            state.result?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium) }
             HorizontalDivider()
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.lock_execution_log), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
@@ -354,7 +355,12 @@ internal fun BandLockScreen(rootDiag: RootDiagViewModel, onBack: () -> Unit, mod
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(confirmation)
-                    Text(stringResource(if (action.restartsModem) R.string.lock_confirm_restart else R.string.lock_confirm_mode))
+                    Text(stringResource(when {
+                        action.modeAfterLock != null && action.restartsModem -> R.string.lock_confirm_apply_restart
+                        action.modeAfterLock != null -> R.string.lock_confirm_apply_mode
+                        action.restartsModem -> R.string.lock_confirm_restart
+                        else -> R.string.lock_confirm_mode
+                    }))
                     if (state.profile.level == LockSupportLevel.ProbeOnly) {
                         Text(stringResource(R.string.lock_confirm_unverified))
                     }

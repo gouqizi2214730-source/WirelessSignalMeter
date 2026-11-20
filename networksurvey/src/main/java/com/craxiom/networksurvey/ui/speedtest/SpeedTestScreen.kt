@@ -34,7 +34,6 @@ import com.craxiom.networksurvey.R
 import com.craxiom.networksurvey.db.SpeedTestDbHelper
 import com.craxiom.networksurvey.db.SurveyTaskStore
 import com.craxiom.networksurvey.model.SurveyEvent
-import com.craxiom.networksurvey.ui.SurveyTaskBar
 import com.craxiom.networksurvey.model.SpeedTestRecord
 import com.craxiom.networksurvey.ui.dashboard.DashboardCardDefaults
 import com.craxiom.networksurvey.ui.dashboard.DashboardCardHeader
@@ -301,7 +300,6 @@ fun SpeedTestScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                item("task") { SurveyTaskBar() }
                 item("measurement") {
                     SpeedPanel(
                         title = if (test != null || result != null) {

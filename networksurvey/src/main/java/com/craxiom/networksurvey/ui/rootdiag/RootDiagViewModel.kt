@@ -15,6 +15,8 @@ import com.craxiom.networksurvey.model.ownsDiagnostic
 import com.craxiom.networksurvey.R
 import com.craxiom.networksurvey.fragments.model.CellularViewModel
 import com.craxiom.networksurvey.model.CellularProtocol
+import com.craxiom.networksurvey.model.AndroidNrCarriers
+import com.craxiom.networksurvey.model.NrCarrier
 import com.craxiom.networksurvey.ui.cellular.CellularChartViewModel
 import com.craxiom.networksurvey.util.AndroidLteSinrReader
 import com.craxiom.networksurvey.util.LteSinrUtils
@@ -65,6 +67,7 @@ internal data class RootSignalState(
     val errorDetails: List<String> = emptyList(),
     val cachedMeasureIds: Set<Long> = emptySet(),
     val failureReason: String? = null,
+    val nrCarriers: List<NrCarrier> = emptyList(),
 ) {
     val useRootSignal: Boolean
         get() = (status == RootDiagStatus.Running || status == RootDiagStatus.Checking ||
@@ -85,6 +88,8 @@ internal data class QmdlState(
     val bytes: Long = 0,
     val hasRecording: Boolean = false,
     val result: QmdlResult? = null,
+    val recovering: Boolean = false,
+    val errorCode: Int? = null,
 )
 
 class RootDiagViewModel(application: Application) : AndroidViewModel(application) {
@@ -93,12 +98,12 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
     internal val signal = signalState.asStateFlow()
     private val signalingState = MutableStateFlow<List<DiagRecord>>(emptyList())
     internal val signaling = signalingState.asStateFlow()
-    private val qmdlDirectory by lazy { File(app.noBackupFilesDir, "qmdl") }
-    private val activeQmdl get() = File(qmdlDirectory, "active.qmdl")
-    private val latestQmdl get() = File(qmdlDirectory, "latest.qmdl")
+    private val qmdlFiles by lazy { QmdlRecordingFiles(File(app.noBackupFilesDir, "qmdl")) }
     private val qmdlState = MutableStateFlow(QmdlState())
     internal val qmdl = qmdlState.asStateFlow()
     private val qmdlExport = MutableStateFlow<Int?>(null)
+    private var qmdlStopWatchdog: Job? = null
+    private var lastQmdlStatus: JSONObject? = null
     internal val qmdlExportProgress = qmdlExport.asStateFlow()
     private val nrChart = CellularChartViewModel()
     private val lteChart = CellularChartViewModel()
@@ -110,6 +115,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
     private val measurementSamples = ArrayDeque<JSONObject>()
     private val neighborProbeSamples = linkedMapOf<String, ArrayDeque<JSONObject>>()
     private val layoutNotices = linkedMapOf<String, JSONObject>()
+    private val nrCaObservations = ArrayDeque<JSONObject>()
     private val collectorRuns = ArrayDeque<JSONObject>()
     private var nextCollectorRun = 1L
     private var invalidLineCount = 0L
@@ -150,7 +156,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
 
     init {
         viewModelScope.launch {
-            val hasRecording = withContext(Dispatchers.IO) { activeQmdl.length() > 0 || latestQmdl.length() > 0 }
+            val hasRecording = withContext(Dispatchers.IO) { qmdlFiles.exportFile() != null }
             if (hasRecording) qmdlState.value = qmdlState.value.copy(hasRecording = true)
         }
         viewModelScope.launch {
@@ -165,43 +171,53 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
 
     internal fun startQmdl() {
         if (signalState.value.status != RootDiagStatus.Running ||
-            qmdlState.value.phase != QmdlPhase.Idle || qmdlExport.value != null) return
-        qmdlState.value = qmdlState.value.copy(phase = QmdlPhase.Starting, packets = 0, bytes = 0, result = null)
+            qmdlState.value.phase != QmdlPhase.Idle || qmdlState.value.recovering || qmdlExport.value != null) return
+        lastQmdlStatus = null
+        qmdlState.value = qmdlState.value.copy(phase = QmdlPhase.Starting, packets = 0, bytes = 0,
+            result = null, errorCode = null)
     }
 
     internal fun stopQmdl() {
         if (qmdlState.value.phase == QmdlPhase.Recording) {
             qmdlState.value = qmdlState.value.copy(phase = QmdlPhase.Stopping)
+            qmdlStopWatchdog = viewModelScope.launch {
+                delay(QMDL_ACK_TIMEOUT)
+                if (qmdlState.value.phase != QmdlPhase.Stopping) return@launch
+                qmdlState.value = qmdlState.value.copy(
+                    phase = QmdlPhase.Idle, result = QmdlResult.Interrupted, recovering = true,
+                )
+                restartAfterStop = foreground && !pausedByUser
+                capture?.cancel()
+            }
         }
-    }
-
-    private fun retainQmdl(): Boolean = when {
-        activeQmdl.length() > 0 -> activeQmdl.renameTo(latestQmdl)
-        activeQmdl.exists() -> activeQmdl.delete()
-        else -> true
     }
 
     private suspend fun finishQmdl(result: QmdlResult) {
+        qmdlStopWatchdog?.cancel()
+        qmdlStopWatchdog = null
         val saved = withContext(Dispatchers.IO) {
-            val hasNewData = activeQmdl.length() > 0
-            val retained = retainQmdl()
+            val bytes = qmdlFiles.active.length()
+            val retained = qmdlFiles.retain()
             val outcome = when {
                 !retained -> QmdlResult.Error
-                !hasNewData && result == QmdlResult.Saved -> QmdlResult.Empty
+                bytes == 0L && result == QmdlResult.Saved -> QmdlResult.Empty
                 else -> result
             }
-            outcome to (activeQmdl.length() > 0 || latestQmdl.length() > 0)
+            Triple(outcome, qmdlFiles.exportFile() != null, bytes)
         }
-        qmdlState.value = qmdlState.value.copy(phase = QmdlPhase.Idle, result = saved.first, hasRecording = saved.second)
+        qmdlState.value = qmdlState.value.copy(
+            phase = QmdlPhase.Idle, result = saved.first, hasRecording = saved.second, recovering = false,
+            bytes = saved.third,
+        )
     }
 
     internal fun exportQmdl(uri: Uri) {
-        if (qmdlExport.value != null || qmdlState.value.phase != QmdlPhase.Idle) return
+        if (qmdlExport.value != null || qmdlState.value.phase != QmdlPhase.Idle || qmdlState.value.recovering) return
         qmdlExport.value = 0
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    val file = if (activeQmdl.length() > 0) activeQmdl else latestQmdl
+                    val file = qmdlFiles.exportFile() ?: throw IOException("No QMDL data")
                     val total = file.length()
                     if (total <= 0) throw IOException("No QMDL data")
                     file.inputStream().use { input ->
@@ -224,7 +240,8 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 Toast.makeText(app, R.string.diag_qmdl_exported, Toast.LENGTH_SHORT).show()
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                timber.log.Timber.w(error, "Could not export QMDL")
                 Toast.makeText(app, R.string.diag_qmdl_export_failed, Toast.LENGTH_SHORT).show()
             } finally {
                 qmdlExport.value = null
@@ -239,15 +256,18 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
         val samples = if (includeMeasurementSamples) measurementSamples.toList() else emptyList()
         val probeSamples = if (includeMeasurementSamples) neighborProbeSamples.values.flatten() else emptyList()
         val collectorStatus = lastCollectorStatus
+        val qmdlStatus = lastQmdlStatus
         val runs = collectorRuns.map { JSONObject(it.toString()) }
         val signalMode = lastSignalMode
         val androidNrBandwidth = lastAndroidNrBandwidth
         val androidLteSinr = AndroidLteSinrReader.snapshot()
+        val androidNrBatches = AndroidNrCarriers.diagnostics()
+        val rootNrCa = nrCaObservations.toList()
         val neighborTables = neighborTableDiagnostics(snapshot.records)
         val invalidLines = invalidLineCount
         withContext(Dispatchers.IO) {
             val tasks = SurveyTaskStore.get(app)
-            val taskIds = (snapshot.records.map { it.data } + records + samples + probeSamples)
+            val taskIds = (snapshot.records.map { it.data } + records + samples + probeSamples + rootNrCa)
                 .mapNotNull { if (it.isNull("task_id")) null else it.optString("task_id").takeIf(String::isNotBlank) }.toMutableSet()
             snapshot.records.mapNotNullTo(taskIds) { it.taskId }
             androidLteSinr.mapNotNullTo(taskIds) { it.taskId() }
@@ -294,10 +314,21 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                     }
                 }
                 collectorStatus?.let { writer.appendLine(redactDiagnostic(it).toString()) }
+                qmdlStatus?.let { writer.appendLine(redactDiagnostic(it).toString()) }
                 for (entry in runs) writer.appendLine(redactDiagnostic(entry).toString())
                 signalMode?.let { writer.appendLine(it.toString()) }
                 androidNrBandwidth?.let { writer.appendLine(it.toString()) }
                 for (entry in androidLteSinr) writer.appendLine(entry.toDiagnosticJson().toString())
+                for (entry in androidNrBatches) {
+                    writer.appendLine(JSONObject().put("type", "android_nr_carriers")
+                        .put("t", entry.timeMs()).put("elapsed_ms", entry.elapsedMs())
+                        .put("subscription_id", entry.subscriptionId()).put("rat", entry.anchorRat())
+                        .put("nr_mode", entry.nrMode()).put("nr_rows", entry.nrRows())
+                        .put("serving_nr_rows", entry.servingNrRows()).put("fresh_rows", entry.freshRows())
+                        .put("retained_rows", entry.retainedRows()).put("oldest_fresh_age_ms", entry.oldestFreshAgeMs())
+                        .toString())
+                }
+                for (entry in rootNrCa) writer.appendLine(entry.toString())
                 for (entry in neighborTables) writer.appendLine(entry.toString())
                 for (entry in layouts) writer.appendLine(redactDiagnostic(entry).toString())
                 for (entry in snapshot.records) writer.appendLine(redactDiagnostic(entry.data)
@@ -309,10 +340,16 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    private fun recordNrCaObservation(entry: JSONObject) {
+        if (nrCaObservations.size == 96) nrCaObservations.removeFirst()
+        nrCaObservations.addLast(entry)
+    }
+
     private fun recordDiagnostic(value: JSONObject) {
         val type = value.optString("type")
         when (type) {
             "status" -> lastCollectorStatus = value
+            "qmdl" -> lastQmdlStatus = value
             "unknown_layout", "layout_seen" -> {
                 val key = type + ":" + value.optString("code") + ":" + value.optString("ver")
                 if (key !in layoutNotices && layoutNotices.size == 128) layoutNotices.remove(layoutNotices.keys.first())
@@ -505,6 +542,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
         var errorCode: Int? = null
         val metrics = mutableMapOf<String, DiagRecord>()
         val cached = lastMeasurements.toMutableMap()
+        val nrCarriers = RootNrCarriers()
         val measurementConfigs = mutableMapOf<String, RrcMeasurementConfig>()
         var readyAt: Long? = null
         val pending = ArrayDeque<DiagRecord>()
@@ -520,6 +558,9 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
         val buffer = ByteArray(8192)
         var qmdlCommand: Char? = null
         var qmdlDeadline: Long? = null
+        var previousCaPacket = ""
+        var previousCaPacketAt = 0L
+        var previousCaCounts = 0 to 0
 
         fun publish(now: Long) {
             metrics.entries.removeAll { (_, record) ->
@@ -542,6 +583,16 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 hadBeenRunning = true
                 restartAttempt = 0
             }
+            val carriers = if (status == RootDiagStatus.Running) nrCarriers.snapshot(now) else emptyList()
+            val retained = carriers.count { it.lastObservation() }
+            val caCounts = carriers.size - retained to retained
+            if (caCounts != previousCaCounts) {
+                recordNrCaObservation(JSONObject().put("type", "root_nr_carriers")
+                    .put("t", System.currentTimeMillis()).put("elapsed_ms", now)
+                    .put("collector_run", run.optLong("id")).put("current_rows", caCounts.first)
+                    .put("retained_rows", caCounts.second))
+                previousCaCounts = caCounts
+            }
             signalState.value = RootSignalState(
                 status, lastMeasurements.values.toList() + lastConfiguration.values,
                 errorCode, errorDetails, cachedIds,
@@ -549,6 +600,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                     status == RootDiagStatus.Unsupported || status == RootDiagStatus.Denied ||
                         status == RootDiagStatus.Unavailable
                 },
+                nrCarriers = carriers,
             )
             publishOverlay(status, signalState.value.records)
             publishCapability()
@@ -675,7 +727,9 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 "rrcReconfigurationComplete", "rrcConnectionReconfigurationComplete",
                 "rrcReestablishmentComplete", "rrcConnectionReestablishmentComplete", "securityModeFailure",
             )
-            if (task != null && (type in setOf("event", "cell_change", "nas_release") || isStateChange || completion)) {
+            val timelineEvent = type in setOf("event", "cell_change", "nas_release", "nr_rach") || isStateChange || completion
+            if (timelineEvent) value.put("timeline_event", true)
+            if (task != null && timelineEvent && type != "nr_rach") {
                 val rat = value.optString("rat").takeIf { it in setOf("NR", "LTE") }
                 // A private DIAG stream has no reliable Android subscription ID.
                 val estimated = value.optInt("tentative") == 1 || value.optInt("guess") == 1
@@ -770,9 +824,11 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 "qmdl" -> {
                     if (qmdlCommand == null) return
                     val current = qmdlState.value
+                    if (current.recovering) return
                     qmdlState.value = current.copy(
                         packets = value.optLong("packets"), bytes = value.optLong("bytes"),
                         phase = if (current.phase == QmdlPhase.Stopping) QmdlPhase.Stopping else QmdlPhase.Recording,
+                        errorCode = value.optInt("rc").takeIf { it != 0 },
                     )
                     val result = when (value.optString("state")) {
                         "stopped" -> QmdlResult.Saved
@@ -782,12 +838,33 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                     }
                     if (qmdlCommand == 'Q' || result != null) qmdlDeadline = null
                     if (result != null) {
-                        finishQmdl(result)
                         qmdlCommand = null
+                        withContext(NonCancellable) { finishQmdl(result) }
                     }
                 }
                 "mr_sample", "neighbor_probe_sample", "unknown_layout", "layout_seen" -> Unit
+                "nr_ca_state" -> {
+                    val result = nrCarriers.acceptCaState(value, now)
+                    val cc = value.optJSONArray("cc")
+                    val states = JSONArray()
+                    if (cc != null) for (i in 0 until cc.length()) {
+                        val row = cc.optJSONObject(i) ?: continue
+                        states.put(JSONObject().put("cc", row.optInt("cc"))
+                            .put("dl", row.optInt("dl")).put("ul", row.optInt("ul")))
+                    }
+                    val version = value.optString("ver")
+                    val signature = "$version:$result:$states"
+                    if (signature != previousCaPacket || now - previousCaPacketAt >= 5_000) {
+                        recordNrCaObservation(JSONObject().put("type", "root_b9a7_state")
+                            .put("t", value.optLong("t")).put("elapsed_ms", now).put("ver", version)
+                            .put("collector_run", run.optLong("id")).put("task_id", value.opt("task_id"))
+                            .put("clock_id", SurveyTaskStore.CLOCK_ID).put("result", result).put("cc", states))
+                        previousCaPacket = signature
+                        previousCaPacketAt = now
+                    }
+                }
                 else -> {
+                    nrCarriers.accept(value, now)
                     val record = DiagRecord(nextId++, now, value)
                     val rat = value.optString("rat")
                     when (record.type) {
@@ -1053,6 +1130,12 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                         val arfcn = value.optInt("arfcn", -1)
                         val validCell = if (rat == "NR") pci in 0..1007 && arfcn in 1..3_279_165
                             else pci in 0..503 && arfcn in 0..262_143
+                        val tdd = value.optJSONObject("lte_tdd_config")
+                        if (rat == "LTE" && validCell && tdd != null) {
+                            val type = "lte_tdd_config"
+                            storeCellConfiguration("$type:$pci:$arfcn", record,
+                                JSONObject(tdd.toString()).put("type", type).put("pci", pci).put("arfcn", arfcn))
+                        }
                         if (access != null && validCell) {
                             val type = if (rat == "NR") "nr_access_config" else "lte_access_config"
                             val key = "$type:$pci:$arfcn"
@@ -1087,10 +1170,10 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 when {
                     status == RootDiagStatus.Running && qmdlState.value.phase == QmdlPhase.Starting && qmdlCommand == null -> {
                         val prepared = withContext(Dispatchers.IO) {
-                            runCatching {
-                                (qmdlDirectory.isDirectory || qmdlDirectory.mkdirs()) &&
-                                    retainQmdl() && activeQmdl.createNewFile()
-                            }.getOrDefault(false)
+                            runCatching { qmdlFiles.prepare() }.getOrElse {
+                                timber.log.Timber.w(it, "Could not prepare QMDL file")
+                                false
+                            }
                         }
                         if (prepared) {
                             qmdlCommand = 'Q'
@@ -1180,7 +1263,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                     }
                 }
             }
-            if (qmdlState.value.phase != QmdlPhase.Idle) {
+            if (qmdlState.value.phase != QmdlPhase.Idle || qmdlState.value.recovering) {
                 withContext(NonCancellable) {
                     finishQmdl(QmdlResult.Interrupted)
                 }
@@ -1192,7 +1275,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
         // Match DiagCap's executable location so Android uses the same linker configuration.
         // The fresh 0700 directory is owned by root and the child keeps the app's stdin pipe.
         val quotedPath = "'" + helper.absolutePath.replace("'", "'\\''") + "'"
-        val quotedQmdl = "'" + activeQmdl.absolutePath.replace("'", "'\\''") + "'"
+        val quotedQmdl = "'" + qmdlFiles.active.absolutePath.replace("'", "'\\''") + "'"
         return """
             PATH=/system/bin
             export PATH

@@ -12,6 +12,7 @@ import java.util.List;
 public class NrRecordWrapper extends CellularRecordWrapper
 {
     public final int[] bands;
+    public final long measuredAtElapsedMs;
 
     public NrRecordWrapper(NrRecord nrRecord, int[] bands)
     {
@@ -20,8 +21,14 @@ public class NrRecordWrapper extends CellularRecordWrapper
 
     public NrRecordWrapper(NrRecord nrRecord, int[] bands, Collection<String> additionalPlmns)
     {
+        this(nrRecord, bands, additionalPlmns, -1);
+    }
+
+    public NrRecordWrapper(NrRecord nrRecord, int[] bands, Collection<String> additionalPlmns, long measuredAtElapsedMs)
+    {
         super(CellularProtocol.NR, nrRecord, additionalPlmns);
 
         this.bands = bands;
+        this.measuredAtElapsedMs = measuredAtElapsedMs;
     }
 }

@@ -557,7 +557,7 @@ int main(int argc, char **argv) {
     if (state_dir < 0) return fail("Cannot open the private backup directory.");
     int lock = openat(state_dir, "operation.lock", O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0600);
     if (lock < 0 || flock(lock, LOCK_EX | LOCK_NB)) return fail("Another lock operation is in progress.");
-    if (connect_router()) return 1;
+    if (connect_router()) return 2;
     int result = execute(argc - 3, argv + 3);
     close(router); close(lock); close(state_dir);
     return result;

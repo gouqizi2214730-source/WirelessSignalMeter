@@ -1,5 +1,6 @@
 package com.craxiom.networksurvey.ui.cellular
 
+import android.os.SystemClock
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -54,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.livedata.observeAsState
 import com.craxiom.networksurvey.R
+import com.craxiom.networksurvey.model.AndroidNrCarriers
 import com.craxiom.networksurvey.model.CellularProtocol
 import com.craxiom.networksurvey.model.EngineeringParam
 import com.craxiom.networksurvey.model.StationInfo
@@ -78,6 +80,7 @@ import com.craxiom.networksurvey.util.ColorUtils
 import com.craxiom.networksurvey.util.CellularUtils.UplinkReference
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 @Composable
@@ -123,6 +126,18 @@ fun CellularDetailsScreen(
     val signalThree by viewModel.getSignalThree().observeAsState(null)
 
     val nrSecondary by viewModel.getNrSecondaryCell().observeAsState(null)
+    val reportedNrCarriers by viewModel.nrCarriers.observeAsState(emptyList())
+    val nrCarrierClock by produceState(0L, reportedNrCarriers) {
+        if (reportedNrCarriers.size >= 2) {
+            do {
+                value = SystemClock.elapsedRealtime()
+                if (AndroidNrCarriers.displayAt(reportedNrCarriers, value).size < 2) break
+                delay(1_000)
+            } while (true)
+        }
+    }
+    val nrCarriers = AndroidNrCarriers.displayAt(reportedNrCarriers,
+        maxOf(nrCarrierClock, SystemClock.elapsedRealtime()))
     val nrServing by viewModel.nrServingCell.observeAsState()
     val nrLastSeen by viewModel.getNrLastSeenText().observeAsState("")
 
@@ -189,7 +204,16 @@ fun CellularDetailsScreen(
         }
 
         if (!isLive) return@Column
-        ServingSignalMetrics(protocol, signalOne, signalTwo, signalThree)
+        if (protocol != CellularProtocol.NR || nrCarriers.count { !it.lastObservation() } < 2) {
+            ServingSignalMetrics(protocol, signalOne, signalTwo, signalThree)
+        }
+        if (protocol == CellularProtocol.NR || protocol == CellularProtocol.LTE) {
+            NrCarrierSection(nrCarriers, fromDiag = false)
+        }
+        nrSecondary?.takeIf { protocol == CellularProtocol.LTE && !it.idle() &&
+            nrCarriers.count { carrier -> !carrier.lastObservation() } < 2 }?.let { secondary ->
+            NrSecondaryCard(secondary, nrLastSeen, onNrInfoClick)
+        }
         val fields = cellIdentityFields(
             protocol, registeredPlmn, cellPlmns, areaCode, cellId, channelNumber, frequency,
             band, lteBand, pci, bandwidth, ta, cqi, matchedCell, uplink,
@@ -210,10 +234,6 @@ fun CellularDetailsScreen(
             } else null
         } else null
         SignalParameterCard(stringResource(R.string.serving_cell_parameters), fields.primary, nrBandwidthRow)
-
-        nrSecondary?.takeIf { protocol == CellularProtocol.LTE && !it.idle() }?.let { secondary ->
-            NrSecondaryCard(secondary, nrLastSeen, onNrInfoClick)
-        }
 
         // 邻区按制式展示
         if (protocol == CellularProtocol.NR || protocol == CellularProtocol.LTE) {
