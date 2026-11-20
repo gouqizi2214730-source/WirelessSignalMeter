@@ -47,6 +47,7 @@ import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -73,6 +74,7 @@ import kotlinx.coroutines.delay
 internal fun BandLockScreen(rootDiag: RootDiagViewModel, onBack: () -> Unit, model: BandLockViewModel = viewModel()) {
     val state by model.state.collectAsStateWithLifecycle()
     val signal by rootDiag.signal.collectAsStateWithLifecycle()
+    LaunchedEffect(state.profile) { rootDiag.updateBandLockProfile(state.profile) }
     val now by produceState(SystemClock.elapsedRealtime()) {
         while (true) {
             delay(1_000)
@@ -148,12 +150,24 @@ internal fun BandLockScreen(rootDiag: RootDiagViewModel, onBack: () -> Unit, mod
                     Text(model.device, style = MaterialTheme.typography.titleSmall)
                     Text(stringResource(when {
                         state.busy -> R.string.lock_working
-                        state.availability == LockAvailability.Ready -> R.string.lock_ready
+                        state.availability == LockAvailability.Ready && state.profile.level == LockSupportLevel.Verified -> R.string.lock_ready
+                        state.availability == LockAvailability.Ready -> R.string.lock_probe_only
                         state.availability == LockAvailability.Checking -> R.string.lock_checking
                         else -> R.string.lock_unavailable
                     }), style = MaterialTheme.typography.bodySmall,
                         color = if (state.availability == LockAvailability.Unavailable) MaterialTheme.colorScheme.error
                         else MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (state.profile.reason.isNotBlank() && state.availability != LockAvailability.Checking) {
+                        Text(stringResource(when (state.profile.reason) {
+                            "mediatek_unsupported" -> R.string.lock_reason_mediatek
+                            "exynos_unsupported" -> R.string.lock_reason_exynos
+                            "kirin_unsupported" -> R.string.lock_reason_kirin
+                            "unverified_model" -> R.string.lock_reason_unverified
+                            "no_diag_channel" -> R.string.lock_reason_no_channel
+                            else -> R.string.lock_reason_unknown
+                        }), style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
                 LockIconButton(R.string.lock_refresh, Icons.Rounded.Refresh, !state.busy, model::refresh)
             }
@@ -261,6 +275,7 @@ internal fun BandLockScreen(rootDiag: RootDiagViewModel, onBack: () -> Unit, mod
                 }
             }
             val applyLabel = stringResource(R.string.lock_apply)
+    val consoleRunLabel = stringResource(R.string.lock_console_run)
             Button(
                 onClick = { pending = command; confirmation = "$applyLabel · $targetLabel\n$summary" },
                 enabled = enabled && command != null, modifier = Modifier.fillMaxWidth(),
@@ -312,8 +327,11 @@ internal fun BandLockScreen(rootDiag: RootDiagViewModel, onBack: () -> Unit, mod
                     supportingText = { Text(stringResource(R.string.lock_console_hint)) },
                 )
                 LockIconButton(R.string.lock_console_run, Icons.Rounded.Terminal,
-                    !state.busy && consoleValid != null) {
-                    consoleValid?.let { model.runRaw(consoleText.trim()) }
+                    enabled && consoleValid != null) {
+                    consoleValid?.let {
+                        pending = it
+                        confirmation = "$consoleRunLabel · ${consoleText.trim()}"
+                    }
                 }
             }
             state.result?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium) }
@@ -337,6 +355,9 @@ internal fun BandLockScreen(rootDiag: RootDiagViewModel, onBack: () -> Unit, mod
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(confirmation)
                     Text(stringResource(if (action.restartsModem) R.string.lock_confirm_restart else R.string.lock_confirm_mode))
+                    if (state.profile.level == LockSupportLevel.ProbeOnly) {
+                        Text(stringResource(R.string.lock_confirm_unverified))
+                    }
                 }
             },
             confirmButton = {

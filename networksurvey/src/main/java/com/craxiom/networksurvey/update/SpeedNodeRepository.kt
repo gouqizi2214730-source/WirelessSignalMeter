@@ -10,11 +10,9 @@ import java.net.URL
 
 /**
  * 测速节点仓库（v3.74 起全部从服务器获取）：
- * 依次尝试 主/备用服务器 × /api/nodes|/nodes.json，成功后写入 SharedPreferences 缓存；
+ * 依次尝试主/备用服务器上的 /api/nodes 与 /nodes.json，成功后写入 SharedPreferences 缓存；
  * 全部失败时用 [cached] 回退（无内置预设兜底）。
- * DAD 反编译 SpeedNodeRepository(Ln72) 还原：
- *   - 候选路径 ["/api/nodes", "/nodes.json"]
- *   - 解析支持 ["[...]"] 数组与 {"nodes":[...]} 对象两种格式
+ * 解析支持节点数组，以及 {"nodes":[...]} 对象两种格式。
  */
 object SpeedNodeRepository {
     private val PATHS = listOf("/api/nodes", "/nodes.json")

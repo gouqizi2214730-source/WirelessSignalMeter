@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Host tests for the DIAG decode queue and Samsung IMS logcat parser.
+# Does not talk to a phone.
+set -euo pipefail
+root="$(cd "$(dirname "$0")/../../../.." && pwd)"
+cc="${CC:-cc}"
+flags=(-std=c11 -Wall -Wextra -Werror -O2)
+"$cc" "${flags[@]}" -o /tmp/diag_queue_test "$root/networksurvey/src/test/cpp/diag_queue_test.c"
+/tmp/diag_queue_test
+"$cc" "${flags[@]}" -o /tmp/ims_logcat_test "$root/networksurvey/src/test/cpp/ims_logcat_test.c"
+/tmp/ims_logcat_test
+echo "host C tests passed"

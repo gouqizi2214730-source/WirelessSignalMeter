@@ -18,6 +18,12 @@ import com.craxiom.networksurvey.model.CellularProtocol
 import com.craxiom.networksurvey.ui.cellular.CellularChartViewModel
 import com.craxiom.networksurvey.util.AndroidLteSinrReader
 import com.craxiom.networksurvey.util.LteSinrUtils
+import com.craxiom.networksurvey.services.RootDiagCollectorService
+import com.craxiom.networksurvey.ui.bandlock.BandLockProfile
+import com.craxiom.networksurvey.ui.bandlock.LockSupportLevel
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineStart
@@ -58,6 +64,7 @@ internal data class RootSignalState(
     val errorCode: Int? = null,
     val errorDetails: List<String> = emptyList(),
     val cachedMeasureIds: Set<Long> = emptySet(),
+    val failureReason: String? = null,
 ) {
     val useRootSignal: Boolean
         get() = (status == RootDiagStatus.Running || status == RootDiagStatus.Checking ||
@@ -109,6 +116,21 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
     private var lastCollectorStatus: JSONObject? = null
     private var lastSignalMode: JSONObject? = null
     private var lastAndroidNrBandwidth: JSONObject? = null
+    private var overlayImsReg = "unknown"
+    private var overlayImsSource = ""
+    private var overlayImsAvailable: Boolean? = null
+    private var overlayImsCall = "idle"
+    private var overlayDropped = 0L
+    private var lastEndStatus = RootDiagStatus.Checking
+    private var lastEndError: Int? = null
+    private var hadBeenRunning = false
+    private var restartAttempt = 0
+    private var simCount = 0
+    private var selectedSubscriptionId: Int? = null
+    private val imsProviders = linkedMapOf<String, ImsProviderStatus>()
+    private var bandLockProfile = BandLockProfile(LockSupportLevel.Unsupported, "unknown", reason = "unchecked")
+    private val capabilityState = MutableStateFlow(currentCapability())
+    internal val capability = capabilityState.asStateFlow()
 
     internal fun recordSignalMode(root: Boolean, androidProtocol: String?, simCount: Int) {
         lastSignalMode = JSONObject().put("type", "signal_mode").put("t", System.currentTimeMillis())
@@ -130,6 +152,14 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             val hasRecording = withContext(Dispatchers.IO) { activeQmdl.length() > 0 || latestQmdl.length() > 0 }
             if (hasRecording) qmdlState.value = qmdlState.value.copy(hasRecording = true)
+        }
+        viewModelScope.launch {
+            RootDiagCollectorService.stopRequested.collect { requested ->
+                if (requested) {
+                    RootDiagCollectorService.stopRequested.value = false
+                    pause()
+                }
+            }
         }
     }
 
@@ -224,7 +254,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
             tasks.active.value?.id?.let(taskIds::add)
             val header = JSONObject()
                 .put("type", "export")
-                .put("schema", 3)
+                .put("schema", 4)
                 .put("active_task_id", tasks.active.value?.id ?: JSONObject.NULL)
                 .put("tasks", JSONArray(taskIds.map { id -> tasks.taskMetadata(id).apply {
                     put("mission_count", optJSONArray("mission_ids")?.length() ?: 0)
@@ -248,6 +278,9 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 .put("neighbor_probe_samples", probeSamples.size)
                 .put("android_lte_sinr_samples", androidLteSinr.size)
                 .put("android_lte_sinr_policy", AndroidLteSinrReader.POLICY)
+                .put("qmdl_contains_raw_signaling", true)
+                .put("qmdl_privacy", "Raw QMDL includes complete RRC, NAS and possibly SIP payloads with identifiers. Do not share it.")
+                .put("measurement_samples_redacted", includeMeasurementSamples)
             val output = app.contentResolver.openOutputStream(uri, "wt") ?: throw IOException("No output stream")
             output.bufferedWriter(Charsets.UTF_8).use { writer ->
                 writer.appendLine(header.toString())
@@ -270,8 +303,8 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 for (entry in snapshot.records) writer.appendLine(redactDiagnostic(entry.data)
                     .put("task_id", entry.taskId ?: JSONObject.NULL).put("clock_id", entry.clockId ?: JSONObject.NULL).toString())
                 for (entry in records) writer.appendLine(redactDiagnostic(entry).toString())
-                for (entry in samples) writer.appendLine(entry.toString())
-                for (entry in probeSamples) writer.appendLine(entry.toString())
+                for (entry in samples) writer.appendLine(redactDiagnostic(entry).toString())
+                for (entry in probeSamples) writer.appendLine(redactDiagnostic(entry).toString())
             }
         }
     }
@@ -295,6 +328,10 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 val samples = neighborProbeSamples.getOrPut(code) { ArrayDeque() }
                 if (samples.size == MAX_NEIGHBOR_SAMPLES_PER_CODE) samples.removeFirst()
                 samples.addLast(value)
+            }
+            "ims_provider" -> {
+                if (diagnosticRecords.size == MAX_DIAGNOSTIC_MESSAGES) diagnosticRecords.removeFirst()
+                diagnosticRecords.addLast(redactDiagnostic(value))
             }
             in signalingTypes -> {
                 if (diagnosticRecords.size == MAX_DIAGNOSTIC_MESSAGES) diagnosticRecords.removeFirst()
@@ -320,8 +357,13 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
 
     internal fun leaveForeground() {
         foreground = false
+        if (keepsCollectingInBackground()) {
+            RootDiagCollectorService.start(app)
+            return
+        }
         restartAfterStop = false
         capture?.cancel()
+        RootDiagCollectorService.stop(app)
     }
 
     internal fun retry() {
@@ -333,7 +375,11 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
         pausedByUser = true
         restartAfterStop = false
         capture?.cancel()
+        RootDiagCollectorService.stop(app)
     }
+
+    private fun keepsCollectingInBackground() =
+        RootDiagPrefs.backgroundEnabled(app) && capture != null && !pausedByUser
 
     internal fun clearSignaling() {
         firstVisibleMessageId = nextId
@@ -341,7 +387,8 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
     }
 
     private fun start() {
-        if (!foreground || capture != null) return
+        if (capture != null) return
+        if (!foreground && !RootDiagPrefs.backgroundEnabled(app)) return
         attempted = true
         signalState.value = RootSignalState(
             RootDiagStatus.Checking, lastMeasurements.values.toList() + lastConfiguration.values,
@@ -352,13 +399,93 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 captureRecords()
             } finally {
                 capture = null
-                if (restartAfterStop && foreground && !pausedByUser) {
+                val keep = !pausedByUser && (foreground || RootDiagPrefs.backgroundEnabled(app))
+                val retry = CollectorRestartPolicy.shouldRetry(
+                    lastEndStatus, lastEndError, hadBeenRunning, restartAttempt,
+                )
+                if (keep && (restartAfterStop || retry)) {
                     restartAfterStop = false
-                    start()
+                    if (retry) {
+                        val wait = CollectorRestartPolicy.delayMs(restartAttempt)
+                        restartAttempt++
+                        delay(wait)
+                    }
+                    if (!pausedByUser && (foreground || RootDiagPrefs.backgroundEnabled(app))) start()
+                    else syncCollectorService(lastEndStatus)
+                } else {
+                    syncCollectorService(lastEndStatus)
                 }
             }
         }
         capture?.start()
+        syncCollectorService(RootDiagStatus.Checking)
+    }
+
+    internal fun updateSimContext(count: Int, subscriptionId: Int?) {
+        simCount = count
+        selectedSubscriptionId = subscriptionId
+        publishCapability()
+        viewModelScope.launch(Dispatchers.IO) {
+            imsProviders["android_telephony"] = readAndroidIms(app)
+            withContext(Dispatchers.Main) { publishCapability() }
+        }
+    }
+
+    internal fun updateBandLockProfile(profile: BandLockProfile) {
+        bandLockProfile = profile
+        publishCapability()
+    }
+
+    private fun syncCollectorService(status: RootDiagStatus) {
+        val active = status == RootDiagStatus.Checking || status == RootDiagStatus.Starting ||
+            status == RootDiagStatus.Running
+        if (active && RootDiagPrefs.backgroundEnabled(app)) RootDiagCollectorService.start(app)
+        else if (!active) RootDiagCollectorService.stop(app)
+    }
+
+    private fun currentCapability(): DeviceCapabilitySnapshot {
+        val permission = ContextCompat.checkSelfPermission(app, Manifest.permission.READ_PHONE_STATE) ==
+            PackageManager.PERMISSION_GRANTED
+        return DeviceCapabilities.snapshot(
+            sdk = Build.VERSION.SDK_INT,
+            supportedAbis = Build.SUPPORTED_ABIS,
+            manufacturer = Build.MANUFACTURER,
+            model = Build.MODEL,
+            soc = Build.SOC_MODEL,
+            hardware = Build.HARDWARE,
+            simCount = simCount,
+            selectedSubscriptionId = selectedSubscriptionId,
+            telephonyPermission = permission,
+            collectorStatus = signalState.value.status,
+            collectorError = signalState.value.errorCode,
+            imsProviders = imsProviders.values.toList(),
+            bandLock = bandLockProfile,
+        )
+    }
+
+    private fun publishCapability() {
+        capabilityState.value = currentCapability()
+    }
+
+    private fun publishOverlay(status: RootDiagStatus, records: List<DiagRecord>) {
+        val serving = records.filter { it.type == "serving" }.maxByOrNull { it.receivedAt }?.data
+        val registration = if (overlayImsAvailable == false) "unavailable" else overlayImsReg
+        DiagOverlayState.publish(
+            DiagOverlaySnapshot(
+                collecting = status == RootDiagStatus.Running || status == RootDiagStatus.Starting ||
+                    status == RootDiagStatus.Checking,
+                status = status.name,
+                rat = serving?.optString("rat").orEmpty(),
+                pci = serving?.optInt("pci", -1)?.takeIf { it >= 0 },
+                rsrp = serving?.optDouble("rsrp")?.takeIf { it.isFinite() },
+                sinr = serving?.optDouble("sinr")?.takeIf { it.isFinite() },
+                imsReg = registration,
+                imsRegSource = if (overlayImsAvailable == false) "unavailable" else overlayImsSource,
+                imsAvailable = overlayImsAvailable,
+                imsCall = overlayImsCall,
+                decodeDropped = overlayDropped,
+            )
+        )
     }
 
     private suspend fun captureRecords() {
@@ -409,10 +536,22 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
             val errorDetails = if (status == RootDiagStatus.Unsupported) startupLog.toList() else emptyList()
             val cachedIds = (if (status == RootDiagStatus.Stopped) lastMeasurements else cached)
                 .values.mapTo(mutableSetOf()) { it.id }
+            lastEndStatus = status
+            lastEndError = errorCode
+            if (status == RootDiagStatus.Running) {
+                hadBeenRunning = true
+                restartAttempt = 0
+            }
             signalState.value = RootSignalState(
                 status, lastMeasurements.values.toList() + lastConfiguration.values,
                 errorCode, errorDetails, cachedIds,
+                failureReason = CollectorRestartPolicy.collectorReason(status, errorCode).takeIf {
+                    status == RootDiagStatus.Unsupported || status == RootDiagStatus.Denied ||
+                        status == RootDiagStatus.Unavailable
+                },
             )
+            publishOverlay(status, signalState.value.records)
+            publishCapability()
             if (status == RootDiagStatus.Running) {
                 for (rat in listOf("NR", "LTE")) {
                     val record = metrics["serving:$rat"] ?: continue
@@ -587,6 +726,46 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                     status = next
                     errorCode = value.optInt("rc").takeIf { it != 0 }
                     lastHeartbeat = now
+                    overlayDropped = value.optLong("decode_dropped")
+                }
+                "ims_provider" -> {
+                    val name = value.optString("name")
+                    val statusName = value.optString("status")
+                    val available = if (value.has("available")) value.optBoolean("available") else null
+                    if (name.isNotBlank()) {
+                        imsProviders[name] = ImsProviderStatus(name, statusName, available, value.optString("detail"))
+                        publishCapability()
+                    }
+                    if (name == "samsung_logcat") {
+                        overlayImsAvailable = when {
+                            available == false || statusName == "unavailable" -> false
+                            available == true || statusName == "available" -> true
+                            else -> overlayImsAvailable
+                        }
+                        if (overlayImsAvailable == false) {
+                            overlayImsReg = "unavailable"
+                            overlayImsSource = "samsung_logcat"
+                        } else if (overlayImsAvailable == true && overlayImsSource.isBlank()) {
+                            overlayImsSource = "samsung_logcat"
+                        }
+                    }
+                    if (name == "qualcomm_diag" && (available == true || statusName == "available")) {
+                        if (overlayImsAvailable != true) overlayImsSource = "qualcomm_diag"
+                    }
+                }
+                "ims_state", "ims_reg", "ims_call" -> {
+                    if (type == "ims_state" || type == "ims_reg") {
+                        val registration = value.optString("reg").ifBlank { value.optString("result") }
+                        if (overlayImsAvailable != false && registration.isNotBlank()) {
+                            overlayImsReg = registration
+                            overlayImsSource = when {
+                                value.optInt("reg_inferred") == 1 -> "inferred"
+                                value.optString("src").isNotBlank() -> value.optString("src")
+                                else -> overlayImsSource.ifBlank { type }
+                            }
+                        }
+                    }
+                    value.optString("call").takeIf { it.isNotBlank() }?.let { overlayImsCall = it }
                 }
                 "qmdl" -> {
                     if (qmdlCommand == null) return
@@ -965,7 +1144,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 }
                 if (!running.isAlive && size == 0) break
                 if (qmdlDeadline?.let { now >= it } == true) {
-                    restartAfterStop = foreground && !pausedByUser
+                    restartAfterStop = (foreground || RootDiagPrefs.backgroundEnabled(app)) && !pausedByUser
                     break
                 }
                 val timeout = if (status == RootDiagStatus.Checking) 25_000 else 16_000
@@ -1102,6 +1281,7 @@ private fun AndroidLteSinrReader.Sample.toDiagnosticJson() = JSONObject().apply 
 private val excludedDiagnosticKeys = setOf(
     "ncgi", "nci", "nci_hex", "cid", "ci", "tac", "call_id", "raw", "head", "access",
     "reason_hdr", "reason", "dnn", "apn", "imsi", "imei", "tmsi", "ue_identity", "uper_hex", "decoded_tree",
+    "from", "to", "contact", "via", "uri", "ip", "impu", "impi", "msisdn", "phone", "user", "p_asserted",
 )
 
 private fun redactDiagnostic(data: JSONObject): JSONObject = JSONObject().apply {

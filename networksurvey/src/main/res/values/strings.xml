@@ -1368,7 +1368,7 @@
     <string name="diag_qmdl_start">Start QMDL recording</string>
     <string name="diag_qmdl_stop">Stop QMDL recording</string>
     <string name="diag_qmdl_export">Export last QMDL</string>
-    <string name="diag_qmdl_description">Records raw cellular DIAG packets, which can contain network identifiers. Recording stops when the app goes into the background or the file reaches 128 MB. Export the previous recording to keep it.</string>
+    <string name="diag_qmdl_description">Records raw cellular DIAG packets. The file contains complete RRC, NAS and possibly SIP messages with identifiers; do not share it. Recording continues in the background if background collection is enabled, and stops at 128 MB. Export the previous recording to keep it.</string>
     <string name="diag_qmdl_starting">Starting QMDL recording…</string>
     <string name="diag_qmdl_recording">Recording QMDL · %1$d packets · %2$s</string>
     <string name="diag_qmdl_stopping">Finishing QMDL recording…</string>
@@ -1381,7 +1381,7 @@
     <string name="diag_qmdl_exporting">Exporting QMDL · %1$d%%</string>
     <string name="diag_qmdl_export_failed">Could not export QMDL</string>
     <string name="diag_export_subtitle">Recent signaling and decoder status</string>
-    <string name="diag_export_explanation">Save the recent diagnostic records as a local JSONL file. The standard export omits subscriber and cell identifiers.</string>
+    <string name="diag_export_explanation">Save the recent diagnostic records as a local JSONL file. The standard export omits subscriber and cell identifiers. Raw QMDL recordings are not redacted.</string>
     <string name="diag_export_include_mr">Include raw RRC and DIAG neighbor samples (may contain cell identifiers)</string>
     <string name="diag_export_save">Choose save location</string>
     <string name="diag_export_saved">Diagnostic log saved</string>
@@ -1394,4 +1394,63 @@
     <string name="diag_mr_best_neighbor">Best neighbor reported with a serving cell</string>
     <string name="diag_nas_protected">This NAS message is ciphered. The report shows its security header.</string>
     <string name="map_unavailable">Map unavailable on this device. Restart the app or upload logs from Settings.</string>
+
+    <string name="diag_bg_notification_title">DIAG collection running</string>
+    <string name="diag_bg_notification_text">Collection continues after the screen is off or the app is switched away. Force-stop still ends it.</string>
+    <string name="diag_bg_stop">Stop collection</string>
+    <string name="diag_bg_title">Background collection</string>
+    <string name="diag_bg_subtitle">Keep DIAG collection running with a notification when you leave the app. It will not survive force-stop.</string>
+    <string name="diag_overlay_title">Collection overlay</string>
+    <string name="diag_overlay_subtitle">Show a small, draggable status window. This needs the system overlay permission; it is not opened automatically.</string>
+    <string name="diag_overlay_need_permission">The overlay stays off until you grant “Display over other apps” in system settings. This app will not open that page by itself.</string>
+    <string name="diag_overlay_open_settings">Open system settings</string>
+    <string name="diag_overlay_collecting">Collecting</string>
+    <string name="diag_overlay_dropped">Decode drops: %1$d</string>
+    <string name="diag_overlay_show_rf">Show radio measurements</string>
+    <string name="diag_overlay_show_ims">Show IMS status</string>
+    <string name="diag_overlay_show_queue">Show decode-drop count</string>
+    <string name="diag_ims_source_unavailable">IMS source unavailable</string>
+    <string name="diag_qmdl_privacy">Raw QMDL files contain complete RRC, NAS and possibly SIP messages, including identifiers. Keep them on this device and do not share them.</string>
+    <string name="diag_export_qmdl_note">Diagnostic JSON is redacted. Raw QMDL recordings are not, and still contain full signaling.</string>
+    <string name="lock_probe_only">DIAG channel found on an unverified model. Commands are available after confirmation, but layouts are not treated as proven.</string>
+    <string name="lock_confirm_unverified">This phone model has not been verified. The command may fail, drop the network, or interrupt calls. Only continue if you intend to test it.</string>
+    <string name="lock_reason_mediatek">MediaTek is not supported. No lock backend is implemented.</string>
+    <string name="lock_reason_exynos">Exynos is not supported. No lock backend is implemented.</string>
+    <string name="lock_reason_kirin">Kirin is not supported. No lock backend is implemented.</string>
+    <string name="lock_reason_unverified">The live DIAG probe succeeded, but this model is not in the verified set.</string>
+    <string name="lock_reason_no_channel">No supported Qualcomm DIAG channel was found.</string>
+    <string name="lock_reason_unknown">This device is unsupported until a live DIAG probe succeeds.</string>
+
+
+    <string name="diag_dual_sim_unmapped">DIAG is still collecting on the modem stack, but those measurements cannot be mapped to the selected SIM. The view below is Android Telephony for the current subscription.</string>
+    <string name="diag_capability_title">Device capabilities</string>
+    <string name="diag_capability_telephony">Android signal</string>
+    <string name="diag_capability_root">Root</string>
+    <string name="diag_capability_diag">Qualcomm DIAG</string>
+    <string name="diag_capability_ims">IMS sources</string>
+    <string name="diag_capability_lock">Band lock</string>
+    <string name="diag_cap_available">Available</string>
+    <string name="diag_cap_degraded">Limited</string>
+    <string name="diag_cap_unavailable">Unavailable</string>
+    <string name="diag_cap_unsupported">Unsupported</string>
+    <string name="diag_reason_ok">Ready</string>
+    <string name="diag_reason_checking">Checking</string>
+    <string name="diag_reason_no_su">No root shell</string>
+    <string name="diag_reason_root_denied">Root access denied</string>
+    <string name="diag_reason_no_libdiag">libdiag was not found (this is common on non-Qualcomm devices)</string>
+    <string name="diag_reason_missing_libdiag_symbols">libdiag is missing required symbols</string>
+    <string name="diag_reason_diag_lsm_init_failed">DIAG initialization failed; will retry with backoff</string>
+    <string name="diag_reason_dci_register_failed">DCI registration failed; the channel may be busy</string>
+    <string name="diag_reason_dci_stream_or_mask_failed">DCI stream or log mask was rejected</string>
+    <string name="diag_reason_collector_stopped">The collector stopped after a successful start</string>
+    <string name="diag_reason_abi_unsupported">This build only includes arm64-v8a native helpers</string>
+    <string name="diag_reason_permission_denied">Permission denied</string>
+    <string name="diag_reason_api_too_low">Needs Android 11 or later</string>
+    <string name="diag_reason_no_subscription">No active SIM subscription</string>
+    <string name="diag_reason_ims_unavailable">Android IMS is not available for this subscription</string>
+    <string name="diag_reason_no_samsung_ims_tags">Samsung IMS log tags were not observed</string>
+    <string name="diag_reason_no_backend">No backend is implemented</string>
+    <string name="diag_reason_logcat_exited">The logcat reader exited and will reconnect</string>
+    <string name="diag_ims_providers">IMS: %1$s</string>
+
 </resources>

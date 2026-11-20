@@ -87,6 +87,16 @@ public class MainCellularFragment extends AServiceDataFragment
         return currentSimIndex;
     }
 
+    /** Active Android subscription id for the selected SIM, or INVALID if unknown. */
+    public int getCurrentSubscriptionId() {
+        if (activeSubscriptionInfoList == null || activeSubscriptionInfoList.isEmpty()) {
+            return android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+        }
+        int index = currentSimIndex;
+        if (index < 0 || index >= activeSubscriptionInfoList.size()) index = 0;
+        return activeSubscriptionInfoList.get(index).getSubscriptionId();
+    }
+
     /** 获取当前 SIM 标签 */
     public String getCurrentSimLabel() {
         if (activeSubscriptionInfoList == null || activeSubscriptionInfoList.isEmpty()) return "No SIM";

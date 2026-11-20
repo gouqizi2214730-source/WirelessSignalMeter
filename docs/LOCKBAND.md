@@ -97,3 +97,15 @@ Windows 复现（使用项目 NDK 27.3.13750724）：
 ```
 
 最新整合包和验证范围见 [RESUME-2026-11-18.md](RESUME-2026-11-18.md)。
+
+## 多机型能力分类
+
+`BandLockProfiles` 在现场探测之后分类支持级别，不会用型号名单覆盖失败的探测，也不会把探测成功的未验证机型当成已适配。
+
+- **已验证（Verified）**：型号 `SM-S9370` 或 SoC `SM8750`/`sun`，并且现场探测到 DIAG 通道。沿用已证实的 Qualcomm diag-router 路径、回包校验和备份/恢复。
+- **仅探测（ProbeOnly）**：其他机型上探测到 `samsung-diag-router` / `diag-stream` / `diag-seqpacket` 之一。允许用户在额外确认后试验，不把三星固定偏移或命令泛化成已验证布局。
+- **不支持（Unsupported）**：探测失败，或识别为联发科、Exynos、麒麟。界面禁用锁定/恢复/命令行。没有这些芯片的锁频后端，也不会用空接口冒充。
+
+依赖商用路测软件、授权或加固分析才能得到的路径只保留在参考文档中，不在本工具里实现。开发与测试不得向已连接手机自动下发锁频命令。
+
+分类单测见 `networksurvey/src/test/java/com/craxiom/networksurvey/ui/bandlock/BandLockProfileTest.kt`。

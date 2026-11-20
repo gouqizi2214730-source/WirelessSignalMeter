@@ -291,6 +291,7 @@ private fun DiagRecord.matches(filter: ProtocolFilter, includeDiagnostics: Boole
 @Composable
 internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
     val status by viewModel.signal.collectAsStateWithLifecycle()
+    val capability by viewModel.capability.collectAsStateWithLifecycle()
     val records by viewModel.signaling.collectAsStateWithLifecycle()
     val qmdl by viewModel.qmdl.collectAsStateWithLifecycle()
     val exportProgress by viewModel.qmdlExportProgress.collectAsStateWithLifecycle()
@@ -486,8 +487,14 @@ internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
                 Text(stringResource(R.string.diag_visible_messages, visible.size),
                     Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (status.status != RootDiagStatus.Running) Text(stringResource(status.status.title),
-                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(horizontalAlignment = Alignment.End) {
+                    if (status.status != RootDiagStatus.Running) Text(
+                        status.failureReason?.let { capabilityReasonText(it) } ?: stringResource(status.status.title),
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val ims = capability.imsSources.joinToString(" · ") { "${it.id}:${capabilityReasonText(context, it.reason)}" }
+                    if (ims.isNotBlank()) Text(ims, style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             LazyColumn(

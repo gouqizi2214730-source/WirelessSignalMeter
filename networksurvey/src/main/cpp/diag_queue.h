@@ -1,0 +1,39 @@
+/* Bounded record queue for DIAG decode off the libdiag callback path.
+   Fixed-size slots avoid wrap-around overlap bugs and keep the hot path short. */
+#ifndef DIAG_QUEUE_H
+#define DIAG_QUEUE_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+#define DIAG_Q_SLOTS 32
+#define DIAG_Q_SLOT 65535
+
+struct diag_q_stats {
+    unsigned long pushed;
+    unsigned long popped;
+    unsigned long dropped;
+    unsigned long dropped_bytes;
+    unsigned long oversized;
+    unsigned int high_water;
+};
+
+struct diag_q_item {
+    const uint8_t *data;
+    uint16_t len;
+};
+
+struct diag_queue {
+    uint8_t bytes[DIAG_Q_SLOTS][DIAG_Q_SLOT];
+    uint16_t len[DIAG_Q_SLOTS];
+    unsigned head, tail, count;
+    struct diag_q_stats stats;
+};
+
+void diag_q_init(struct diag_queue *q);
+int diag_q_push(struct diag_queue *q, const uint8_t *data, uint16_t len);
+int diag_q_pop(struct diag_queue *q, struct diag_q_item *item);
+int diag_q_empty(const struct diag_queue *q);
+unsigned diag_q_count(const struct diag_queue *q);
+
+#endif

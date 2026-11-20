@@ -46,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -62,6 +63,19 @@ import androidx.preference.PreferenceManager
 import com.craxiom.networksurvey.BuildConfig
 import com.craxiom.networksurvey.R
 import com.craxiom.networksurvey.ui.rootdiag.RootDiagViewModel
+import com.craxiom.networksurvey.ui.rootdiag.capabilityLine
+import com.craxiom.networksurvey.ui.rootdiag.capabilityReasonText
+import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
+import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.OpenInNew
+import com.craxiom.networksurvey.ui.rootdiag.RootDiagPrefs
+import com.craxiom.networksurvey.services.RootDiagCollectorService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -140,7 +154,13 @@ fun SettingsScreen(
                 }
             }
             if (rootDiag != null) item {
-                SettingsGroup(stringResource(R.string.diag_settings_group)) { DiagnosticLogExport(rootDiag) }
+                SettingsGroup(stringResource(R.string.diag_settings_group)) {
+                    DiagCollectionSettings()
+                    SettingsDivider()
+                    DeviceCapabilitySummary(rootDiag)
+                    SettingsDivider()
+                    DiagnosticLogExport(rootDiag)
+                }
             }
             item {
                 SettingsGroup("关于") {
@@ -184,6 +204,8 @@ private fun DiagnosticLogExport(rootDiag: RootDiagViewModel) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(R.string.diag_export_explanation))
+                    Text(stringResource(R.string.diag_export_qmdl_note))
+                    Text(stringResource(R.string.diag_qmdl_privacy))
                     Row(
                         Modifier.fillMaxWidth().toggleable(
                             value = includeSamples, role = Role.Checkbox, onValueChange = { includeSamples = it },
@@ -206,6 +228,135 @@ private fun DiagnosticLogExport(rootDiag: RootDiagViewModel) {
                 TextButton(onClick = { showDialog = false }) { Text(stringResource(android.R.string.cancel)) }
             },
         )
+    }
+}
+
+
+@Composable
+private fun DeviceCapabilitySummary(rootDiag: RootDiagViewModel) {
+    val capability by rootDiag.capability.collectAsStateWithLifecycle()
+    Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(stringResource(R.string.diag_capability_title), style = MaterialTheme.typography.titleSmall)
+        Text(
+            listOf(capability.manufacturer, capability.model, capability.soc, "API ${capability.sdk}").filter { it.isNotBlank() }.joinToString(" · "),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(capabilityLine(capability.telephony), style = MaterialTheme.typography.bodySmall)
+        Text(capabilityLine(capability.root), style = MaterialTheme.typography.bodySmall)
+        Text(capabilityLine(capability.qualcommDiag), style = MaterialTheme.typography.bodySmall)
+        Text(capabilityLine(capability.bandLock), style = MaterialTheme.typography.bodySmall)
+        val context = LocalContext.current
+        val ims = capability.imsSources.joinToString("；") { "${it.id}: ${capabilityReasonText(context, it.reason)}" }
+        if (ims.isNotBlank()) {
+            Text(stringResource(R.string.diag_ims_providers, ims), style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun DiagCollectionSettings() {
+    val context = LocalContext.current
+    var background by remember { mutableStateOf(RootDiagPrefs.backgroundEnabled(context)) }
+    var overlay by remember { mutableStateOf(RootDiagPrefs.overlayWanted(context) && Settings.canDrawOverlays(context)) }
+    var showRf by remember { mutableStateOf(RootDiagPrefs.showRf(context)) }
+    var showIms by remember { mutableStateOf(RootDiagPrefs.showIms(context)) }
+    var showQueue by remember { mutableStateOf(RootDiagPrefs.showQueue(context)) }
+    var showOverlayHelp by rememberSaveable { mutableStateOf(false) }
+    val notificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    SettingsRow(
+        icon = Icons.Rounded.Notifications,
+        title = stringResource(R.string.diag_bg_title),
+        subtitle = stringResource(R.string.diag_bg_subtitle),
+        modifier = Modifier.toggleable(
+            value = background,
+            role = Role.Switch,
+            onValueChange = { enabled ->
+                if (enabled && Build.VERSION.SDK_INT >= 33 &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                    PackageManager.PERMISSION_GRANTED) {
+                    notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+                RootDiagPrefs.setBackgroundEnabled(context, enabled)
+                background = enabled
+                if (enabled && RootDiagCollectorService.running.value) {
+                    RootDiagCollectorService.start(context)
+                } else if (!enabled) {
+                    RootDiagCollectorService.stop(context)
+                }
+            },
+        ),
+        trailing = { Switch(checked = background, onCheckedChange = null) },
+    )
+    SettingsDivider()
+    SettingsRow(
+        icon = Icons.Rounded.OpenInNew,
+        title = stringResource(R.string.diag_overlay_title),
+        subtitle = stringResource(R.string.diag_overlay_subtitle),
+        modifier = Modifier.toggleable(
+            value = overlay,
+            role = Role.Switch,
+            onValueChange = { enabled ->
+                if (enabled && !Settings.canDrawOverlays(context)) {
+                    RootDiagPrefs.setOverlayWanted(context, false)
+                    overlay = false
+                    showOverlayHelp = true
+                } else {
+                    RootDiagPrefs.setOverlayWanted(context, enabled)
+                    overlay = enabled
+                    RootDiagCollectorService.refreshOverlay(context)
+                }
+            },
+        ),
+        trailing = { Switch(checked = overlay, onCheckedChange = null) },
+    )
+    if (overlay) {
+        OverlayFieldToggle(stringResource(R.string.diag_overlay_show_rf), showRf) {
+            RootDiagPrefs.store(context).edit().putBoolean(RootDiagPrefs.OVERLAY_SHOW_RF, it).apply()
+            showRf = it
+            RootDiagCollectorService.refreshOverlay(context)
+        }
+        OverlayFieldToggle(stringResource(R.string.diag_overlay_show_ims), showIms) {
+            RootDiagPrefs.store(context).edit().putBoolean(RootDiagPrefs.OVERLAY_SHOW_IMS, it).apply()
+            showIms = it
+            RootDiagCollectorService.refreshOverlay(context)
+        }
+        OverlayFieldToggle(stringResource(R.string.diag_overlay_show_queue), showQueue) {
+            RootDiagPrefs.store(context).edit().putBoolean(RootDiagPrefs.OVERLAY_SHOW_QUEUE, it).apply()
+            showQueue = it
+            RootDiagCollectorService.refreshOverlay(context)
+        }
+    }
+    if (showOverlayHelp) {
+        AlertDialog(
+            onDismissRequest = { showOverlayHelp = false },
+            title = { Text(stringResource(R.string.diag_overlay_title)) },
+            text = { Text(stringResource(R.string.diag_overlay_need_permission)) },
+            confirmButton = {
+                TextButton(onClick = { showOverlayHelp = false }) { Text(stringResource(android.R.string.ok)) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showOverlayHelp = false
+                    context.startActivity(
+                        Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                }) { Text(stringResource(R.string.diag_overlay_open_settings)) }
+            },
+        )
+    }
+}
+
+@Composable
+private fun OverlayFieldToggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().toggleable(value = checked, role = Role.Checkbox, onValueChange = onChange)
+            .padding(start = 68.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked = checked, onCheckedChange = null)
+        Text(label, Modifier.padding(start = 10.dp))
     }
 }
 

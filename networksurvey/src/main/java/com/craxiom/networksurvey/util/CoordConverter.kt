@@ -9,8 +9,7 @@ import kotlin.math.sqrt
 
 /**
  * 中国地图坐标系转换（WGS-84 ↔ GCJ-02 ↔ BD-09）。
- * 铁律：工参/定位为 WGS-84，百度地图投放前必须 wgs84ToBd09；导出时 BD-09 主列 + bd09ToWgs84。
- * 恢复版：P2 待办类，按反编译 BaiduMapAreaKt.y10.T（wgs84→bd09）需求转写。
+ * 工参和定位使用 WGS-84；投放到百度地图前需调用 wgs84ToBd09；导出时保留 BD-09 主列，并用 bd09ToWgs84 还原。
  */
 object CoordConverter {
     private const val A = 6378245.0

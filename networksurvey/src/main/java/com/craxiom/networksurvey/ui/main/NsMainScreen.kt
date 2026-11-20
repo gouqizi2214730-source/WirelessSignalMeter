@@ -11,7 +11,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.app.Application
+import com.craxiom.networksurvey.ui.rootdiag.RootDiagViewModelStore
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
@@ -41,7 +44,11 @@ fun MainCompose(
     val context = LocalContext.current
 
     val viewModel = viewModel<SharedViewModel>()
-    val rootDiag = viewModel<RootDiagViewModel>()
+    val app = LocalContext.current.applicationContext as Application
+    val rootDiag = viewModel<RootDiagViewModel>(
+        viewModelStoreOwner = RootDiagViewModelStore,
+        factory = ViewModelProvider.AndroidViewModelFactory.getInstance(app),
+    )
     if (!LocalInspectionMode.current) {
         LifecycleStartEffect(rootDiag) {
             rootDiag.enterForeground()
