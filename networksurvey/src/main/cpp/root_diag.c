@@ -176,6 +176,11 @@ static uint16_t k_qmdl_codes[] = {
 };
 #define N_QMDL_CODES ((int)(sizeof(k_qmdl_codes) / sizeof(k_qmdl_codes[0])))
 
+/* Optional live subscription; independent of the QMDL recording mask. */
+#define NR_CA_STATE_CODE 0xB9A7
+static uint16_t g_nr_ca_state_code = NR_CA_STATE_CODE;
+static int g_nr_ca_subscribe_attempted, g_nr_ca_subscribe_rc;
+
 /* LL1 neighbor tracking/CER and NR measurement candidates. Kept out of the required mask. */
 static uint16_t k_neighbor_probe_codes[] = { 0xB119, 0xB123, 0xB96D, 0xB96E, 0xB96F, 0xB992 };
 #define N_NEIGHBOR_PROBES ((int)(sizeof(k_neighbor_probe_codes) / sizeof(k_neighbor_probe_codes[0])))
@@ -687,6 +692,10 @@ static void emit_rrc_signaling(struct jb *j, int nr, int ch, int pci, const uint
     if (out.trunc) {
         out.trunc = 0;
         sd_put(&out, "\n<内容过长，已截断>\n");
+    }
+    if (!incomplete && !nr && summary.lte_tdd_assignment_plus_one && summary.lte_tdd_special_plus_one) {
+        jb_add(j, ",\"lte_tdd_config\":{\"assignment\":%d,\"special\":%d}",
+               summary.lte_tdd_assignment_plus_one - 1, summary.lte_tdd_special_plus_one - 1);
     }
     if (!incomplete && summary.sib1_present) {
         static const char *const fields[SD_SIB1_FIELDS] = {
@@ -1689,7 +1698,8 @@ static struct lm_acc *lm_get(int pci, long earfcn, int cc) {
     memset(o, 0, sizeof(*o)); o->used = 1; o->pci = pci; o->earfcn = earfcn; o->cc = cc; o->t_emit = -1000000;
     return o;
 }
-static void parse_lte_b193_v66(const uint8_t *sb, int sbl, long earfcn) {
+static unsigned g_b193_report;
+static void parse_lte_b193_v66(const uint8_t *sb, int sbl, long earfcn, unsigned report) {
     int ncells = sb[4] & 7;
     if (ncells == 0) return;
     if (sbl < 8 + ncells * 144) { unknown_layout(0xB193, 66, sb, sbl, "cell length"); return; }
@@ -1726,6 +1736,7 @@ static void parse_lte_b193_v66(const uint8_t *sb, int sbl, long earfcn) {
         if (tm - a->t_emit >= 500) {
             struct jb j; jb_init(&j, "lte_meas");
             jb_add(&j, ",\"src\":\"B193\",\"pci\":%d,\"earfcn\":%ld,\"cc\":%d,\"idx\":%d,\"is_serving\":%d", pci, earfcn, cc, c, is_serving);
+            jb_add(&j, ",\"ca_report\":%u", report);
             jb_f(&j, "rsrp", a->rsrp / a->n); jb_f(&j, "rsrp_filt", rsrp_f); jb_f(&j, "rsrq", a->rsrq / a->n); jb_f(&j, "rsrq_filt", rsrq_f); jb_f(&j, "rssi", a->rssi / a->n);
             if (a->sinr_count) jb_f(&j, "sinr", a->sinr / a->sinr_count);
             if (is_serving) {
@@ -1762,6 +1773,7 @@ static void parse_lte_b193_v66(const uint8_t *sb, int sbl, long earfcn) {
 }
 static void parse_lte_b193(const uint8_t *b, int n) {
     if (n < 8 || b[0] != 1) { unknown_layout(0xB193, n ? b[0] : 0, b, n, "version"); return; }
+    unsigned report = ++g_b193_report;
     int nsub = b[1], pos = 4;
     for (int s = 0; s < nsub && pos + 4 <= n; s++) {
         int id = b[pos], sv = b[pos + 1], size = rd16(b + pos + 2);
@@ -1775,7 +1787,7 @@ static void parse_lte_b193(const uint8_t *b, int n) {
         int cell0 = 0, csz = 0, snr_off = 0;
         if (sv == 36) { cell0 = 8; csz = 128; snr_off = 80; }
         else if (sv == 48 || sv == 50) { cell0 = 12; csz = 140; snr_off = 92; }
-        else if (sv == 66) { parse_lte_b193_v66(sb, sbl, earfcn); continue; }
+        else if (sv == 66) { parse_lte_b193_v66(sb, sbl, earfcn, report); continue; }
         if (!csz) {
             unknown_layout(0xB193, (uint32_t)sv, b, n, "subpkt version");
             continue;
@@ -2358,6 +2370,23 @@ static void parse_nr_b8d8(const uint8_t *b, int n) {
     uint32_t h = rd32(b + 4);
     int pci = (int)((h >> 16) & 0x3ff), carrier = (int)((h >> 26) & 0x3f);
     if (sample_at == 12) trs = b[8] & 1;
+    if (carrier != 0) {
+        /* 3.2 SCC frames carry CC and PCI but no ARFCN. Join to the live config in the app. */
+        if (version != 0x30002 || n != 28 || carrier >= 16 || pci > 1007 || trs) return;
+        int valid, invalid;
+        double snr = snr_q10_max(b + 12, 4, 4, &valid, &invalid);
+        if (!valid || snr < -23.0 || snr > 40.0) return;
+        static int64_t last[16];
+        int64_t now = mono_ms();
+        if (last[carrier] && now - last[carrier] < 500) return;
+        last[carrier] = now;
+        struct jb j; jb_init(&j, "nr_snr");
+        jb_add(&j, ",\"rat\":\"NR\",\"src\":\"B8D8\",\"ver\":\"3.2\",\"rs\":\"SSB\","
+                   "\"pci\":%d,\"carrier\":%d,\"tentative\":0", pci, carrier);
+        jb_f(&j, "sinr", snr);
+        jb_emit(&j);
+        return;
+    }
     emit_nr_snr("B8D8", version, pci, g_nr.arfcn, carrier, trs, b + sample_at, 4, trs ? 4 : 1);
 }
 
@@ -3250,7 +3279,8 @@ static const struct b825_l B825_L[] = {
     { 0x30004, 72, 536, 544, 552, 23, 1, 1 }, { 0x30005, 72, 536, 544, 552, 25, 1, 1 }, { 0x30006, 72, 536, 544, 552, 25, 1, 1 },
     { 0x30008, 72, 536, 544, 552, 26, 1, 1 }, { 0x30009, 72, 536, 544, 552, 26, 1, 1 }, { 0x3000a, 72, 536, 544, 552, 29, 1, 1 },
 };
-static char g_b825_last[512];
+enum { B825_MAX_CELLS = 16, B825_KEY_BYTES = 128 + B825_MAX_CELLS * 128 };
+static char g_b825_last[B825_KEY_BYTES];
 static int64_t g_b825_emitted;
 static void parse_nr_b825(const uint8_t *b, int n) {
     if (n < 4) return;
@@ -3266,32 +3296,84 @@ static void parse_nr_b825(const uint8_t *b, int n) {
     if (s0 > 64 || s1 > 64) return;
     pos += 4 * (s0 + s1);
     int nc = (int)lebits(b, L->cnt_off, 8);
-    if (nc > 16 || pos + nc * L->cell_bytes > n) return;
+    if (nc > B825_MAX_CELLS || pos + nc * L->cell_bytes > n) return;
     static const int bw_a[] = { 5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100, 200, 400 };              /* 3.0-3.2 */
     static const int bw_b[] = { 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 200, 400 };      /* 3.3+   */
-    char cells[400]; int cl = 0; cells[0] = 0;
-    int pci0 = -1; long ssb0 = -1;
-    for (int i = 0; i < nc && cl < (int)sizeof(cells) - 120; i++) {
+    int state = b[12];
+    struct jb j; jb_init(&j, "nr_cfg");
+    const int key_at = j.n;
+    jb_add(&j, ",\"src\":\"B825\",\"ver\":\"%d.%d\",\"tentative\":%d,\"state\":\"%s\",\"ncells\":%d",
+           rel_maj, rel_min, ver == 0x30008 ? 0 : 1, state == 2 ? "connected" : state == 4 ? "idle" : "?", nc);
+    if (nc > 0) jb_add(&j, ",\"pci\":%u,\"ssb_arfcn\":%lu", (unsigned)rd16(b + pos + 1), (unsigned long)rd32(b + pos + 11));
+    if (ver == 0x30008 && nc > 0) jb_i(&j, "nrb", b[18]);
+    jb_add(&j, ",\"cells\":[");
+    for (int i = 0; i < nc; i++) {
         const uint8_t *c = b + pos + i * L->cell_bytes;
         int cc = c[0], pci = rd16(c + 1), band = rd16(c + 15), bwc = c[18], scs = L->has_scs ? c[20] : -1, ml = L->has_scs ? c[21] : c[20];
         long dl = rd32(c + 3), ssb = rd32(c + 11);
         int bw = L->bw35 ? (bwc < 17 ? bw_b[bwc] : 0) : (bwc < 15 ? bw_a[bwc] : 0);
-        if (i == 0) { pci0 = pci; ssb0 = ssb; }
-        cl += snprintf(cells + cl, sizeof(cells) - cl, "%s{\"cc\":%d,\"pci\":%d,\"band\":%d,\"dl_arfcn\":%ld,\"ssb_arfcn\":%ld,\"bw_mhz\":%d,\"scs_khz\":%d,\"max_layers\":%d}",
-                       i ? "," : "", cc, pci, band, dl, ssb, bw, (scs >= 0 && scs < 5) ? 15 << scs : 0, ml);
+        jb_add(&j, "%s{\"cc\":%d,\"pci\":%d,\"band\":%d,\"dl_arfcn\":%ld,\"ssb_arfcn\":%ld,\"bw_mhz\":%d,\"scs_khz\":%d,\"max_layers\":%d}",
+               i ? "," : "", cc, pci, band, dl, ssb, bw, (scs >= 0 && scs < 5) ? 15 << scs : 0, ml);
     }
-    int state = b[12];
-    char key[512]; snprintf(key, sizeof(key), "%u/%d/%d/%s", ver, state, b[18], cells);
+    jb_add(&j, "]");
+    const char *key = j.b + key_at;
+    if (j.n - key_at >= (int)sizeof(g_b825_last)) return;
     int64_t now = mono_ms();
     if (!strcmp(key, g_b825_last) && now - g_b825_emitted < 10000) return;
     g_b825_emitted = now;
     snprintf(g_b825_last, sizeof(g_b825_last), "%s", key);
-    struct jb j; jb_init(&j, "nr_cfg");
-    jb_add(&j, ",\"src\":\"B825\",\"ver\":\"%d.%d\",\"tentative\":%d,\"state\":\"%s\",\"ncells\":%d",
-           rel_maj, rel_min, ver == 0x30008 ? 0 : 1, state == 2 ? "connected" : state == 4 ? "idle" : "?", nc);
-    if (nc > 0) jb_add(&j, ",\"pci\":%d,\"ssb_arfcn\":%ld", pci0, ssb0);
-    if (ver == 0x30008 && nc > 0) jb_i(&j, "nrb", b[18]);
-    jb_add(&j, ",\"cells\":[%s]", cells);
+    jb_emit(&j);
+}
+
+/* --- 0xB9A7 NR5G CA state: fixed-size, versioned carrier table --- */
+static void parse_nr_b9a7(const uint8_t *b, int n) {
+    enum { HEADER = 24, STRIDE = 24, MAX_CC = 16 };
+    static const struct { uint32_t version; int count_at; } layouts[] = {
+        { 0x20003, 5 }, { 0x20004, 9 }, { 0x30000, 9 }, { 0x30002, 9 },
+    };
+    uint32_t ver = n >= 4 ? rd32(b) : 0;
+    int count_at = -1;
+    for (size_t i = 0; i < sizeof(layouts) / sizeof(layouts[0]); i++) {
+        if (layouts[i].version == ver) { count_at = layouts[i].count_at; break; }
+    }
+    if (n < HEADER || count_at < 0) {
+        unknown_layout(NR_CA_STATE_CODE, ver, b, n, n < HEADER ? "header" : "version");
+        return;
+    }
+    int count = b[count_at];
+    if (count > MAX_CC || n != HEADER + count * STRIDE) {
+        unknown_layout(NR_CA_STATE_CODE, ver, b, n, "count/length");
+        return;
+    }
+    uint32_t seen = 0;
+    for (int i = 0; i < count; i++) {
+        const uint8_t *c = b + HEADER + i * STRIDE;
+        unsigned cc = c[0], dl = rd16(c + 4), ul = rd16(c + 16);
+        unsigned pci = rd16(c + 2);
+        uint32_t ssb = rd32(c + 8);
+        unsigned band = (unsigned)rd16(c + 12) + 1;
+        int sul = band == 80 || band == 81 || band == 82 || band == 83 || band == 84 ||
+                  band == 86 || band == 89 || band == 95 || band == 97 || band == 98 || band == 99;
+        /* PCC and SUL can omit the DL identity; their placeholder fields are not joined. */
+        int needs_identity = cc != 0 && !sul && (dl == 1 || dl == 2 || ul == 1 || ul == 2);
+        if (cc >= MAX_CC || (seen & (1U << cc)) || dl > 3 || ul > 3 ||
+            (needs_identity && (pci > 1007 || ssb == 0 || ssb > 3279165))) {
+            unknown_layout(NR_CA_STATE_CODE, ver, b, n, "carrier/state/identity");
+            return;
+        }
+        seen |= 1U << cc;
+    }
+    layout_seen(NR_CA_STATE_CODE, ver, b, n);
+    struct jb j; jb_init(&j, "nr_ca_state");
+    jb_add(&j, ",\"rat\":\"NR\",\"src\":\"B9A7\",\"ver\":\"%u.%u\",\"tentative\":0,\"cc\":[",
+           ver >> 16, ver & 0xffff);
+    for (int i = 0; i < count; i++) {
+        const uint8_t *c = b + HEADER + i * STRIDE;
+        jb_add(&j, "%s{\"cc\":%u,\"pci\":%u,\"ssb_arfcn\":%lu,\"band\":%u,\"dl\":%u,\"ul\":%u}",
+               i ? "," : "", (unsigned)c[0], (unsigned)rd16(c + 2), (unsigned long)rd32(c + 8),
+               (unsigned)rd16(c + 12) + 1, (unsigned)rd16(c + 4), (unsigned)rd16(c + 16));
+    }
+    jb_add(&j, "]");
     jb_emit(&j);
 }
 
@@ -3415,11 +3497,14 @@ static void parse_nr_b887(const uint8_t *b, int n) {
             if (rnti != 0 && rnti != 3) { g_dl_other_rnti++; continue; }
             int cc = (int)lebits(it, L->scell_off, 4);
             if (cc > 7) continue;
+            int pci = (int)lebits(it, 32, 10);
+            long arfcn = (long)lebits(it, 42, 22);
             if (cc == 0 && g_dl_pci >= 0 && g_dl_arfcn > 0 &&
-                ((int)lebits(it, 32, 10) != g_dl_pci || (long)lebits(it, 42, 22) != g_dl_arfcn)) continue;
+                (pci != g_dl_pci || arfcn != g_dl_arfcn)) continue;
             struct dl_acc *a = &g_dl[cc];
+            if (a->used && (a->pci != pci || a->arfcn != arfcn)) memset(a, 0, sizeof(*a));
             a->used = 1;
-            a->pci = (int)lebits(it, 32, 10); a->arfcn = (long)lebits(it, 42, 22);
+            a->pci = pci; a->arfcn = arfcn;
             a->bw = (int)lebits(it, L->bw_off, 4); a->scs = (int)lebits(it, 87, 3);
             a->bt = L->bt_off >= 0 ? (int)lebits(it, L->bt_off, 1) : 0;
             uint32_t tbs = lebits(it, 69, 18);
@@ -4916,6 +5001,7 @@ static void handle_record(const uint8_t *rec, int len) {
         parse_nr_layer_stats(code, body, blen); break;
     case 0xB8A7: parse_nr_b8a7(body, blen); break;
     case 0xB825: parse_nr_b825(body, blen); break;
+    case NR_CA_STATE_CODE: parse_nr_b9a7(body, blen); break;
     case 0xB887: parse_nr_b887(body, blen); break;
     case 0xB884: parse_nr_b884(body, blen); break;
     case 0xB883: parse_nr_b883(body, blen); break;
@@ -5031,6 +5117,7 @@ static void emit_status_locked(const char *state, int rc) {
            g_lc_alive, g_lc_fmt ? "true" : "false", g_lc_sip, g_lc_rcs, g_diag_ims_pkts);
     if (g_last_pkt_mono) jb_add(&j, ",\"last_pkt_age_s\":%lld",
                                 (long long)((mono_ms() - g_last_pkt_mono) / 1000));
+    if (g_nr_ca_subscribe_attempted) jb_i(&j, "b9a7_subscribe_rc", g_nr_ca_subscribe_rc);
     jb_add(&j, ",\"log_counts\":{");
     const char *separator = "";
     for (int i = 0; i < g_nstats; i++) {
@@ -5150,6 +5237,8 @@ static int dci_start(void) {
 }
 
 static void dci_stop(void) {
+    if (g_nr_ca_subscribe_attempted && g_nr_ca_subscribe_rc == DCI_OK && p_logcfg && g_client >= 0)
+        p_logcfg(g_client, 0, &g_nr_ca_state_code, 1);
     if (g_neighbor_probes_enabled && p_logcfg && g_client >= 0)
         p_logcfg(g_client, 0, k_neighbor_probe_codes, N_NEIGHBOR_PROBES);
     if (g_enabled && p_logcfg && g_client >= 0) {
@@ -5159,6 +5248,71 @@ static void dci_stop(void) {
     }
     if (g_client >= 0 && p_rel) { int id = g_client; int r = p_rel(&id); elog("diag_release_dci_client -> %d", r); g_client = -1; }
     if (g_inited && p_deinit) { boolean ok = p_deinit(); elog("Diag_LSM_DeInit -> %d", (int)ok); g_inited = 0; }
+}
+
+/* A stalled optional vendor subscription must not block file writes or stop ACKs. */
+static pthread_mutex_t g_qmdl_mask_mu = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t g_qmdl_mask_cond = PTHREAD_COND_INITIALIZER;
+static pthread_t g_qmdl_mask_thread;
+static int g_qmdl_mask_started, g_qmdl_mask_wanted, g_qmdl_mask_exit;
+
+static void *qmdl_mask_worker(void *unused) {
+    (void)unused;
+    int ca_rc = p_logcfg(g_client, 1, &g_nr_ca_state_code, 1);
+    pthread_mutex_lock(&g_mu);
+    g_nr_ca_subscribe_rc = ca_rc;
+    g_nr_ca_subscribe_attempted = 1;
+    pthread_mutex_unlock(&g_mu);
+    elog("optional live B9A7 subscription -> %d", ca_rc);
+    int enabled = 0;
+    pthread_mutex_lock(&g_qmdl_mask_mu);
+    while (!g_qmdl_mask_exit) {
+        while (!g_qmdl_mask_exit && enabled == g_qmdl_mask_wanted)
+            pthread_cond_wait(&g_qmdl_mask_cond, &g_qmdl_mask_mu);
+        if (g_qmdl_mask_exit) break;
+        enabled = g_qmdl_mask_wanted;
+        pthread_mutex_unlock(&g_qmdl_mask_mu);
+        int result = p_logcfg(g_client, enabled, k_qmdl_codes, N_QMDL_CODES);
+        if (enabled && result != DCI_OK) {
+            for (int i = 0; i < N_QMDL_CODES; i++) {
+                pthread_mutex_lock(&g_qmdl_mask_mu);
+                int wanted = g_qmdl_mask_wanted && !g_qmdl_mask_exit;
+                pthread_mutex_unlock(&g_qmdl_mask_mu);
+                if (!wanted) break;
+                int rc = p_logcfg(g_client, 1, &k_qmdl_codes[i], 1);
+                if (rc != DCI_OK) elog("QMDL code 0x%04X rejected (%d)", k_qmdl_codes[i], rc);
+            }
+        }
+        pthread_mutex_lock(&g_qmdl_mask_mu);
+    }
+    pthread_mutex_unlock(&g_qmdl_mask_mu);
+    return NULL;
+}
+
+static void qmdl_request_mask(int enabled) {
+    if (!g_qmdl_mask_started) {
+        int rc = pthread_create(&g_qmdl_mask_thread, NULL, qmdl_mask_worker, NULL);
+        if (rc != 0) {
+            elog("QMDL optional mask worker unavailable (%d)", rc);
+            return;
+        }
+        g_qmdl_mask_started = 1;
+    }
+    if (!g_qmdl_mask_started) return;
+    pthread_mutex_lock(&g_qmdl_mask_mu);
+    g_qmdl_mask_wanted = enabled;
+    pthread_cond_signal(&g_qmdl_mask_cond);
+    pthread_mutex_unlock(&g_qmdl_mask_mu);
+}
+
+static void qmdl_stop_mask_worker(void) {
+    if (!g_qmdl_mask_started) return;
+    pthread_mutex_lock(&g_qmdl_mask_mu);
+    g_qmdl_mask_exit = 1;
+    pthread_cond_signal(&g_qmdl_mask_cond);
+    pthread_mutex_unlock(&g_qmdl_mask_mu);
+    pthread_join(g_qmdl_mask_thread, NULL);
+    /* Client release removes any masks still enabled. */
 }
 
 static void qmdl_start(const char *path) {
@@ -5175,30 +5329,23 @@ static void qmdl_start(const char *path) {
     g_qmdl_fd = g_qmdl_error ? -1 : fd;
     qmdl_status_locked(g_qmdl_error ? "error" : "recording");
     pthread_mutex_unlock(&g_mu);
-    if (g_qmdl_fd < 0) return;
-    int result = p_logcfg(g_client, 1, k_qmdl_codes, N_QMDL_CODES);
-    record_subscriptions(k_qmdl_codes, N_QMDL_CODES, result);
-    if (result != DCI_OK) {
-        for (int i = 0; i < N_QMDL_CODES; i++) {
-            int rc = p_logcfg(g_client, 1, &k_qmdl_codes[i], 1);
-            record_subscriptions(&k_qmdl_codes[i], 1, rc);
-            if (rc != DCI_OK) elog("QMDL code 0x%04X rejected (%d)", k_qmdl_codes[i], rc);
-        }
-    }
+    if (g_qmdl_fd >= 0) qmdl_request_mask(1);
 }
 
-static void qmdl_stop(void) {
+static void qmdl_stop(int requested) {
     pthread_mutex_lock(&g_mu);
     int fd = g_qmdl_fd;
     g_qmdl_fd = -1;
     pthread_mutex_unlock(&g_mu);
-    if (fd < 0) return;
-    qmdl_flush(fd);
-    if (close(fd) != 0 && !g_qmdl_error) g_qmdl_error = errno;
+    if (fd < 0 && !requested) return;
+    if (fd >= 0) {
+        qmdl_flush(fd);
+        if (close(fd) != 0 && !g_qmdl_error) g_qmdl_error = errno;
+    }
     pthread_mutex_lock(&g_mu);
     qmdl_status_locked(g_qmdl_error ? "error" : g_qmdl_limit ? "limit" : "stopped");
     pthread_mutex_unlock(&g_mu);
-    p_logcfg(g_client, 0, k_qmdl_codes, N_QMDL_CODES);
+    if (fd >= 0 && requested) qmdl_request_mask(0);
 }
 
 int main(int argc, char **argv) {
@@ -5232,6 +5379,7 @@ int main(int argc, char **argv) {
     pthread_mutex_lock(&g_mu);
     emit_status_locked(rc == 0 ? "running" : "error", rc);
     pthread_mutex_unlock(&g_mu);
+    if (rc == 0) qmdl_request_mask(0);
 
     int64_t last_snapshot = mono_ms();
     while (!g_stop && rc == 0) {
@@ -5243,7 +5391,7 @@ int main(int argc, char **argv) {
             if (n <= 0) break;
             for (ssize_t i = 0; i < n; i++) {
                 if (cmd[i] == 'Q') qmdl_start(qmdl_path);
-                else if (cmd[i] == 'S') qmdl_stop();
+                else if (cmd[i] == 'S') qmdl_stop(1);
             }
         } else if (ready > 0 && input.revents != 0) break;
         if (ready < 0 && errno != EINTR) break;
@@ -5265,7 +5413,7 @@ int main(int argc, char **argv) {
         }
         if (g_diag_ims_pkts) emit_ims_provider("qualcomm_diag", "available", "true", "0x156E");
         pthread_mutex_unlock(&g_mu);
-        if (finish_qmdl) qmdl_stop();
+        if (finish_qmdl) qmdl_stop(1);
         last_snapshot = now;
     }
 
@@ -5277,7 +5425,8 @@ int main(int argc, char **argv) {
     if (g_dq_started) pthread_join(g_dq_th, NULL);
     logcat_stop();
     alarm(3);
-    qmdl_stop();
+    qmdl_stop(0);
+    qmdl_stop_mask_worker();
     dci_stop();
     if (g_lib) dlclose(g_lib);
     return rc == 0 ? 0 : 10 + rc;

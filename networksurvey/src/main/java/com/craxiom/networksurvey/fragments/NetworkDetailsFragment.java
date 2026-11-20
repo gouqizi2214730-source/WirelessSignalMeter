@@ -49,9 +49,11 @@ import com.craxiom.networksurvey.fragments.model.NrSecondaryCellSighting;
 import com.craxiom.networksurvey.fragments.model.NrSecondaryCellViewState;
 import com.craxiom.networksurvey.fragments.model.UmtsNeighbor;
 import com.craxiom.networksurvey.listeners.ICellularSurveyRecordListener;
+import com.craxiom.networksurvey.model.AndroidNrCarriers;
 import com.craxiom.networksurvey.model.CellularProtocol;
 import com.craxiom.networksurvey.model.CellularRecordWrapper;
 import com.craxiom.networksurvey.model.NetworkTechnologyInfo;
+import com.craxiom.networksurvey.model.NrCarrier;
 import com.craxiom.networksurvey.model.NrRecordWrapper;
 import com.craxiom.networksurvey.services.NetworkSurveyService;
 import com.craxiom.networksurvey.ui.cellular.CellularChartViewModel;
@@ -129,6 +131,9 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
     private volatile TelephonyStateUtils.NrMode currentNrMode = TelephonyStateUtils.NrMode.NONE;
     private volatile NetworkTechnologyInfo currentTechnology;
     private volatile NrBandwidthReading lastNrBandwidth;
+    private final AndroidNrCarriers androidNrCarriers = new AndroidNrCarriers();
+    private boolean nrScanActive;
+    private volatile boolean nrAirplaneMode;
 
     private record NrBandwidthCell(String plmn, long nci, int pci, int channel) {}
     private record NrBandwidthReading(NrBandwidthCell cell, int khz, long measuredAt) {}
@@ -204,6 +209,7 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
 
         // Check initial airplane mode state
         boolean isAirplaneModeOn = isAirplaneModeOn(requireContext());
+        nrAirplaneMode = isAirplaneModeOn;
         viewModel.setAirplaneModeActive(isAirplaneModeOn);
         if (isAirplaneModeOn)
         {
@@ -247,6 +253,9 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
     @Override
     protected void onSurveyServiceConnected(NetworkSurveyService service)
     {
+        synchronized (androidNrCarriers) {
+            nrScanActive = true;
+        }
         service.registerCellularSurveyRecordListener(this);
 
         service.runSingleCellularScan();
@@ -256,6 +265,10 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
     protected void onSurveyServiceDisconnecting(NetworkSurveyService service)
     {
         service.unregisterCellularSurveyRecordListener(this);
+        synchronized (androidNrCarriers) {
+            nrScanActive = false;
+            clearAndroidNrCarriers();
+        }
 
         super.onSurveyServiceDisconnecting(service);
     }
@@ -317,8 +330,6 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
                             : getString(R.string.branding_none));
         }
 
-        viewModel.setCarrierAggregation(toCarrierAggregationViewState(
-                CarrierAggregation.fromServiceState(technologyInfo.cellBandwidthsKhz(), technologyInfo.nrMode())));
     }
 
     /**
@@ -353,48 +364,22 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
     }
 
     /**
-     * @return The carrier aggregation view state, or null when there is not enough evidence to
-     * show a section. Summaries do not treat ServiceState bandwidths or branding overrides as
-     * proof of activated carrier aggregation.
+     * @return The carrier aggregation view state (per-carrier chip labels plus the summary line),
+     * or null when fewer than two valid component carriers are reported (so the section is hidden).
      */
-    private CarrierAggregationViewState toCarrierAggregationViewState(CarrierAggregation.Snapshot snapshot)
+    private CarrierAggregationViewState carrierAggregationViewState(CarrierAggregation.Snapshot snapshot)
     {
-        if (snapshot == null || !snapshot.getVisible()) return null;
-        final List<String> chipLabels = new ArrayList<>();
-        for (CarrierAggregation.Component component : snapshot.getComponents())
-        {
-            final String label = CarrierAggregation.chipLabel(component);
-            if (!label.isEmpty()) chipLabels.add(label);
-        }
-        final int n = Math.max(snapshot.getComponents().size(), snapshot.getBandwidthCount());
-        final String mhz = CellularBandwidthUtils.formatBandwidthMhz(Math.max(snapshot.getAggregateKhz(), 0));
-        final int res = carrierAggregationSummaryRes(snapshot);
-        final String summary = res == 0 ? CarrierAggregation.englishSummary(snapshot) : getString(res, n, mhz);
-        return new CarrierAggregationViewState(chipLabels, summary);
-    }
-
-    private static int carrierAggregationSummaryRes(CarrierAggregation.Snapshot snapshot)
-    {
-        return switch (snapshot.getEvidence())
-        {
-            case CELLINFO_SECONDARY_SERVING -> switch (snapshot.getKind())
-            {
-                case EN_DC -> R.string.ca_endc_cellinfo;
-                case LTE_CA -> R.string.ca_lte_cellinfo;
-                case NR_CA -> R.string.ca_nr_cellinfo;
-                default -> 0;
-            };
-            case DIAG_B825_CONFIGURED -> R.string.ca_nr_b825;
-            case DIAG_B193_MEASURED_SERVING -> R.string.ca_lte_b193;
-            case SERVICE_STATE_BANDWIDTHS -> switch (snapshot.getKind())
-            {
-                case EN_DC -> R.string.ca_endc_bandwidths;
-                case LTE_CA -> R.string.ca_lte_bandwidths;
-                case NR_CA -> R.string.ca_nr_bandwidths;
-                default -> R.string.ca_multi_bandwidths;
-            };
-            case NONE -> 0;
+        if (!snapshot.getVisible()) return null;
+        final int label = switch (snapshot.getKind()) {
+            case LTE_CA -> R.string.ca_lte_cellinfo;
+            case NR_CA -> R.string.ca_nr_cellinfo;
+            case EN_DC -> R.string.ca_endc_cellinfo;
+            default -> R.string.ca_multi_bandwidths;
         };
+        final List<String> chips = snapshot.getComponents().stream()
+                .map(CarrierAggregation::chipLabel).collect(Collectors.toList());
+        return new CarrierAggregationViewState(chips, getString(label, chips.size(),
+                CellularBandwidthUtils.formatBandwidthMhz(snapshot.getAggregateKhz())));
     }
     /**
      * Clears out the UI, which is needed if the phone stops seeing towers or something else happens (e.g. airplane mode).
@@ -439,6 +424,7 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
         viewModel.setCarrierAggregation(null);
 
         viewModel.setNrSecondaryCell(null);
+        clearAndroidNrCarriers();
         viewModel.setNrLastSeenText("");
         viewModel.clearLastNrSecondaryCell();
     }
@@ -453,10 +439,11 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
         final List<GsmRecordData> gsmNeighbors = new ArrayList<>();
         final List<UmtsRecordData> umtsNeighbors = new ArrayList<>();
         final List<LteRecordData> lteNeighbors = new ArrayList<>();
-        final List<LteRecordData> lteSecondaries = new ArrayList<>();
+        final List<CarrierAggregation.Component> lteSecondaries = new ArrayList<>();
         final List<NrRecordWrapper> nrNonServing = new ArrayList<>();
         final NetworkTechnologyInfo technology = currentTechnology;
-        final CellularProtocol preferredRat = currentNrMode == TelephonyStateUtils.NrMode.NON_STANDALONE
+        final TelephonyStateUtils.NrMode nrMode = currentNrMode;
+        final CellularProtocol preferredRat = nrMode == TelephonyStateUtils.NrMode.NON_STANDALONE
                 ? CellularProtocol.LTE : CellularProtocol.NR;
         int activeLte = 0;
         int activeNr = 0;
@@ -529,9 +516,9 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
                             secondaryNrBandwidth = CellularBandwidthUtils.secondaryBandwidthKhz(reported, preciseBandwidth);
                         }
                         processLteServingCell(lteData, cellularRecord.additionalPlmns, bandwidth);
-                    } else if (CellularUtils.isSecondaryServing(lteData.getConnectionStatus()))
+                    } else if (lteData.getConnectionStatus() == ConnectionStatus.SECONDARY_SERVING)
                     {
-                        lteSecondaries.add(lteData);
+                        lteSecondaries.add(lteComponent(lteData));
                     } else
                     {
                         lteNeighbors.add(lteData);
@@ -571,14 +558,33 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
                     new ServingCellInfo(servingCellRecord, subscriptionId, System.currentTimeMillis()));
         }
 
-        // A cell the device reports as SECONDARY_SERVING is one the phone is actively using: on
-        // 5G NSA it is the NR cell carrying the 5G data (the phone is registered on the LTE
-        // anchor, so it shows up as a non-serving record), and on 5G SA with NR carrier
-        // aggregation it is an NR SCell. Promote it to the NR details card and keep it out of the
-        // neighbors table. Devices that report no connection status simply do not show the card.
-        final List<NrRecordWrapper> nrSecondaries = CellularUtils.selectAllSecondaryServingNrCells(nrNonServing);
-        nrNonServing.removeAll(nrSecondaries);
-        final NrRecordWrapper secondaryNrCell = nrSecondaries.isEmpty() ? null : nrSecondaries.get(0);
+        final long now = SystemClock.elapsedRealtime();
+        final List<NrCarrier> reportedCarriers = reportedNrCarriers(servingCellRecord, nrNonServing, now);
+        final boolean nrPrimary = servingCellRecord != null && servingCellRecord.cellularProtocol == CellularProtocol.NR;
+        if (servingCellRecord != null) {
+            final int nrBandwidth = secondaryNrBandwidth;
+            final List<CarrierAggregation.Component> nrSecondaries = reportedCarriers.stream()
+                    .filter(row -> row.role() != NrCarrier.Role.PRIMARY)
+                    .map(row -> nrComponent(row, reportedCarriers.size() == 1 ? nrBandwidth : 0))
+                    .collect(Collectors.toList());
+            final CarrierAggregation.Component primary = switch (servingCellRecord.cellularProtocol) {
+                case LTE -> lteComponent(((LteRecord) servingCellRecord.cellularRecord).getData());
+                case NR -> reportedCarriers.stream().filter(row -> row.role() == NrCarrier.Role.PRIMARY)
+                        .findFirst().map(row -> nrComponent(row, 0)).orElse(null);
+                default -> null;
+            };
+            final CarrierAggregation.Snapshot fallback = CarrierAggregation.fromServiceState(primary == null || technology == null
+                    ? null : primaryBandwidths(technology, nrPrimary ? TelephonyManager.NETWORK_TYPE_NR
+                    : TelephonyManager.NETWORK_TYPE_LTE, primary.getArfcn()));
+            viewModel.setCarrierAggregation(carrierAggregationViewState(
+                    CarrierAggregation.mergeWithCellInfo(fallback, primary, lteSecondaries, nrSecondaries)));
+        }
+        publishAndroidNrCarriers(servingCellRecord, nrMode, nrNonServing.size() + (nrPrimary ? 1 : 0),
+                activeNr, reportedCarriers, now);
+        final Set<NrCarrier.Identity> nrServingIdentities = reportedCarriers.stream()
+                .map(NrCarrier::identity).collect(Collectors.toSet());
+        final NrRecordWrapper secondaryNrCell = servingCellRecord != null
+                ? CellularUtils.selectSecondaryServingNrCell(nrNonServing) : null;
         final NrSecondaryCellViewState secondaryState = resolveNrSecondaryCellViewState(secondaryNrCell,
                 CellularUtils.getTowerId(servingCellRecord), secondaryNrBandwidth);
         viewModel.setNrSecondaryCell(secondaryState);
@@ -588,32 +594,113 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
                     ? ((NrRecord) secondaryNrCell.cellularRecord).getData() : null);
         }
 
-        if (servingCellRecord != null)
-        {
-            final int nrSecondaryBw = nrSecondaries.size() == 1 ? secondaryNrBandwidth : 0;
-            final List<CarrierAggregation.Component> lteComponents = new ArrayList<>();
-            for (LteRecordData data : lteSecondaries)
-            {
-                lteComponents.add(lteSecondaryComponent(data));
-            }
-            final List<CarrierAggregation.Component> nrComponents = new ArrayList<>();
-            for (NrRecordWrapper wrapper : nrSecondaries)
-            {
-                nrComponents.add(nrSecondaryComponent(wrapper, nrSecondaryBw));
-            }
-            final CarrierAggregation.Snapshot base = CarrierAggregation.fromServiceState(
-                    technology != null ? technology.cellBandwidthsKhz() : null, currentNrMode);
-            viewModel.setCarrierAggregation(toCarrierAggregationViewState(
-                    CarrierAggregation.mergeWithCellInfo(base, servingComponent(servingCellRecord),
-                            lteComponents, nrComponents)));
-        }
-
         processGsmNeighbors(gsmNeighbors);
         processUmtsNeighbors(umtsNeighbors);
         processLteNeighbors(lteNeighbors);
         processNrNeighbors(nrNonServing.stream()
                 .map(wrapper -> ((NrRecord) wrapper.cellularRecord).getData())
+                .filter(data -> !isActiveCarrier(data.getServingCell().getValue(), data.getConnectionStatus())
+                        && !nrServingIdentities.contains(nrIdentity(data)))
                 .collect(Collectors.toList()));
+    }
+
+    private static CarrierAggregation.Component lteComponent(LteRecordData data)
+    {
+        final int earfcn = data.hasEarfcn() ? data.getEarfcn().getValue() : -1;
+        return new CarrierAggregation.Component(CarrierAggregation.LTE, data.hasPci() ? data.getPci().getValue() : -1,
+                earfcn, CellularUtils.downlinkEarfcnToBand(earfcn),
+                LteMessageConstants.getLteBandwidthKhz(data.getLteBandwidth()));
+    }
+
+    private static CarrierAggregation.Component nrComponent(NrCarrier carrier, int bandwidth)
+    {
+        final int arfcn = carrier.identity().arfcn();
+        return new CarrierAggregation.Component(CarrierAggregation.NR, carrier.identity().pci(), arfcn,
+                CellularUtils.downlinkNarfcnToBand(arfcn), bandwidth);
+    }
+
+    private void clearAndroidNrCarriers()
+    {
+        synchronized (androidNrCarriers) {
+            androidNrCarriers.clear();
+            viewModel.setNrCarriers(List.of());
+        }
+    }
+
+    private void publishAndroidNrCarriers(CellularRecordWrapper serving, TelephonyStateUtils.NrMode mode,
+                                         int nrRows, int servingNrRows, List<NrCarrier> reported, long now)
+    {
+        synchronized (androidNrCarriers) {
+            if (!nrScanActive || nrAirplaneMode) return;
+            final AndroidNrCarriers.Anchor anchor = serving == null
+                    || (serving.cellularProtocol == CellularProtocol.LTE
+                    && mode != TelephonyStateUtils.NrMode.NON_STANDALONE && reported.size() < 2)
+                    ? null : nrCarrierAnchor(serving);
+            final List<NrCarrier> display = androidNrCarriers.update(anchor, reported, now);
+            viewModel.setNrCarriers(display);
+            AndroidNrCarriers.record(new AndroidNrCarriers.Batch(System.currentTimeMillis(), now, subscriptionId,
+                    serving == null ? "NONE" : serving.cellularProtocol.name(), mode.name(), nrRows, servingNrRows,
+                    reported.size(), (int) display.stream().filter(NrCarrier::lastObservation).count(),
+                    reported.stream().mapToLong(row -> now - row.measuredAtElapsedMs()).max().orElse(-1)));
+        }
+    }
+
+    private static AndroidNrCarriers.Anchor nrCarrierAnchor(CellularRecordWrapper serving)
+    {
+        if (serving.cellularProtocol == CellularProtocol.NR) {
+            final NrRecordData nr = ((NrRecord) serving.cellularRecord).getData();
+            return new AndroidNrCarriers.Anchor(true, nr.getPlmn().getValue(),
+                    nr.hasNci() ? nr.getNci().getValue() : -1, nr.hasPci() ? nr.getPci().getValue() : -1,
+                    nr.hasNarfcn() ? nr.getNarfcn().getValue() : -1);
+        }
+        if (serving.cellularProtocol == CellularProtocol.LTE) {
+            final LteRecordData lte = ((LteRecord) serving.cellularRecord).getData();
+            return new AndroidNrCarriers.Anchor(false, lte.getPlmn().getValue(),
+                    lte.hasEci() ? lte.getEci().getValue() : -1, lte.hasPci() ? lte.getPci().getValue() : -1,
+                    lte.hasEarfcn() ? lte.getEarfcn().getValue() : -1);
+        }
+        return null;
+    }
+
+    private static List<NrCarrier> reportedNrCarriers(CellularRecordWrapper serving, List<NrRecordWrapper> otherNr, long now)
+    {
+        if (serving == null || (serving.cellularProtocol != CellularProtocol.NR
+                && serving.cellularProtocol != CellularProtocol.LTE)) return List.of();
+        final boolean nrPrimary = serving.cellularProtocol == CellularProtocol.NR;
+        final List<NrCarrier> candidates = new ArrayList<>();
+        if (nrPrimary) {
+            final NrRecordWrapper primary = (NrRecordWrapper) serving;
+            if (!NrCarrier.isFreshAndroid(primary.measuredAtElapsedMs, now)) return List.of();
+            candidates.add(androidNrCarrier(primary, NrCarrier.Role.PRIMARY));
+        }
+        for (NrRecordWrapper wrapper : otherNr) {
+            if (!NrCarrier.isFreshAndroid(wrapper.measuredAtElapsedMs, now)) continue;
+            final NrRecordData data = ((NrRecord) wrapper.cellularRecord).getData();
+            final ConnectionStatus status = data.getConnectionStatus();
+            final NrCarrier.Role role = NrCarrier.androidRole(nrPrimary, false,
+                    status == ConnectionStatus.PRIMARY_SERVING || data.getServingCell().getValue(),
+                    status == ConnectionStatus.SECONDARY_SERVING);
+            if (role != null) candidates.add(androidNrCarrier(wrapper, role));
+        }
+        return NrCarrier.androidSnapshot(candidates);
+    }
+
+    private static NrCarrier.Identity nrIdentity(NrRecordData data)
+    {
+        return new NrCarrier.Identity(data.hasPci() ? data.getPci().getValue() : -1,
+                data.hasNarfcn() ? data.getNarfcn().getValue() : -1);
+    }
+
+    private static NrCarrier androidNrCarrier(NrRecordWrapper wrapper, NrCarrier.Role role)
+    {
+        final NrRecordData data = ((NrRecord) wrapper.cellularRecord).getData();
+        final NrCarrier.Identity identity = nrIdentity(data);
+        final NrCarrier.Signal signal = NrCarrier.Signal.ss(
+                data.hasSsRsrp() ? data.getSsRsrp().getValue() : Double.NaN,
+                data.hasSsRsrq() ? data.getSsRsrq().getValue() : Double.NaN,
+                data.hasSsSinr() ? data.getSsSinr().getValue() : Double.NaN);
+        return new NrCarrier(identity, role, -1, CellularUtils.formatNrBands(wrapper.bands, identity.arfcn()), 0, false,
+                signal, wrapper.measuredAtElapsedMs, false);
     }
 
     private static boolean isRegisteredCell(CellularRecordWrapper wrapper)
@@ -630,58 +717,6 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
     private static boolean isActiveCarrier(boolean registered, ConnectionStatus status)
     {
         return registered || status == ConnectionStatus.PRIMARY_SERVING || status == ConnectionStatus.SECONDARY_SERVING;
-    }
-
-    private static CarrierAggregation.Component lteSecondaryComponent(LteRecordData data)
-    {
-        final int rawBw = LteMessageConstants.getLteBandwidthKhz(data.getLteBandwidth());
-        final Integer bandwidthKhz = rawBw > 0 ? rawBw : null;
-        final Long earfcn = data.hasEarfcn() ? (long) data.getEarfcn().getValue() : null;
-        final Integer band = earfcn == null ? null : bandOrNull(CellularUtils.downlinkEarfcnToBand(earfcn.intValue()));
-        return new CarrierAggregation.Component(
-                CarrierAggregation.LTE, CarrierAggregation.ROLE_SCC,
-                data.hasPci() ? data.getPci().getValue() : null, earfcn, band, bandwidthKhz,
-                CarrierAggregation.Evidence.CELLINFO_SECONDARY_SERVING);
-    }
-
-    private static CarrierAggregation.Component nrSecondaryComponent(NrRecordWrapper wrapper, int bandwidthKhz)
-    {
-        final NrRecordData data = ((NrRecord) wrapper.cellularRecord).getData();
-        final Long narfcn = data.hasNarfcn() ? (long) data.getNarfcn().getValue() : null;
-        final Integer band = narfcn == null ? null : bandOrNull(CellularUtils.downlinkNarfcnToBand(narfcn.intValue()));
-        return new CarrierAggregation.Component(
-                CarrierAggregation.NR, CarrierAggregation.ROLE_SCC,
-                data.hasPci() ? data.getPci().getValue() : null, narfcn, band,
-                bandwidthKhz > 0 ? bandwidthKhz : null,
-                CarrierAggregation.Evidence.CELLINFO_SECONDARY_SERVING);
-    }
-
-    private static Integer bandOrNull(int band)
-    {
-        return band > 0 ? band : null;
-    }
-
-    private static CarrierAggregation.Component servingComponent(CellularRecordWrapper serving)
-    {
-        if (serving == null) return null;
-        if (serving.cellularProtocol == CellularProtocol.LTE)
-        {
-            final CarrierAggregation.Component component = lteSecondaryComponent(((LteRecord) serving.cellularRecord).getData());
-            return new CarrierAggregation.Component(CarrierAggregation.LTE, CarrierAggregation.ROLE_PCC,
-                    component.getPci(), component.getArfcn(), component.getBand(), component.getBandwidthKhz(),
-                    CarrierAggregation.Evidence.CELLINFO_SECONDARY_SERVING);
-        }
-        if (serving.cellularProtocol == CellularProtocol.NR)
-        {
-            final NrRecordWrapper wrapper = serving instanceof NrRecordWrapper nrWrapper
-                    ? nrWrapper
-                    : new NrRecordWrapper((NrRecord) serving.cellularRecord, new int[0]);
-            final CarrierAggregation.Component component = nrSecondaryComponent(wrapper, 0);
-            return new CarrierAggregation.Component(CarrierAggregation.NR, CarrierAggregation.ROLE_PCC,
-                    component.getPci(), component.getArfcn(), component.getBand(), component.getBandwidthKhz(),
-                    CarrierAggregation.Evidence.CELLINFO_SECONDARY_SERVING);
-        }
-        return null;
     }
 
     private static int[] primaryBandwidths(NetworkTechnologyInfo technology, int radioType, int channel)
@@ -1095,6 +1130,7 @@ public class NetworkDetailsFragment extends AServiceDataFragment implements ICel
             if (Intent.ACTION_AIRPLANE_MODE_CHANGED.equals(intent.getAction()))
             {
                 boolean isAirplaneModeOn = intent.getBooleanExtra("state", false);
+                nrAirplaneMode = isAirplaneModeOn;
                 Timber.d("Airplane mode broadcast received: %s, subscriptionId: %d",
                         isAirplaneModeOn ? "ON" : "OFF", subscriptionId);
 

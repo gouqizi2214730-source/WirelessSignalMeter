@@ -1,14 +1,22 @@
 package com.craxiom.networksurvey.ui.bandlock
 
-internal enum class LockRadio(val argument: String, val maxBand: Int, val maxChannel: Int, val maxPci: Int) {
-    Lte("lte", 64, 262_143, 503),
-    Nr("nr", 512, 3_279_165, 1007),
+import kotlinx.coroutines.delay
+
+internal enum class LockRadio(
+    val argument: String, val maxBand: Int, val maxChannel: Int, val maxPci: Int, val mode: LockNetworkMode,
+) {
+    Lte("lte", 64, 262_143, 503, LockNetworkMode.Lte),
+    Nr("nr", 512, 3_279_165, 1007, LockNetworkMode.Nr),
 }
 
 internal enum class LockTarget { Bands, Frequency, Cell }
 internal enum class LockNetworkMode(val argument: String) { Auto("auto"), Lte("lte"), Nr("nr") }
 
-internal data class BandLockCommand(val arguments: List<String>, val restartsModem: Boolean) {
+internal data class BandLockCommand(
+    val arguments: List<String>,
+    val restartsModem: Boolean,
+    val modeAfterLock: LockNetworkMode? = null,
+) {
     companion object {
         private fun number(text: String, maximum: Int, minimum: Int = 0): Int {
             require(text.trim().matches(Regex("[0-9]+")))
@@ -45,7 +53,7 @@ internal data class BandLockCommand(val arguments: List<String>, val restartsMod
                     }
                 }
             }
-            return BandLockCommand(args, !instantLteBands)
+            return BandLockCommand(args, !instantLteBands, radio.mode)
         }
 
         fun restore(radio: LockRadio, target: LockTarget) = BandLockCommand(
@@ -73,4 +81,33 @@ internal data class BandLockCommand(val arguments: List<String>, val restartsMod
             return BandLockCommand(tokens, restartsModem = tokens.first() != "probe")
         }
     }
+}
+
+internal data class BandLockOutcome(val exit: Int, val output: String) {
+    val restartRequested get() = exit == 0 && output.lineSequence().any { it.trimEnd() == "RESULT restart_sent" }
+    val accepted get() = restartRequested || exit == 0 && output.lineSequence().any { it.trimEnd() == "RESULT accepted" }
+    // band_lock.c returns 2 only when the operation could not connect to DIAG.
+    val channelUnavailable get() = exit == 2
+}
+
+internal data class BandLockExecution(val outcome: BandLockOutcome, val modeConfirmed: Boolean? = null)
+
+internal suspend fun BandLockCommand.executeWithMode(
+    pause: suspend (Long) -> Unit = { delay(it) },
+    execute: suspend (BandLockCommand) -> BandLockOutcome,
+): BandLockExecution {
+    val outcome = execute(this)
+    val mode = modeAfterLock?.takeIf { outcome.accepted } ?: return BandLockExecution(outcome)
+    val restart = outcome.restartRequested
+    val maxAttempts = if (restart) 6 else 1
+    if (restart) pause(5_000)
+    repeat(maxAttempts) { attempt ->
+        val change = execute(BandLockCommand.mode(mode))
+        // Retry only if no command was sent; a missing ACK is not safe to retry.
+        if (!change.channelUnavailable || attempt == maxAttempts - 1) {
+            return BandLockExecution(outcome, change.accepted)
+        }
+        pause(2_000)
+    }
+    return BandLockExecution(outcome, false)
 }

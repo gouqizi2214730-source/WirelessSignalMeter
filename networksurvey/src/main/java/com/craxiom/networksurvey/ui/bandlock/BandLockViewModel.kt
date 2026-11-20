@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -27,6 +28,7 @@ internal data class BandLockState(
     val profile: BandLockProfile = BandLockProfile(LockSupportLevel.Unsupported, "unknown", reason = "unchecked"),
     val lteBackup: Boolean = false,
     val nrBackup: Boolean = false,
+    val appliedMode: LockNetworkMode? = null,
     val result: Int? = null,
     val log: String = "",
 )
@@ -47,15 +49,16 @@ internal class BandLockViewModel(application: Application) : AndroidViewModel(ap
         if (mutableState.value.busy) return
         val probe = command.arguments.firstOrNull() == "probe"
         if (!probe && mutableState.value.availability != LockAvailability.Ready) return
-        mutableState.value = mutableState.value.copy(busy = true, result = null)
+        mutableState.update {
+            it.copy(busy = true, result = null, availability = if (probe) LockAvailability.Checking else it.availability)
+        }
         viewModelScope.launch {
             try {
-                val outcome = withContext(Dispatchers.IO) { execute(command) }
+                val execution = withContext(Dispatchers.IO) { command.executeWithMode(execute = ::execute) }
+                val outcome = execution.outcome
                 val current = mutableState.value
                 val ready = outcome.exit == 0 && outcome.output.lineSequence().any { it == "RESULT ready" }
-                val accepted = outcome.exit == 0 && outcome.output.lineSequence().any {
-                    it == "RESULT accepted" || it == "RESULT restart_sent"
-                }
+                val accepted = outcome.accepted
                 val probedChannel = if (probe) outcome.output.lineSequence()
                     .firstOrNull { it.startsWith("CHANNEL ") }
                     ?.removePrefix("CHANNEL ")?.trim().orEmpty() else current.channel
@@ -66,6 +69,7 @@ internal class BandLockViewModel(application: Application) : AndroidViewModel(ap
                     probedCaps.count { it.second },
                 ) else current.profile
                 mutableState.value = current.copy(
+                    busy = false,
                     availability = if (probe) {
                         if (ready && profile.canLock) LockAvailability.Ready else LockAvailability.Unavailable
                     } else current.availability,
@@ -76,12 +80,17 @@ internal class BandLockViewModel(application: Application) : AndroidViewModel(ap
                         current.lteBackup || (accepted && command.arguments.first() == "lte-band"),
                     nrBackup = if (probe && ready) outcome.output.contains("BACKUP nr 1") else
                         current.nrBackup || (accepted && command.arguments.first() == "nr-band"),
+                    appliedMode = when {
+                        execution.modeConfirmed == true -> command.modeAfterLock
+                        accepted && command.arguments.first() == "mode" ->
+                            LockNetworkMode.entries.firstOrNull { it.argument == command.arguments.getOrNull(1) }
+                        else -> current.appliedMode
+                    },
                     result = when {
-                        fromConsole -> null
-                        probe && ready && profile.canLock && profile.level == LockSupportLevel.Verified -> R.string.lock_ready
-                        probe && ready && profile.canLock -> R.string.lock_probe_only
-                        probe -> R.string.lock_unavailable
-                        accepted && command.restartsModem -> R.string.lock_restart_sent
+                        fromConsole || probe -> null
+                        execution.modeConfirmed == false -> R.string.lock_mode_unconfirmed
+                        execution.modeConfirmed == true -> R.string.lock_and_mode_accepted
+                        outcome.restartRequested -> R.string.lock_restart_sent
                         accepted -> R.string.lock_accepted
                         else -> R.string.lock_failed
                     },
@@ -91,15 +100,14 @@ internal class BandLockViewModel(application: Application) : AndroidViewModel(ap
             } catch (error: Exception) {
                 appendLog(error.message ?: error.javaClass.simpleName)
                 mutableState.value = mutableState.value.copy(
+                    busy = false,
                     availability = if (probe) LockAvailability.Unavailable else mutableState.value.availability,
                     profile = if (probe) BandLockProfiles.classify(
                         Build.MANUFACTURER, Build.MODEL, Build.SOC_MODEL, Build.HARDWARE, null, 0,
                     ) else mutableState.value.profile,
-                    result = if (probe) R.string.lock_unavailable else R.string.lock_failed,
+                    result = if (fromConsole || probe) null else R.string.lock_failed,
                 )
             } finally {
-                process?.destroy()
-                process = null
                 mutableState.value = mutableState.value.copy(busy = false)
             }
         }
@@ -111,9 +119,14 @@ internal class BandLockViewModel(application: Application) : AndroidViewModel(ap
         run(BandLockCommand.console(text), fromConsole = true)
     }
 
-    private data class Outcome(val exit: Int, val output: String)
+    private suspend fun execute(command: BandLockCommand): BandLockOutcome = try {
+        runHelper(command)
+    } catch (error: IOException) {
+        appendLog(error.message ?: error.javaClass.simpleName)
+        BandLockOutcome(1, "")
+    }
 
-    private suspend fun execute(command: BandLockCommand): Outcome {
+    private suspend fun runHelper(command: BandLockCommand): BandLockOutcome {
         val helper = File(app.applicationInfo.nativeLibraryDir, "libwireless_band_lock.so")
         if (!helper.isFile) throw IOException("The lock helper is unavailable for this ABI.")
         val directory = File(app.noBackupFilesDir, "band-lock")
@@ -124,13 +137,13 @@ internal class BandLockViewModel(application: Application) : AndroidViewModel(ap
         val running = ProcessBuilder("su", "-c", "exec " + arguments.joinToString(" ", transform = ::quote))
             .redirectErrorStream(true).start()
         process = running
-        running.outputStream.close()
-        val output = StringBuilder()
-        val pending = StringBuilder()
-        val input = running.inputStream
-        val bytes = ByteArray(4096)
-        val started = SystemClock.elapsedRealtime()
         try {
+            running.outputStream.close()
+            val output = StringBuilder()
+            val pending = StringBuilder()
+            val input = running.inputStream
+            val bytes = ByteArray(4096)
+            val started = SystemClock.elapsedRealtime()
             while (running.isAlive || input.available() > 0) {
                 if (SystemClock.elapsedRealtime() - started > 110_000) {
                     running.destroyForcibly()
@@ -152,8 +165,12 @@ internal class BandLockViewModel(application: Application) : AndroidViewModel(ap
                 }
             }
             if (pending.isNotEmpty()) appendLog(pending.toString())
-            return Outcome(running.waitFor(), output.toString())
-        } finally { input.close() }
+            return BandLockOutcome(running.waitFor(), output.toString())
+        } finally {
+            running.destroy()
+            process = null
+            running.inputStream.close()
+        }
     }
 
     private fun parseCaps(output: String): List<Pair<String, Boolean>> =
@@ -164,7 +181,7 @@ internal class BandLockViewModel(application: Application) : AndroidViewModel(ap
         }.toList()
 
     private fun appendLog(line: String) {
-        mutableState.value = mutableState.value.copy(log = (mutableState.value.log + line + "\n").takeLast(24_000))
+        mutableState.update { it.copy(log = (it.log + line + "\n").takeLast(24_000)) }
     }
 
     override fun onCleared() {

@@ -1,5 +1,6 @@
 package com.craxiom.networksurvey.ui.bandlock
 
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -78,5 +79,80 @@ class BandLockCommandTest {
         assertTrue(BandLockCommand.console("at /dev/smd0 AT+CGMR").restartsModem)
         assertTrue(!BandLockCommand.console("probe").restartsModem)
         assertTrue(runCatching { BandLockCommand.console("   ") }.isFailure)
+    }
+
+    @Test
+    fun appliesInstantLteLockBeforeSelectingLteMode() = runBlocking {
+        val commands = mutableListOf<List<String>>()
+        val result = BandLockCommand.apply(LockRadio.Lte, LockTarget.Bands, "3", "", "", 30)
+            .executeWithMode(pause = { error("Instant lock should not wait for a restart") }) {
+                commands.add(it.arguments)
+                BandLockOutcome(0, "RESULT accepted\n")
+            }
+        assertEquals(listOf(listOf("lte-band", "3"), listOf("mode", "lte")), commands)
+        assertEquals(true, result.modeConfirmed)
+    }
+
+    @Test
+    fun switchesToNrAfterRestartAndRetriesUnavailableChannel() = runBlocking {
+        val steps = mutableListOf<String>()
+        val outcomes = ArrayDeque(listOf(
+            BandLockOutcome(0, "RESULT restart_sent\n"), BandLockOutcome(2, ""), BandLockOutcome(0, "RESULT accepted\n"),
+        ))
+        val result = BandLockCommand.apply(LockRadio.Nr, LockTarget.Frequency, "", "627264", "", 30)
+            .executeWithMode(pause = { steps.add("wait $it") }) {
+                steps.add(it.arguments.joinToString(" "))
+                outcomes.removeFirst()
+            }
+        assertEquals(listOf("nr-freq 627264 30", "wait 5000", "mode nr", "wait 2000", "mode nr"), steps)
+        assertEquals(true, result.modeConfirmed)
+    }
+
+    @Test
+    fun failedLockClearingAndConsoleDoNotSwitchModes() = runBlocking {
+        val lock = BandLockCommand.apply(LockRadio.Nr, LockTarget.Bands, "78", "", "", 30)
+        val scenarios = listOf(
+            lock to BandLockOutcome(1, "RESULT restart_sent\n"),
+            BandLockCommand.restore(LockRadio.Nr, LockTarget.Bands) to BandLockOutcome(0, "RESULT restart_sent\n"),
+            BandLockCommand.console("nr-band 78") to BandLockOutcome(0, "RESULT restart_sent\n"),
+        )
+        for ((command, outcome) in scenarios) {
+            val commands = mutableListOf<BandLockCommand>()
+            val result = command.executeWithMode(pause = { error("No mode follow-up expected") }) {
+                commands.add(it)
+                outcome
+            }
+            assertEquals(listOf(command), commands)
+            assertEquals(null, result.modeConfirmed)
+        }
+    }
+
+    @Test
+    fun reportsUnconfirmedModeWithoutRetryingAModeCommandThatWasSent() = runBlocking {
+        val commands = mutableListOf<List<String>>()
+        val lock = BandLockCommand.apply(LockRadio.Lte, LockTarget.Cell, "", "100", "3", 30)
+        val waits = mutableListOf<Long>()
+        val result = lock.executeWithMode(pause = { waits.add(it) }) {
+            commands.add(it.arguments)
+            if (it == lock) BandLockOutcome(0, "RESULT restart_sent\n") else BandLockOutcome(1, "No acknowledgement")
+        }
+        assertEquals(listOf(listOf("lte-cell", "100:3"), listOf("mode", "lte")), commands)
+        assertEquals(listOf(5_000L), waits)
+        assertTrue(result.outcome.accepted)
+        assertEquals(false, result.modeConfirmed)
+    }
+
+    @Test
+    fun stopsRetryingIfRestartedChannelNeverReturns() = runBlocking {
+        val lock = BandLockCommand.apply(LockRadio.Nr, LockTarget.Bands, "78", "", "", 30)
+        var modeAttempts = 0
+        val result = lock.executeWithMode(pause = {}) {
+            if (it == lock) BandLockOutcome(0, "RESULT restart_sent\n") else {
+                modeAttempts++
+                BandLockOutcome(2, "")
+            }
+        }
+        assertEquals(6, modeAttempts)
+        assertEquals(false, result.modeConfirmed)
     }
 }

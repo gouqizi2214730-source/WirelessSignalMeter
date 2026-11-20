@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel;
 import com.craxiom.messaging.LteRecordData;
 import com.craxiom.messaging.NrRecordData;
 import com.craxiom.networksurvey.model.CellularProtocol;
+import com.craxiom.networksurvey.model.NrCarrier;
 import com.craxiom.networksurvey.util.CellularUtils.UplinkReference;
 import com.craxiom.networksurvey.util.TelephonyStateUtils.NrMode;
 
@@ -71,6 +72,7 @@ public class CellularViewModel extends ViewModel
     // The 5G NR secondary cell details card (the NSA data leg, or an NR CA SCell under SA); null
     // means "hide the card".
     private final DistinctLiveData<NrSecondaryCellViewState> nrSecondaryCell = new DistinctLiveData<>();
+    private final DistinctLiveData<List<NrCarrier>> nrCarriers = new DistinctLiveData<>(List.of());
     // The idle card's "Last seen ..." line, kept separate from the card's view state so that the
     // ticking age does not invalidate the whole card once per scan; an empty string hides it.
     private final DistinctLiveData<String> nrLastSeenText = new DistinctLiveData<>("");
@@ -229,6 +231,16 @@ public class CellularViewModel extends ViewModel
     public void setNrSecondaryCell(NrSecondaryCellViewState newNrSecondaryCell)
     {
         nrSecondaryCell.postIfChanged(newNrSecondaryCell);
+    }
+
+    public LiveData<List<NrCarrier>> getNrCarriers()
+    {
+        return nrCarriers;
+    }
+
+    public void setNrCarriers(List<NrCarrier> carriers)
+    {
+        nrCarriers.postIfChanged(carriers);
     }
 
     public LiveData<String> getNrLastSeenText()

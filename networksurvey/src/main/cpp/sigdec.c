@@ -37,6 +37,7 @@ struct sd_summary {
     int sib1[SD_SIB1_FIELDS];
     int sib1_dl_grids;
     struct sd_tdd_pattern tdd[2];
+    int lte_tdd_assignment_plus_one, lte_tdd_special_plus_one;
     unsigned access_present;
     int access[SD_ACCESS_FIELDS];
     unsigned nr_frequency_present;
@@ -93,6 +94,7 @@ struct sd {
     int in_sib1_dl, in_sib1_ul, in_sib1_grid;
     int in_tdd_pattern;
     int in_lte_sib2;
+    int in_lte_tdd;
     int in_spcell_common, nr_frequency_direction;
     enum sd_meas_list meas_list;
     struct sd_meas_object meas_object;
@@ -328,6 +330,8 @@ static void sd_val(struct sd *d, struct sd_br *r, uint32_t ni, int depth, const 
             d->summary->sib1_present |= 1u << field;
         }
         if (!strcmp(label, "plmn-IdentityList")) scope = &d->in_sib1_plmns;
+        else if (!d->nr && !strcmp(label, "tdd-Config") && !strcmp(type, "TDD-Config"))
+            scope = &d->in_lte_tdd;
         else if (d->nr && (!strcmp(label, "initialDownlinkBWP") || !strcmp(label, "initialUplinkBWP"))) {
             d->in_initial_bwp = label[7] == 'D' ? SD_DL_BWP_RIV : SD_UL_BWP_RIV;
             sd_val_impl(d, r, ni, depth, label, hide);
@@ -582,6 +586,12 @@ static void sd_val_impl(struct sd *d, struct sd_br *r, uint32_t ni, int depth, c
         const char *nm = idx < n->nroot + n->next ? sd_s(k_rs_mem[n->m0 + idx].name) : "?";
         int nr_access = d->nr && d->in_sib1_ul && d->summary && d->summary->message &&
             !strcmp(d->summary->message, "systemInformationBlockType1");
+        if (!hide && !r->err && d->in_lte_tdd) {
+            if (!strcmp(label, "subframeAssignment") && idx >= 0 && idx <= 6)
+                d->summary->lte_tdd_assignment_plus_one = (int)idx + 1;
+            else if (!strcmp(label, "specialSubframePatterns") && idx >= 0 && idx <= 8)
+                d->summary->lte_tdd_special_plus_one = (int)idx + 1;
+        }
         if (!hide && !r->err && (d->in_lte_sib2 || nr_access)) {
             if (!strcmp(label, "powerRampingStep") && idx >= 0 && idx < 4)
                 sd_set_access(d->summary, SD_ACCESS_RAMP_DB, (int)idx * 2);

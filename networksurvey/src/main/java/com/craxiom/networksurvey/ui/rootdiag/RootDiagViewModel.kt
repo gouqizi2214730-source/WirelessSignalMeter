@@ -15,6 +15,8 @@ import com.craxiom.networksurvey.model.ownsDiagnostic
 import com.craxiom.networksurvey.R
 import com.craxiom.networksurvey.fragments.model.CellularViewModel
 import com.craxiom.networksurvey.model.CellularProtocol
+import com.craxiom.networksurvey.model.AndroidNrCarriers
+import com.craxiom.networksurvey.model.NrCarrier
 import com.craxiom.networksurvey.ui.cellular.CellularChartViewModel
 import com.craxiom.networksurvey.util.AndroidLteSinrReader
 import com.craxiom.networksurvey.util.LteSinrUtils
@@ -66,6 +68,7 @@ internal data class RootSignalState(
     val errorDetails: List<String> = emptyList(),
     val cachedMeasureIds: Set<Long> = emptySet(),
     val failureReason: String? = null,
+    val nrCarriers: List<NrCarrier> = emptyList(),
 ) {
     val useRootSignal: Boolean
         get() = (status == RootDiagStatus.Running || status == RootDiagStatus.Checking ||
@@ -115,6 +118,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
     private val measurementSamples = ArrayDeque<JSONObject>()
     private val neighborProbeSamples = linkedMapOf<String, ArrayDeque<JSONObject>>()
     private val layoutNotices = linkedMapOf<String, JSONObject>()
+    private val nrCaObservations = ArrayDeque<JSONObject>()
     private val collectorRuns = ArrayDeque<JSONObject>()
     private var nextCollectorRun = 1L
     private var invalidLineCount = 0L
@@ -298,11 +302,13 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
         val signalMode = lastSignalMode
         val androidNrBandwidth = lastAndroidNrBandwidth
         val androidLteSinr = AndroidLteSinrReader.snapshot()
+        val androidNrBatches = AndroidNrCarriers.diagnostics()
+        val rootNrCa = nrCaObservations.toList()
         val neighborTables = neighborTableDiagnostics(snapshot.records)
         val invalidLines = invalidLineCount
         withContext(Dispatchers.IO) {
             val tasks = SurveyTaskStore.get(app)
-            val taskIds = (snapshot.records.map { it.data } + records + samples + probeSamples)
+            val taskIds = (snapshot.records.map { it.data } + records + samples + probeSamples + rootNrCa)
                 .mapNotNull { if (it.isNull("task_id")) null else it.optString("task_id").takeIf(String::isNotBlank) }.toMutableSet()
             snapshot.records.mapNotNullTo(taskIds) { it.taskId }
             androidLteSinr.mapNotNullTo(taskIds) { it.taskId() }
@@ -359,6 +365,16 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 signalMode?.let { writer.appendLine(it.toString()) }
                 androidNrBandwidth?.let { writer.appendLine(it.toString()) }
                 for (entry in androidLteSinr) writer.appendLine(entry.toDiagnosticJson().toString())
+                for (entry in androidNrBatches) {
+                    writer.appendLine(JSONObject().put("type", "android_nr_carriers")
+                        .put("t", entry.timeMs()).put("elapsed_ms", entry.elapsedMs())
+                        .put("subscription_id", entry.subscriptionId()).put("rat", entry.anchorRat())
+                        .put("nr_mode", entry.nrMode()).put("nr_rows", entry.nrRows())
+                        .put("serving_nr_rows", entry.servingNrRows()).put("fresh_rows", entry.freshRows())
+                        .put("retained_rows", entry.retainedRows()).put("oldest_fresh_age_ms", entry.oldestFreshAgeMs())
+                        .toString())
+                }
+                for (entry in rootNrCa) writer.appendLine(entry.toString())
                 for (entry in neighborTables) writer.appendLine(entry.toString())
                 for (entry in layouts) writer.appendLine(redactDiagnostic(entry).toString())
                 for (entry in snapshot.records) writer.appendLine(redactDiagnostic(entry.data)
@@ -368,6 +384,11 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 for (entry in probeSamples) writer.appendLine(redactDiagnostic(entry).toString())
             }
         }
+    }
+
+    private fun recordNrCaObservation(entry: JSONObject) {
+        if (nrCaObservations.size == 96) nrCaObservations.removeFirst()
+        nrCaObservations.addLast(entry)
     }
 
     private fun recordDiagnostic(value: JSONObject) {
@@ -587,6 +608,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
         var errorCode: Int? = null
         val metrics = mutableMapOf<String, DiagRecord>()
         val cached = lastMeasurements.toMutableMap()
+        val nrCarriers = RootNrCarriers()
         val measurementConfigs = mutableMapOf<String, RrcMeasurementConfig>()
         var readyAt: Long? = null
         val pending = ArrayDeque<DiagRecord>()
@@ -602,6 +624,9 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
         val buffer = ByteArray(8192)
         var qmdlCommand: Char? = null
         var qmdlDeadline: Long? = null
+        var previousCaPacket = ""
+        var previousCaPacketAt = 0L
+        var previousCaCounts = 0 to 0
 
         fun publish(now: Long) {
             metrics.entries.removeAll { (_, record) ->
@@ -624,6 +649,16 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 hadBeenRunning = true
                 restartAttempt = 0
             }
+            val carriers = if (status == RootDiagStatus.Running) nrCarriers.snapshot(now) else emptyList()
+            val retained = carriers.count { it.lastObservation() }
+            val caCounts = carriers.size - retained to retained
+            if (caCounts != previousCaCounts) {
+                recordNrCaObservation(JSONObject().put("type", "root_nr_carriers")
+                    .put("t", System.currentTimeMillis()).put("elapsed_ms", now)
+                    .put("collector_run", run.optLong("id")).put("current_rows", caCounts.first)
+                    .put("retained_rows", caCounts.second))
+                previousCaCounts = caCounts
+            }
             signalState.value = RootSignalState(
                 status, lastMeasurements.values.toList() + lastConfiguration.values,
                 errorCode, errorDetails, cachedIds,
@@ -631,6 +666,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                     status == RootDiagStatus.Unsupported || status == RootDiagStatus.Denied ||
                         status == RootDiagStatus.Unavailable
                 },
+                nrCarriers = carriers,
             )
             publishOverlay(status, signalState.value.records)
             publishCapability()
@@ -757,7 +793,9 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 "rrcReconfigurationComplete", "rrcConnectionReconfigurationComplete",
                 "rrcReestablishmentComplete", "rrcConnectionReestablishmentComplete", "securityModeFailure",
             )
-            if (task != null && (type in setOf("event", "cell_change", "nas_release") || isStateChange || completion)) {
+            val timelineEvent = type in setOf("event", "cell_change", "nas_release", "nr_rach") || isStateChange || completion
+            if (timelineEvent) value.put("timeline_event", true)
+            if (task != null && timelineEvent && type != "nr_rach") {
                 val rat = value.optString("rat").takeIf { it in setOf("NR", "LTE") }
                 // A private DIAG stream has no reliable Android subscription ID.
                 val estimated = value.optInt("tentative") == 1 || value.optInt("guess") == 1
@@ -862,7 +900,28 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                     }
                 }
                 "mr_sample", "neighbor_probe_sample", "unknown_layout", "layout_seen" -> Unit
+                "nr_ca_state" -> {
+                    val result = nrCarriers.acceptCaState(value, now)
+                    val cc = value.optJSONArray("cc")
+                    val states = JSONArray()
+                    if (cc != null) for (i in 0 until cc.length()) {
+                        val row = cc.optJSONObject(i) ?: continue
+                        states.put(JSONObject().put("cc", row.optInt("cc"))
+                            .put("dl", row.optInt("dl")).put("ul", row.optInt("ul")))
+                    }
+                    val version = value.optString("ver")
+                    val signature = "$version:$result:$states"
+                    if (signature != previousCaPacket || now - previousCaPacketAt >= 5_000) {
+                        recordNrCaObservation(JSONObject().put("type", "root_b9a7_state")
+                            .put("t", value.optLong("t")).put("elapsed_ms", now).put("ver", version)
+                            .put("collector_run", run.optLong("id")).put("task_id", value.opt("task_id"))
+                            .put("clock_id", SurveyTaskStore.CLOCK_ID).put("result", result).put("cc", states))
+                        previousCaPacket = signature
+                        previousCaPacketAt = now
+                    }
+                }
                 else -> {
+                    nrCarriers.accept(value, now)
                     val record = DiagRecord(nextId++, now, value)
                     val rat = value.optString("rat")
                     when (record.type) {
@@ -1128,6 +1187,12 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                         val arfcn = value.optInt("arfcn", -1)
                         val validCell = if (rat == "NR") pci in 0..1007 && arfcn in 1..3_279_165
                             else pci in 0..503 && arfcn in 0..262_143
+                        val tdd = value.optJSONObject("lte_tdd_config")
+                        if (rat == "LTE" && validCell && tdd != null) {
+                            val type = "lte_tdd_config"
+                            storeCellConfiguration("$type:$pci:$arfcn", record,
+                                JSONObject(tdd.toString()).put("type", type).put("pci", pci).put("arfcn", arfcn))
+                        }
                         if (access != null && validCell) {
                             val type = if (rat == "NR") "nr_access_config" else "lte_access_config"
                             val key = "$type:$pci:$arfcn"

@@ -292,3 +292,121 @@ HTTP 请求成功率不标为 ICMP 丢包率，网络切换/任务取消也不�
 并已有修复包；见 [CRASH-COMPATIBILITY.md](CRASH-COMPATIBILITY.md)。
 用户随后提供的同机旧版 3.90 对无 Root LTE SINR 排查更直接，
 对照结果和本轮接入见 [ANDROID-LTE-SINR-390.md](ANDROID-LTE-SINR-390.md)。
+
+## 第三轮：5G 多载波与 CA
+
+2026-11-19 静态核对同一 APK 与当前项目。没有运行 T-Phone，也没有拿到
+同一台手机上 2CC / 3CC 激活、退激活的对照抓包。本节记录接入依据与第一版实现。
+
+### T-Phone 的数据与呈现
+
+- `tphone/main/k4.java` 把 `0xB9A7` 交给 `g/x/b/u0.java`（`NrCaInfo`）。
+  后者按 2.3、2.4、3.0、3.2 分支解析载波列表，带宽码表也分版本。
+  `u0.c()` 按载波输出 PCI、SSB ARFCN、Band、带宽及独立的 DL / UL 状态，
+  区分 `Configured`、`Activated` 和 `Deconfigured`，也有 SUL 特殊处理。
+  主载波部分字段来自另一份当前服务小区快照，不是所有列都只靠一条日志填满。
+- `g/x/b/p0.java:W()` 将 NR 测量/统计结构交给 `g/x/b/v0.java`，分别维护
+  每载波的测量、吞吐、PDSCH、PUSCH 和发射功率；这些统计与 `B9A7` 的状态
+  不应视为同一条消息。`DetailNr5gFragment` 能在普通详情和 NR CA 视图间切换，
+  `MeasureNr5gFragment` 单独显示每载波测量。表头可参考 PCC / SCC1 / SCC2，
+  但我们的数据模型不应固定三列。
+- 这里能确认的是该 APK 消费这些数据，不代表本项目支持的每个 DIAG 通道都能收到
+  同版本 `B9A7`，也不代表普通 Android 应用能通过 T-Phone 的私有服务读取它。
+
+### 现状与接入
+
+| 层次 | 现状 | 第一版 |
+| --- | --- | --- |
+| Android 普通采集 | `NetworkDetailsFragment` 用 `getCellBandwidths()` 生成通用带宽摘要；`CellInfoNr` 的连接状态已传到 UI，但只挑一条 NR 辅服务小区，余下记录可能进入邻区 | 保留同一订阅、同一批次中明确标为服务/辅服务的 NR 小区，去除重复记录和邻区表中的这些服务项。显示“系统上报”，不保证列出实际全部 CC |
+| Root / DIAG | `root_diag.c:parse_nr_b825()` 已输出配置列表 `nr_cfg.cells`（CC、PCI、SSB/DL ARFCN、频段、带宽、SCS）；`parse_nr_b887()` 已输出按 CC 的下行调度统计 `nr_dl_sched` | 先修 B825 的 `cells[400]` 输出上限及对应的去重键，让 `cells` 和 `ncells` 一致；优先复用已核实布局，未知布局只留诊断。B887 能匹配且足够新时显示“近期有下行调度”，缺包不等于停用 |
+| Root 状态增强 | 项目当前没有订阅或解析 B9A7，B825 配置和 B887 调度不能独立提供完整 UL/DL 激活状态 | 采集实机原始包核对版本、长度、索引、状态和 SUL；确认后再加入可选订阅与解码。只在协议状态明确时显示“已激活 / 已配置 / 未配置” |
+
+关联时按当前会话、订阅/协议栈和主小区划分载波快照，再以 CC 索引与可核实的
+PCI、频点交叉校验。不要跨日志盲用相同 CC 编号，也不要把 SSB 频点当成 DL
+中心频点。切卡、切换服务小区、释放连接或采样超时后清掉旧辅载波和调度状态；
+两条同频段载波不能仅按频段合并。SUL 不计入下行 CC 数或下行总带宽。
+
+Android 的 `getCellBandwidths()` 不返回每个带宽对应的小区身份，不按数组位置
+给 NR 辅小区分配带宽，也不把混有 LTE 的数组标为 NR 总带宽。
+`PhysicalChannelConfigListener` 有精确电话状态权限或运营商权限要求，不作为普通采集的必需链路。
+
+### 信号页布局和验收
+
+在主小区参数后、邻区前放「NR 多载波」区块。按载波逐行列出角色、频段、带宽、
+PCI、NR-ARFCN；展开再看有值的 RSRP/RSRQ/SINR、DL/UL 状态和调度指标。
+区块标题可显示“NR 2CC · 120 MHz”，但只在同一快照的两条 NR 下行载波都
+有可归属带宽时才显示总带宽；激活数量和配置数量分别统计。
+
+SA 模式的主载波是 NR PCell。EN-DC 的 LTE 锚点单列，NR PSCell 计为第一条 NR
+载波；只有 LTE 锚点和一个 NR PSCell 时不是 NR CA。无 Root 时若无法区分
+PSCell 与其他 NR 辅载波，统一标为“NR 服务载波”，不猜角色。两路模式都不能把
+邻区、同一载波的多束 SSB、终端能力列表或 5G 图标当作 CA 证据。
+
+真机验证需要同一订阅下空闲、蜂窝下载、停止下载的连续样本，与 T-Phone 表格
+按时间对照。至少覆盖 SA 2CC、NSA 单 NR、NSA 多 NR、同频段双载波、
+切换/释放时清除旧值，以及 4+ CC 不截断。保留 `nr_cfg`、`nr_dl_sched` 和
+可取得的原始 DIAG 记录；无 Root 设备仅能验证系统确实上报的载波。
+
+标准与 API 口径：3GPP TS 37.340（MR-DC 的 PCell / PSCell / SCell）、
+3GPP TS 38.321（NR SCell 激活与去激活）、Android `CellInfo#getCellConnectionStatus()`、
+`ServiceState#getCellBandwidths()` 与 AOSP `TelephonyCallback.PhysicalChannelConfigListener`。
+
+### 第一版行为
+
+- 信号页在邻区前展示「NR 多载波」。无 Root 只列同一订阅、同一批次内 15 秒以内的
+  NR 服务观测，以 PCI + NR-ARFCN 去重；NSA 角色不细分，LTE 不计入 CC。
+  不分摊系统带宽数组。仅有一条 NR 时保留原来的 NSA 详情。
+- Root 复用完整 B825 列表（上限 16 项），只采用现有非推测的 3.8 布局。
+  仅当 CC 0 的 PCI 与近期 NR 主载波一致且频点匹配 SSB 或 DL ARFCN 时显示，SUL 不计入。
+  全部显示载波均有已知带宽时才合计。已确认的配置在同一服务小区持续可见时保留；
+  切换、释放、超过 10 秒无服务或主载波调度观测和采集器重启均不显示旧载波状态。
+- B887 必须符合当前主小区、CC、PCI 以及相同的 SSB 或 DL ARFCN，且调度窗口不跨
+  配置切换或释放。4 秒内匹配的记录注明「近期有下行调度」，不等于报告激活状态。
+  尚未实现 B9A7 或独立 UL 激活状态。
+- `src/test/host/test_nr_carriers.ps1` 覆盖 Android/DIAG 关联和过期边界；
+  `src/test/cpp/test_nr_config_host.ps1` 使用合成 4/16 CC 数据验证 B825 完整输出与去重。
+  这两套测试不等同于真实 modem 上的 CA 抓包验收。
+
+## 第四轮：子帧、时隙和逐载波参数
+
+对照 `DetailLteFragment`、`DetailNr5gFragment`、`MeasureNr5gFragment`、`tphone/views/z.java`、
+`g/x/b/u0.java`、`g/x/b/v0.java` 及 APK 中文资源。以下区分已确认的界面、现有实现和后续候选：
+
+| 参数 | T-Phone 静态证据 | 本项目与可补内容 |
+| --- | --- | --- |
+| LTE TDD 子帧 | LTE 详情资源 `lteinfo_subframe_scheduled`、`lteinfo_subframe_statistics_total`、`lteinfo_rbpersubframe_avg`、`lteinfo_tbsizepersubframe_avg` 是采样统计，未确认该 APK 有静态 D/S/U 配比页面 | 本轮读取 LTE SIB1 的 `subframeAssignment` 与基础 `specialSubframePatterns`。按 TS 36.211 显示 10 子帧 D/S/U 顺序及数量；特殊子帧不并入 DL 或 UL |
+| NR TDD 时隙 | `RBs/Slot`、`TBSize/Slot`、`Grant Num` 是上下行调度表指标，不能推出公共配比 | 现有 NR SIB1 已解公共 `pattern1/2`；本轮补显示周期及 DL/UL/灵活符号数，按 reference SCS 校验。未等同动态 SFI 或专用时隙覆盖；仅收到 SIB1 后显示，NSA 不一定收到 |
+| NR CA 与 SUL | `k4.java` 将 B9A7 分发到 `u0`，再交 `v0`；`u0.c()` 对 SCC 分别解 DL/UL 状态，主载波字段来自其他测量；SUL 行无 DL 状态 | 现有 B825 只代表配置、B887 只代表近期下行调度。本轮仅在 QMDL 录制时尝试订阅 B9A7，不解码状态。录制 1CC、2CC、下行/上行负载与退激活对照后再接状态 |
+| 调度和物理层 | `z.java` 有 Grant 数、RB/TBSize 每槽、MCS 众数/最佳/均值、调制众数、BLER/iBLER/rBLER、层数、TxMode、RI/CQI、DL/UL BWP 索引 | 已有每 TB 的 RB/MCS、CRC BLER、部分 RI/CQI、发射功率和初始 BWP。后续优先补「按码字/首次与重传 BLER」和「当前 BWP 索引」；RB/slot 要用去重槽标识，不能把每 TB 均值改名 |
+| 逐载波测量 | `MeasureNr5gFragment` 与 `v0` 区分逐 CC 测量、调度及功率 | 已有服务小区和部分按 CC 调度。可加逐 CC 的 RSRP/RSRQ/SINR，但只对齐同 CC、PCI、频点和时间窗的测量，不用邻区值填充 |
+| 录制停止 | `PacketCaptureActivity` / `PacketCaptureService` 是独立抓包工具，不能当作本项目 Qualcomm DCI/QMDL 停止回执的实现依据 | 本项目 native 停录先落盘、关文件并回执，可选日志订阅的启停改由独立线程处理。应用保留可导出的非空文件，空录制不替换上一份记录 |
+
+`v0.w()` 在锁下替换整份 CA 快照，`v0.c()` 读取；这条路径没有按秒过期。
+`v0.l()` 从这份配置列 CC，`v0.m()` 找非主载波且无下行状态的 SUL，表头单列。
+逐载波调度同时用单独的对象更新，所以忙闲改变统计不会直接抹掉配置。
+这不证明 APK 的所有断链清理路径已经还原。
+
+2026-11-19 样本检查：用户提供的 25 份历史 QMDL 含可验证 CRC 的 DIAG 帧；
+两份 `wireless-*` 均为非空录制。部分 `diagcap_*` 中可见 B825 3.8 从单载波、
+双载波到 idle 的真实变化；样本未包含 B9A7 或本次录制失败后的文件。
+
+### 信号页逐载波读数
+
+- Android 模式只使用对应服务小区自身的 SS-RSRP / SS-RSRQ / SS-SINR。
+- Root 模式只用 B97F 的服务层记录，按 PCI 与 SSB ARFCN 匹配 B825，不从邻区条目取值。
+- 两份双载波样本中，580 条 B8D8 3.2 辅载波 SSB SINR 同时匹配 B825 的 CC / PCI
+  及近期 B97F 的 PCI / SSB ARFCN；不匹配的记录不使用。B8D8 不提供 ARFCN，
+  因此必须有同一配置周期内、前 2 秒的对应载波测量。测量 5 秒过期，不影响载波配置。
+
+### B9A7 可选实时状态
+
+- 按包版本适配 2.3、2.4、3.0、3.2，不按手机型号猜布局。未知版本、长度
+  不符或非法载波记录只保留布局诊断，不改变现有配置。
+- Root 模式独立订阅 B9A7；订阅失败仍用 B825 配置与 B887 近期下行调度。
+  停止 QMDL 不撤销实时订阅。B9A7 按 CC、PCI 和频点匹配 B825，独立标记
+  上下行状态，不从 SUL 或占位项添加下行载波；状态失效不删除 B825 配置。
+- Android 模式不读取 DIAG。同一订阅和主小区临时漏报时，只保留已观测的载波
+  身份，最长 30 秒，不复用漏报载波的信号读数。
+- JSONL 包含无小区标识的 `android_nr_carriers`、`root_nr_carriers`、
+  `root_b9a7_state`，可区分订阅结果、包布局、匹配和显示状态。四种 B9A7
+  布局使用合成包回归，历史 QMDL 中没有相应真机样本。

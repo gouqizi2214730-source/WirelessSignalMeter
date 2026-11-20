@@ -61,7 +61,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.craxiom.networksurvey.R
-import com.craxiom.networksurvey.ui.SurveyTaskBar
 import com.craxiom.networksurvey.ui.dashboard.DashboardCardDefaults
 import com.craxiom.networksurvey.ui.main.appbar.AppBarAction
 import com.craxiom.networksurvey.ui.main.appbar.TitleBar
@@ -232,6 +231,8 @@ private val DiagRecord.isUnknownRrc: Boolean
         data.optString("ch").let { it == "?" || it.startsWith("pdu", ignoreCase = true) }
 
 private val DiagRecord.isPacket: Boolean get() = type == "rrc" || type == "nas" || type == "sip"
+private val DiagRecord.isTimelineEvent: Boolean
+    get() = protocol == SignalingProtocol.Event || data.optBoolean("timeline_event")
 
 private val DiagRecord.direction: String
     get() = data.optString("dir").ifBlank {
@@ -259,12 +260,28 @@ private val DiagRecord.channelLabel: String get() = data.optString("ch").let { c
     }
 }
 
+@Composable
 private fun DiagRecord.signalingHeading(protocol: String): String =
     listOf(formatTime(time), data.optString("rat").ifBlank { protocol }, directionArrow,
-        title().replaceFirstChar { it.uppercase() }).filter(String::isNotBlank).joinToString("  ")
+        if (type == "cell_change") stringResource(R.string.diag_event_cell_change)
+        else title().replaceFirstChar { it.uppercase() }).filter(String::isNotBlank).joinToString("  ")
 
 private fun DiagRecord.signalingInfo(protocol: String): String = buildList {
     val rat = data.optString("rat")
+    if (type == "cell_change") {
+        fun cell(prefix: String): String = buildList {
+            data.optInt("${prefix}_pci", -1).takeIf { it >= 0 }?.let { add("PCI $it") }
+            data.optInt("${prefix}_arfcn", -1).takeIf { it >= 0 }?.let {
+                add("${if (rat == "LTE") "EARFCN" else "NR-ARFCN"} $it")
+            }
+        }.joinToString(" ")
+        add("${cell("from").ifBlank { "?" }} → ${cell("to").ifBlank { "?" }}")
+        return@buildList
+    }
+    if (isTimelineEvent) {
+        listOf("cause", "state", "reg", "call").map(data::optString).filter(String::isNotBlank)
+            .distinct().forEach { add(it) }
+    }
     if (channelLabel.isNotBlank() && !data.optString("ch").equals(title(), ignoreCase = true)) add(channelLabel)
     else if (type != "rrc" && protocol != rat) add(protocol)
     data.optInt("pci", -1).takeIf { it >= 0 }?.let { add("PCI $it") }
@@ -285,7 +302,7 @@ private fun DiagRecord.matches(filter: ProtocolFilter, includeDiagnostics: Boole
     ProtocolFilter.Lte -> protocol == SignalingProtocol.Rrc && data.optString("rat") == "LTE"
     ProtocolFilter.Nas -> protocol == SignalingProtocol.Nas || data.has("dedicatedNAS") || data.has("nested_nas")
     ProtocolFilter.Ims -> protocol == SignalingProtocol.Ims
-    ProtocolFilter.Event -> protocol == SignalingProtocol.Event
+    ProtocolFilter.Event -> isTimelineEvent
 }
 
 @Composable
@@ -301,6 +318,10 @@ internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
     val qmdlExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri != null) viewModel.exportQmdl(uri)
     }
+    fun chooseQmdlDestination() {
+        val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(Date())
+        qmdlExporter.launch("wireless-$stamp.qmdl")
+    }
     var filter by rememberSaveable { mutableStateOf(ProtocolFilter.All) }
     var search by rememberSaveable { mutableStateOf("") }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
@@ -310,6 +331,7 @@ internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
     var followLatest by rememberSaveable { mutableStateOf(true) }
     var openedMessages by remember { mutableStateOf(emptyList<DiagRecord>()) }
     var openedIndex by remember { mutableStateOf(-1) }
+    var linkedPacket by remember { mutableStateOf<DiagRecord?>(null) }
     val visible = remember(records, filter, search, showPaging, showDiagnostics) {
         val query = search.trim()
         records.filter { record ->
@@ -321,6 +343,7 @@ internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
                 (showPaging || query.isNotEmpty() || !record.isPaging) &&
                 (query.isEmpty() || record.title().contains(query, ignoreCase = true) ||
                 record.data.optString("msg").contains(query, ignoreCase = true) ||
+                record.data.optString("event").contains(query, ignoreCase = true) ||
                 (nasNames[nas] ?: nas).contains(query, ignoreCase = true))
         }
     }
@@ -333,18 +356,26 @@ internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
     LaunchedEffect(followLatest, visible.firstOrNull()?.id, openedIndex >= 0) {
         if (followLatest && openedIndex < 0 && visible.isNotEmpty()) listState.requestScrollToItem(0)
     }
-    val detail = openedMessages.getOrNull(openedIndex)
+    val detail = linkedPacket ?: openedMessages.getOrNull(openedIndex)
     if (detail != null) {
+        val parent = if (linkedPacket == null) {
+            val relatedId = detail.data.optLong("related_message_id", -1)
+            records.firstOrNull { it.isPacket && it.id == relatedId }
+        } else null
         val close = {
-            openedIndex = -1
-            openedMessages = emptyList()
+            if (linkedPacket != null) linkedPacket = null
+            else {
+                openedIndex = -1
+                openedMessages = emptyList()
+            }
         }
         BackHandler(onBack = close)
         MessageDetailsScreen(
             detail,
             onClose = close,
-            onPrevious = if (openedIndex < openedMessages.lastIndex) ({ openedIndex++ }) else null,
-            onNext = if (openedIndex > 0) ({ openedIndex-- }) else null,
+            onPrevious = if (linkedPacket == null && openedIndex < openedMessages.lastIndex) ({ openedIndex++ }) else null,
+            onNext = if (linkedPacket == null && openedIndex > 0) ({ openedIndex-- }) else null,
+            onRelatedPacket = parent?.let { ({ linkedPacket = it }) },
         )
         return
     }
@@ -373,22 +404,22 @@ internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
                         if (!searchOpen) search = ""
                     }, active = searchOpen),
                     AppBarAction(R.drawable.ic_filter, R.string.diag_message_options, onClick = { menuOpen = true },
-                        active = !showPaging || showDiagnostics || filter == ProtocolFilter.Ims || filter == ProtocolFilter.Event),
+                        active = !showPaging || showDiagnostics || filter == ProtocolFilter.Ims),
                 ))
         },
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets.safeDrawing,
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
-            SurveyTaskBar()
             Box(Modifier.align(Alignment.End).padding(end = 12.dp)) {
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         val running = status.status in setOf(RootDiagStatus.Checking, RootDiagStatus.Starting, RootDiagStatus.Running)
                         DropdownMenuItem(
                             text = { Text(stringResource(if (qmdl.phase == QmdlPhase.Idle) R.string.diag_qmdl_start else R.string.diag_qmdl_stop)) },
                             enabled = qmdl.phase == QmdlPhase.Recording ||
-                                qmdl.phase == QmdlPhase.Idle && !qmdl.recovering && status.status == RootDiagStatus.Running &&
-                                collectionMode == DiagRecordingPolicy.Mode.TaskRecording && exportProgress == null,
+                                qmdl.phase == QmdlPhase.Idle && !qmdl.recovering &&
+                                    status.status == RootDiagStatus.Running &&
+                                    collectionMode == DiagRecordingPolicy.Mode.TaskRecording && exportProgress == null,
                             onClick = {
                                 menuOpen = false
                                 if (qmdl.phase == QmdlPhase.Idle) confirmQmdl = true else viewModel.stopQmdl()
@@ -400,8 +431,7 @@ internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
                                 enabled = qmdl.phase == QmdlPhase.Idle && !qmdl.recovering && exportProgress == null,
                                 onClick = {
                                     menuOpen = false
-                                    val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(Date())
-                                    qmdlExporter.launch("wireless-$stamp.qmdl")
+                                    chooseQmdlDestination()
                                 },
                             )
                         }
@@ -417,10 +447,8 @@ internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
                             text = { Text(stringResource(if (showDiagnostics) R.string.diag_hide_diagnostics else R.string.diag_show_diagnostics)) },
                             onClick = { menuOpen = false; showDiagnostics = !showDiagnostics },
                         )
-                        for (option in listOf(ProtocolFilter.Ims, ProtocolFilter.Event)) {
-                            DropdownMenuItem(text = { Text(stringResource(option.label)) },
-                                onClick = { menuOpen = false; filter = option })
-                        }
+                        DropdownMenuItem(text = { Text(stringResource(ProtocolFilter.Ims.label)) },
+                            onClick = { menuOpen = false; filter = ProtocolFilter.Ims })
                     }
             }
             CaptureErrors(status)
@@ -441,10 +469,15 @@ internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     val progress = exportProgress
+                    val error = qmdl.errorCode
                     val label = when {
                         progress != null -> stringResource(R.string.diag_qmdl_exporting, progress)
                         qmdl.phase == QmdlPhase.Recording -> stringResource(R.string.diag_qmdl_recording, qmdl.packets,
                             android.text.format.Formatter.formatShortFileSize(context, qmdl.bytes))
+                        qmdlLabel != null && error != null ->
+                            "${stringResource(qmdlLabel)} (${stringResource(R.string.diag_error_code, error)})"
+                        qmdlLabel != null && qmdl.bytes > 0 && qmdl.phase == QmdlPhase.Idle ->
+                            "${stringResource(qmdlLabel)} · ${android.text.format.Formatter.formatShortFileSize(context, qmdl.bytes)}"
                         qmdlLabel != null -> stringResource(qmdlLabel)
                         else -> ""
                     }
@@ -452,21 +485,17 @@ internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (qmdl.phase == QmdlPhase.Recording) {
                         TextButton(onClick = viewModel::stopQmdl) { Text(stringResource(R.string.diag_qmdl_stop)) }
+                    } else if (qmdl.phase == QmdlPhase.Idle && qmdl.hasRecording && !qmdl.recovering && progress == null) {
+                        TextButton(onClick = { chooseQmdlDestination() }) { Text(stringResource(R.string.diag_qmdl_export_short)) }
                     }
                 }
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                val first = filter.takeIf { it == ProtocolFilter.Ims || it == ProtocolFilter.Event } ?: ProtocolFilter.All
-                for (option in listOf(first, ProtocolFilter.Nr, ProtocolFilter.Lte, ProtocolFilter.Nas)) {
+                val first = filter.takeIf { it == ProtocolFilter.Ims } ?: ProtocolFilter.All
+                for (option in listOf(first, ProtocolFilter.Nr, ProtocolFilter.Lte, ProtocolFilter.Nas, ProtocolFilter.Event)) {
                     SignalListAction(stringResource(option.label), Modifier.weight(1f), selected = filter == option) {
                         filter = if (option == first && first != ProtocolFilter.All) ProtocolFilter.All else option
                     }
-                }
-                SignalListAction(stringResource(R.string.diag_follow_latest), Modifier.weight(1.1f), selected = followLatest) {
-                    followLatest = !followLatest
-                }
-                SignalListAction(stringResource(R.string.diag_clear_short), Modifier.weight(1f), enabled = records.isNotEmpty()) {
-                    viewModel.clearSignaling()
                 }
             }
             if (searchOpen) {
@@ -486,15 +515,20 @@ internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(stringResource(R.string.diag_visible_messages, visible.size),
-                    Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Column(horizontalAlignment = Alignment.End) {
+                Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
+                    Text(stringResource(R.string.diag_visible_messages, visible.size),
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (status.status != RootDiagStatus.Running) Text(
                         status.failureReason?.let { capabilityReasonText(it) } ?: stringResource(status.status.title),
                         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(imsStatusLine(capability.imsStatus), style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                SignalListAction(stringResource(R.string.diag_follow_latest), Modifier, selected = followLatest) {
+                    followLatest = !followLatest
+                }
+                SignalListAction(stringResource(R.string.diag_clear_short), Modifier, enabled = records.isNotEmpty()) {
+                    viewModel.clearSignaling()
                 }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -667,7 +701,8 @@ private fun DiagRecord.packetHeader(): String = buildList {
 
 @Composable
 private fun MessageDetailsScreen(record: DiagRecord, onClose: () -> Unit,
-                                 onPrevious: (() -> Unit)?, onNext: (() -> Unit)?) {
+                                 onPrevious: (() -> Unit)?, onNext: (() -> Unit)?,
+                                 onRelatedPacket: (() -> Unit)?) {
     val context = LocalContext.current
     val masked = stringResource(R.string.diag_identity_masked)
     val unknownPaging = stringResource(R.string.diag_paging_unsupported)
@@ -723,6 +758,9 @@ private fun MessageDetailsScreen(record: DiagRecord, onClose: () -> Unit,
                                 if (warning.isNotBlank()) Text(warning, color = MaterialTheme.colorScheme.error,
                                     style = MaterialTheme.typography.labelMedium)
                             }
+                        }
+                        if (onRelatedPacket != null) item("related") {
+                            TextButton(onClick = onRelatedPacket) { Text(stringResource(R.string.diag_open_related_message)) }
                         }
                         if (header.isNotBlank()) item("header") {
                             PacketText(header, Modifier.padding(bottom = 16.dp))

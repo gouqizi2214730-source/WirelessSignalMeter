@@ -1967,7 +1967,9 @@ public class SurveyRecordProcessor
 
         final var additionalPlmns = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
                 ? cellIdentity.getAdditionalPlmns() : Set.<String>of();
-        return new NrRecordWrapper(recordBuilder.build(), bands, additionalPlmns);
+        final long measuredAt = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                ? cellInfoNr.getTimestampMillis() : -1;
+        return new NrRecordWrapper(recordBuilder.build(), bands, additionalPlmns, measuredAt);
     }
 
     /**
