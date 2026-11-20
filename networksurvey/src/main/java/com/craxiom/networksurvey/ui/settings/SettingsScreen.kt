@@ -64,7 +64,7 @@ import com.craxiom.networksurvey.BuildConfig
 import com.craxiom.networksurvey.R
 import com.craxiom.networksurvey.ui.rootdiag.RootDiagViewModel
 import com.craxiom.networksurvey.ui.rootdiag.capabilityLine
-import com.craxiom.networksurvey.ui.rootdiag.capabilityReasonText
+import com.craxiom.networksurvey.ui.rootdiag.imsStatusLine
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
@@ -155,7 +155,7 @@ fun SettingsScreen(
             }
             if (rootDiag != null) item {
                 SettingsGroup(stringResource(R.string.diag_settings_group)) {
-                    DiagCollectionSettings()
+                    DiagCollectionSettings(rootDiag)
                     SettingsDivider()
                     DeviceCapabilitySummary(rootDiag)
                     SettingsDivider()
@@ -246,16 +246,12 @@ private fun DeviceCapabilitySummary(rootDiag: RootDiagViewModel) {
         Text(capabilityLine(capability.root), style = MaterialTheme.typography.bodySmall)
         Text(capabilityLine(capability.qualcommDiag), style = MaterialTheme.typography.bodySmall)
         Text(capabilityLine(capability.bandLock), style = MaterialTheme.typography.bodySmall)
-        val context = LocalContext.current
-        val ims = capability.imsSources.joinToString("；") { "${it.id}: ${capabilityReasonText(context, it.reason)}" }
-        if (ims.isNotBlank()) {
-            Text(stringResource(R.string.diag_ims_providers, ims), style = MaterialTheme.typography.bodySmall)
-        }
+        Text(imsStatusLine(capability.imsStatus), style = MaterialTheme.typography.bodySmall)
     }
 }
 
 @Composable
-private fun DiagCollectionSettings() {
+private fun DiagCollectionSettings(rootDiag: RootDiagViewModel? = null) {
     val context = LocalContext.current
     var background by remember { mutableStateOf(RootDiagPrefs.backgroundEnabled(context)) }
     var overlay by remember { mutableStateOf(RootDiagPrefs.overlayWanted(context) && Settings.canDrawOverlays(context)) }
@@ -279,11 +275,7 @@ private fun DiagCollectionSettings() {
                 }
                 RootDiagPrefs.setBackgroundEnabled(context, enabled)
                 background = enabled
-                if (enabled && RootDiagCollectorService.running.value) {
-                    RootDiagCollectorService.start(context)
-                } else if (!enabled) {
-                    RootDiagCollectorService.stop(context)
-                }
+                rootDiag?.onCollectionPreferenceChanged()
             },
         ),
         trailing = { Switch(checked = background, onCheckedChange = null) },
@@ -304,6 +296,7 @@ private fun DiagCollectionSettings() {
                 } else {
                     RootDiagPrefs.setOverlayWanted(context, enabled)
                     overlay = enabled
+                    rootDiag?.onCollectionPreferenceChanged()
                     RootDiagCollectorService.refreshOverlay(context)
                 }
             },

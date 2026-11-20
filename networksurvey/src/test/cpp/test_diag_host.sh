@@ -9,4 +9,6 @@ flags=(-std=c11 -Wall -Wextra -Werror -O2)
 /tmp/diag_queue_test
 "$cc" "${flags[@]}" -o /tmp/ims_logcat_test "$root/networksurvey/src/test/cpp/ims_logcat_test.c"
 /tmp/ims_logcat_test
+"$cc" "${flags[@]}" -o /tmp/diag_session_file_test "$root/networksurvey/src/test/cpp/diag_session_file_test.c"
+/tmp/diag_session_file_test
 echo "host C tests passed"

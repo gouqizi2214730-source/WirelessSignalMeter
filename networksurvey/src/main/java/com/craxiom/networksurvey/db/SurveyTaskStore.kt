@@ -22,7 +22,6 @@ internal class SurveyTaskStore private constructor(context: Context) :
     val active = activeState.asStateFlow()
     private val revisionState = MutableStateFlow(0L)
     val revision = revisionState.asStateFlow()
-    private var allowAutomaticStart = false
     private val boundMissions = mutableSetOf<Pair<String, String>>()
     private var activeMission: String? = null
 
@@ -31,9 +30,6 @@ internal class SurveyTaskStore private constructor(context: Context) :
             "SELECT id,name,started_at,started_elapsed_ms,clock_id FROM survey_task WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1", null,
         ).use { if (it.moveToFirst()) activeState.value = SurveyTask(it.getString(0), it.getString(1), it.getLong(2),
             startedElapsedMs = it.getLong(3), clockId = it.getString(4)) }
-        readableDatabase.rawQuery("SELECT COUNT(*) FROM survey_task", null).use {
-            allowAutomaticStart = it.moveToFirst() && it.getLong(0) == 0L
-        }
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -49,8 +45,8 @@ internal class SurveyTaskStore private constructor(context: Context) :
 
     @Synchronized fun ensure(): SurveyTask = activeState.value ?: start()
 
-    @Synchronized fun observationTask(): SurveyTask? =
-        activeState.value ?: if (allowAutomaticStart) start() else null
+    /** Returns the running test task only. Viewing live packets must not open a recording session. */
+    @Synchronized fun observationTask(): SurveyTask? = activeState.value
 
     @Synchronized fun start(name: String = ""): SurveyTask {
         val now = System.currentTimeMillis()
@@ -77,7 +73,6 @@ internal class SurveyTaskStore private constructor(context: Context) :
             db.setTransactionSuccessful()
         } finally { db.endTransaction() }
         activeState.value = task
-        allowAutomaticStart = false
         activeMission?.let { boundMissions.add(task.id to it) }
         revisionState.value++
         return task

@@ -1392,7 +1392,7 @@
     <string name="diag_qmdl_start">Start QMDL recording</string>
     <string name="diag_qmdl_stop">Stop QMDL recording</string>
     <string name="diag_qmdl_export">Export last QMDL</string>
-    <string name="diag_qmdl_description">Records raw cellular DIAG packets. The file contains complete RRC, NAS and possibly SIP messages with identifiers; do not share it. Recording continues in the background if background collection is enabled, and stops at 128 MB. Export the previous recording to keep it.</string>
+    <string name="diag_qmdl_description">Records raw cellular DIAG packets only while a test task is running. The file contains complete RRC, NAS and possibly SIP messages with identifiers; do not share it. If background collection is enabled, a running task can continue after you leave the app. Recording stops at 128 MB.</string>
     <string name="diag_qmdl_export_short">Export QMDL</string>
     <string name="diag_open_related_message">Open related message</string>
     <string name="diag_event_cell_change">Serving cell change</string>
@@ -1426,7 +1426,7 @@
     <string name="diag_bg_notification_text">Collection continues after the screen is off or the app is switched away. Force-stop still ends it.</string>
     <string name="diag_bg_stop">Stop collection</string>
     <string name="diag_bg_title">Background collection</string>
-    <string name="diag_bg_subtitle">Keep DIAG collection running with a notification when you leave the app. It will not survive force-stop.</string>
+    <string name="diag_bg_subtitle">If a test task is already recording, keep it running in the background with a notification when you leave the app. This switch does not start recording by itself. Without a running task, you can only view live data in the app. Force-stop still ends it.</string>
     <string name="diag_overlay_title">Collection overlay</string>
     <string name="diag_overlay_subtitle">Show a small, draggable status window. This needs the system overlay permission; it is not opened automatically.</string>
     <string name="diag_overlay_need_permission">The overlay stays off until you grant “Display over other apps” in system settings. This app will not open that page by itself.</string>
@@ -1479,5 +1479,32 @@
     <string name="diag_reason_no_backend">No backend is implemented</string>
     <string name="diag_reason_logcat_exited">The logcat reader exited and will reconnect</string>
     <string name="diag_ims_providers">IMS: %1$s</string>
+    <string name="diag_ims_line">IMS · %1$s</string>
+    <string name="diag_ims_headline_unknown_samsung_ready">Unknown · Samsung log source is ready, no registration evidence yet</string>
+    <string name="diag_ims_headline_unknown_waiting">Unknown · Waiting for registration evidence</string>
+    <string name="diag_ims_headline_unknown_reconnecting">Unknown · Samsung log source is reconnecting</string>
+    <string name="diag_ims_headline_registered">Registered</string>
+    <string name="diag_ims_headline_registered_inferred">Registered (inferred)</string>
+    <string name="diag_ims_headline_deregistered">Not registered</string>
+    <string name="diag_ims_headline_failed">Registration failed</string>
+    <string name="diag_ims_headline_unavailable_privileged">Unavailable · The system IMS API needs privileged permission and cannot be used as evidence</string>
+    <string name="diag_ims_headline_unavailable_no_source">Unavailable · No IMS registration evidence source is available</string>
+    <string name="diag_ims_pipeline_ready">Source ready</string>
+    <string name="diag_ims_pipeline_subscribed">Codes subscribed, no IMS packets yet</string>
+    <string name="diag_ims_pipeline_starting">Source starting</string>
+    <string name="diag_ims_pipeline_reconnecting">Source reconnecting</string>
+    <string name="diag_ims_pipeline_privileged">Privileged system IMS API denied; ordinary phone permission cannot read it</string>
+    <string name="diag_ims_pipeline_unavailable">Source unavailable</string>
+    <string name="diag_ims_call_calling">Call originating</string>
+    <string name="diag_ims_call_alerting">Ringing</string>
+    <string name="diag_ims_call_connected">In call</string>
+    <string name="diag_overlay_task_collecting">Collecting task data</string>
+    <string name="diag_overlay_listening">Live view</string>
+    <string name="diag_overlay_standby">Standby</string>
+    <string name="diag_bg_notification_title_task">Test task collecting</string>
+    <string name="diag_bg_notification_text_task">A test task is recording DIAG data. Leaving the app continues only if background collection is enabled.</string>
+    <string name="diag_bg_notification_title_listen">Live view</string>
+    <string name="diag_bg_notification_text_listen">Showing live data. No test task is recording.</string>
+
 
 </resources>

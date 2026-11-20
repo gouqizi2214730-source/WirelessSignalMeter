@@ -1,6 +1,7 @@
 package com.craxiom.networksurvey.services
 
 import android.app.Notification
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
@@ -22,8 +23,10 @@ import com.craxiom.networksurvey.Application
 import com.craxiom.networksurvey.NetworkSurveyActivity
 import com.craxiom.networksurvey.R
 import com.craxiom.networksurvey.constants.NetworkSurveyConstants
+import com.craxiom.networksurvey.ui.rootdiag.DiagOverlaySnapshot
 import com.craxiom.networksurvey.ui.rootdiag.DiagOverlayState
 import com.craxiom.networksurvey.ui.rootdiag.RootDiagPrefs
+import com.craxiom.networksurvey.ui.rootdiag.imsHeadlineId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -44,6 +47,7 @@ class RootDiagCollectorService : Service() {
     private var window: WindowManager? = null
     private var overlay: View? = null
     private var label: TextView? = null
+    private var notificationMode: String? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -52,6 +56,14 @@ class RootDiagCollectorService : Service() {
         Application.createNotificationChannel(this)
         startInForeground()
         runningState.value = true
+        scope.launch {
+            DiagOverlayState.snapshot.collect { snap ->
+                if (snap.status != notificationMode && !foregroundFailed.value) {
+                    notificationMode = snap.status
+                    updateNotification(snap)
+                }
+            }
+        }
         maybeShowOverlay()
     }
 
@@ -76,7 +88,8 @@ class RootDiagCollectorService : Service() {
     }
 
     private fun startInForeground() {
-        val notification = buildNotification()
+        val snapshot = DiagOverlayState.snapshot.value
+        val notification = buildNotification(snapshot)
         try {
             if (Build.VERSION.SDK_INT >= 29) {
                 ServiceCompat.startForeground(
@@ -86,13 +99,17 @@ class RootDiagCollectorService : Service() {
             } else {
                 startForeground(NOTIFICATION_ID, notification)
             }
+            notificationMode = snapshot.status
         } catch (error: RuntimeException) {
             Timber.w(error, "Unable to start the DIAG foreground service")
             foregroundFailed.value = true
         }
     }
 
-    private fun buildNotification(): Notification {
+    private fun buildNotification(snap: DiagOverlaySnapshot): Notification {
+        val task = snap.collecting || snap.status == "task"
+        val title = if (task) R.string.diag_bg_notification_title_task else R.string.diag_bg_notification_title_listen
+        val text = if (task) R.string.diag_bg_notification_text_task else R.string.diag_bg_notification_text_listen
         val open = PendingIntent.getActivity(
             this, 0, Intent(this, NetworkSurveyActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
@@ -103,8 +120,8 @@ class RootDiagCollectorService : Service() {
         )
         return NotificationCompat.Builder(this, NetworkSurveyConstants.NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.logging_thick_icon)
-            .setContentTitle(getString(R.string.diag_bg_notification_title))
-            .setContentText(getString(R.string.diag_bg_notification_text))
+            .setContentTitle(getString(title))
+            .setContentText(getString(text))
             .setContentIntent(open)
             .setOngoing(true)
             .setSilent(true)
@@ -134,6 +151,7 @@ class RootDiagCollectorService : Service() {
             setOnClickListener {
                 RootDiagPrefs.setOverlayWanted(this@RootDiagCollectorService, false)
                 hideOverlay()
+                if (notificationMode != "task") stopSelf()
             }
         }
         val card = LinearLayout(this).apply {
@@ -192,9 +210,19 @@ class RootDiagCollectorService : Service() {
         }
     }
 
-    private fun formatOverlay(snap: com.craxiom.networksurvey.ui.rootdiag.DiagOverlaySnapshot): String {
+    private fun updateNotification(snap: DiagOverlaySnapshot) {
+        val manager = getSystemService(NotificationManager::class.java) ?: return
+        manager.notify(NOTIFICATION_ID, buildNotification(snap))
+    }
+
+    private fun formatOverlay(snap: DiagOverlaySnapshot): String {
         val parts = mutableListOf<String>()
-        parts += if (snap.collecting) getString(R.string.diag_overlay_collecting) else snap.status.ifBlank { "—" }
+        parts += when {
+            snap.collecting || snap.status == "task" -> getString(R.string.diag_overlay_task_collecting)
+            snap.status == "listening" -> getString(R.string.diag_overlay_listening)
+            snap.status == "standby" -> getString(R.string.diag_overlay_standby)
+            else -> snap.status.ifBlank { getString(R.string.diag_overlay_standby) }
+        }
         if (RootDiagPrefs.showRf(this)) {
             val rf = buildString {
                 if (snap.rat.isNotBlank()) append(snap.rat)
@@ -205,11 +233,21 @@ class RootDiagCollectorService : Service() {
             if (rf.isNotBlank()) parts += rf
         }
         if (RootDiagPrefs.showIms(this)) {
-            val ims = when (snap.imsAvailable) {
-                false -> getString(R.string.diag_ims_source_unavailable)
+            val ims = when {
+                snap.imsAvailable == false && snap.imsReg.isBlank() -> getString(R.string.diag_ims_source_unavailable)
+                snap.imsReg.startsWith("ims_") -> {
+                    val headline = getString(imsHeadlineId(snap.imsReg))
+                    val call = when (snap.imsCall) {
+                        "calling" -> getString(R.string.diag_ims_call_calling)
+                        "alerting" -> getString(R.string.diag_ims_call_alerting)
+                        "connected" -> getString(R.string.diag_ims_call_connected)
+                        else -> ""
+                    }
+                    val line = getString(R.string.diag_ims_line, headline)
+                    if (call.isBlank()) line else "$line · $call"
+                }
                 else -> buildString {
-                    append(snap.imsReg)
-                    if (snap.imsRegSource.isNotBlank()) append(" (").append(snap.imsRegSource).append(")")
+                    append(snap.imsReg.ifBlank { getString(R.string.diag_ims_headline_unknown_waiting) })
                     if (snap.imsCall.isNotBlank() && snap.imsCall != "idle") append(" · ").append(snap.imsCall)
                 }
             }
@@ -244,7 +282,12 @@ class RootDiagCollectorService : Service() {
             stopRequested.value = false
             foregroundFailed.value = false
             val intent = Intent(context, RootDiagCollectorService::class.java)
-            if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent) else context.startService(intent)
+            try {
+                if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent) else context.startService(intent)
+            } catch (error: RuntimeException) {
+                Timber.w(error, "Unable to launch the DIAG foreground service")
+                foregroundFailed.value = true
+            }
         }
 
         fun stop(context: Context) {

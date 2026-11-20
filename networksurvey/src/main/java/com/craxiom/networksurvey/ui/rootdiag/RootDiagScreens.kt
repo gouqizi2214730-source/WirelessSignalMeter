@@ -311,6 +311,7 @@ internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
     val capability by viewModel.capability.collectAsStateWithLifecycle()
     val records by viewModel.signaling.collectAsStateWithLifecycle()
     val qmdl by viewModel.qmdl.collectAsStateWithLifecycle()
+    val collectionMode by viewModel.collectionMode.collectAsStateWithLifecycle()
     val exportProgress by viewModel.qmdlExportProgress.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var confirmQmdl by rememberSaveable { mutableStateOf(false) }
@@ -417,7 +418,8 @@ internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
                             text = { Text(stringResource(if (qmdl.phase == QmdlPhase.Idle) R.string.diag_qmdl_start else R.string.diag_qmdl_stop)) },
                             enabled = qmdl.phase == QmdlPhase.Recording ||
                                 qmdl.phase == QmdlPhase.Idle && !qmdl.recovering &&
-                                    status.status == RootDiagStatus.Running && exportProgress == null,
+                                    status.status == RootDiagStatus.Running &&
+                                    collectionMode == DiagRecordingPolicy.Mode.TaskRecording && exportProgress == null,
                             onClick = {
                                 menuOpen = false
                                 if (qmdl.phase == QmdlPhase.Idle) confirmQmdl = true else viewModel.stopQmdl()
@@ -519,8 +521,7 @@ internal fun SignalingScreen(viewModel: RootDiagViewModel, onBack: () -> Unit) {
                     if (status.status != RootDiagStatus.Running) Text(
                         status.failureReason?.let { capabilityReasonText(it) } ?: stringResource(status.status.title),
                         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    val ims = capability.imsSources.joinToString(" · ") { "${it.id}:${capabilityReasonText(context, it.reason)}" }
-                    if (ims.isNotBlank()) Text(ims, style = MaterialTheme.typography.labelSmall,
+                    Text(imsStatusLine(capability.imsStatus), style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 SignalListAction(stringResource(R.string.diag_follow_latest), Modifier, selected = followLatest) {

@@ -35,6 +35,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
@@ -98,7 +99,9 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
     internal val signal = signalState.asStateFlow()
     private val signalingState = MutableStateFlow<List<DiagRecord>>(emptyList())
     internal val signaling = signalingState.asStateFlow()
-    private val qmdlFiles by lazy { QmdlRecordingFiles(File(app.noBackupFilesDir, "qmdl")) }
+    private val recordingSession by lazy { DiagRecordingSession(File(app.noBackupFilesDir, "qmdl")) }
+    private var qmdlTaskId: String? = null
+    private var qmdlAutoStartBlockedTask: String? = null
     private val qmdlState = MutableStateFlow(QmdlState())
     internal val qmdl = qmdlState.asStateFlow()
     private val qmdlExport = MutableStateFlow<Int?>(null)
@@ -134,9 +137,13 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
     private var simCount = 0
     private var selectedSubscriptionId: Int? = null
     private val imsProviders = linkedMapOf<String, ImsProviderStatus>()
+    private var lastImsEvidence: ImsEvidence? = null
+    private var overlayTaskId: String? = null
     private var bandLockProfile = BandLockProfile(LockSupportLevel.Unsupported, "unknown", reason = "unchecked")
     private val capabilityState = MutableStateFlow(currentCapability())
     internal val capability = capabilityState.asStateFlow()
+    private val collectionModeState = MutableStateFlow(DiagRecordingPolicy.Mode.Idle)
+    internal val collectionMode = collectionModeState.asStateFlow()
 
     internal fun recordSignalMode(root: Boolean, androidProtocol: String?, simCount: Int) {
         lastSignalMode = JSONObject().put("type", "signal_mode").put("t", System.currentTimeMillis())
@@ -156,7 +163,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
 
     init {
         viewModelScope.launch {
-            val hasRecording = withContext(Dispatchers.IO) { qmdlFiles.exportFile() != null }
+            val hasRecording = withContext(Dispatchers.IO) { recordingSession.latestRecording() != null }
             if (hasRecording) qmdlState.value = qmdlState.value.copy(hasRecording = true)
         }
         viewModelScope.launch {
@@ -167,28 +174,58 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 }
             }
         }
+        viewModelScope.launch {
+            val store = withContext(Dispatchers.IO) {
+                runCatching { SurveyTaskStore.get(app) }.getOrNull()
+            } ?: return@launch
+            store.active.collect { task ->
+                overlayTaskId = task?.id
+                if (qmdlAutoStartBlockedTask != overlayTaskId) qmdlAutoStartBlockedTask = null
+                applyCollectionPolicy()
+            }
+        }
     }
 
     internal fun startQmdl() {
+        requestQmdlStart(manual = true)
+    }
+
+    private fun eligibleQmdlTask(): String? =
+        overlayTaskId?.takeIf { DiagRecordingPolicy.shouldRecord(currentMode()) }
+
+    private fun requestQmdlStart(manual: Boolean) {
+        val taskId = eligibleQmdlTask() ?: return
         if (signalState.value.status != RootDiagStatus.Running ||
             qmdlState.value.phase != QmdlPhase.Idle || qmdlState.value.recovering || qmdlExport.value != null) return
+        if (!manual && qmdlAutoStartBlockedTask == taskId) return
+        qmdlTaskId = taskId
         lastQmdlStatus = null
         qmdlState.value = qmdlState.value.copy(phase = QmdlPhase.Starting, packets = 0, bytes = 0,
             result = null, errorCode = null)
     }
 
     internal fun stopQmdl() {
-        if (qmdlState.value.phase == QmdlPhase.Recording) {
-            qmdlState.value = qmdlState.value.copy(phase = QmdlPhase.Stopping)
-            qmdlStopWatchdog = viewModelScope.launch {
-                delay(QMDL_ACK_TIMEOUT)
-                if (qmdlState.value.phase != QmdlPhase.Stopping) return@launch
-                qmdlState.value = qmdlState.value.copy(
-                    phase = QmdlPhase.Idle, result = QmdlResult.Interrupted, recovering = true,
-                )
-                restartAfterStop = foreground && !pausedByUser
-                capture?.cancel()
-            }
+        if (qmdlState.value.phase != QmdlPhase.Recording) return
+        blockQmdlAutoStart()
+        requestQmdlStop()
+    }
+
+    private fun blockQmdlAutoStart() {
+        if (qmdlTaskId != null && qmdlTaskId == overlayTaskId) qmdlAutoStartBlockedTask = qmdlTaskId
+    }
+
+    private fun requestQmdlStop() {
+        if (qmdlState.value.phase != QmdlPhase.Recording && qmdlState.value.phase != QmdlPhase.Starting) return
+        qmdlState.value = qmdlState.value.copy(phase = QmdlPhase.Stopping)
+        qmdlStopWatchdog = viewModelScope.launch {
+            delay(QMDL_ACK_TIMEOUT)
+            if (qmdlState.value.phase != QmdlPhase.Stopping) return@launch
+            blockQmdlAutoStart()
+            qmdlState.value = qmdlState.value.copy(
+                phase = QmdlPhase.Idle, result = QmdlResult.Interrupted, recovering = true,
+            )
+            restartAfterStop = DiagRecordingPolicy.shouldListen(currentMode())
+            capture?.cancel()
         }
     }
 
@@ -196,15 +233,19 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
         qmdlStopWatchdog?.cancel()
         qmdlStopWatchdog = null
         val saved = withContext(Dispatchers.IO) {
-            val bytes = qmdlFiles.active.length()
-            val retained = qmdlFiles.retain()
+            val bytes = if (recordingSession.isOpen()) recordingSession.activeFile.length() else 0L
+            val retained = runCatching { recordingSession.finish() }.onFailure {
+                timber.log.Timber.w(it, "Could not archive QMDL file")
+            }
             val outcome = when {
-                !retained -> QmdlResult.Error
+                retained.isFailure -> QmdlResult.Error
                 bytes == 0L && result == QmdlResult.Saved -> QmdlResult.Empty
                 else -> result
             }
-            Triple(outcome, qmdlFiles.exportFile() != null, bytes)
+            Triple(outcome, recordingSession.latestRecording() != null, bytes)
         }
+        if (saved.first == QmdlResult.Limited || saved.first == QmdlResult.Error) blockQmdlAutoStart()
+        qmdlTaskId = null
         qmdlState.value = qmdlState.value.copy(
             phase = QmdlPhase.Idle, result = saved.first, hasRecording = saved.second, recovering = false,
             bytes = saved.third,
@@ -217,7 +258,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    val file = qmdlFiles.exportFile() ?: throw IOException("No QMDL data")
+                    val file = recordingSession.latestRecording() ?: throw IOException("No QMDL data")
                     val total = file.length()
                     if (total <= 0) throw IOException("No QMDL data")
                     file.inputStream().use { input ->
@@ -282,6 +323,11 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 } }))
                 .put("task_association", "captured_at_sample; missing task_id remains unassigned")
                 .put("time_ms", System.currentTimeMillis())
+                .put("ims_status", JSONObject()
+                    .put("headline", currentCapability().imsStatus.headlineKey)
+                    .put("registration", currentCapability().imsStatus.registration.name)
+                    .put("source", currentCapability().imsStatus.evidenceSource ?: JSONObject.NULL)
+                    .put("technical", currentCapability().imsStatus.technical))
                 .put("app_version", BuildConfig.VERSION_NAME)
                 .put("app_version_code", BuildConfig.VERSION_CODE)
                 .put("android", Build.VERSION.SDK_INT)
@@ -389,19 +435,16 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
     internal fun enterForeground() {
         foreground = true
         if (pausedByUser || (attempted && !authorized)) return
-        if (capture == null) start() else restartAfterStop = capture?.isCancelled == true
+        applyCollectionPolicy()
+        if (capture != null && capture?.isCancelled == true) restartAfterStop = true
     }
 
     internal fun leaveForeground() {
         foreground = false
-        if (keepsCollectingInBackground()) {
-            RootDiagCollectorService.start(app)
-            return
-        }
-        restartAfterStop = false
-        capture?.cancel()
-        RootDiagCollectorService.stop(app)
+        applyCollectionPolicy()
     }
+
+    internal fun onCollectionPreferenceChanged() = applyCollectionPolicy()
 
     internal fun retry() {
         pausedByUser = false
@@ -410,13 +453,29 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
 
     internal fun pause() {
         pausedByUser = true
-        restartAfterStop = false
-        capture?.cancel()
-        RootDiagCollectorService.stop(app)
+        applyCollectionPolicy()
     }
 
-    private fun keepsCollectingInBackground() =
-        RootDiagPrefs.backgroundEnabled(app) && capture != null && !pausedByUser
+    private fun currentMode(): DiagRecordingPolicy.Mode = DiagRecordingPolicy.mode(
+        taskRunning = overlayTaskId != null,
+        foreground = foreground,
+        backgroundAllowed = RootDiagPrefs.backgroundEnabled(app),
+        paused = pausedByUser,
+    )
+
+    private fun applyCollectionPolicy() {
+        val mode = currentMode()
+        collectionModeState.value = mode
+        if (qmdlTaskId != eligibleQmdlTask()) requestQmdlStop()
+        if (DiagRecordingPolicy.shouldListen(mode)) {
+            if (capture == null && !pausedByUser) start()
+        } else {
+            restartAfterStop = false
+            capture?.cancel()
+        }
+        publishOverlay(signalState.value.status, signalState.value.records)
+        syncCollectorService(signalState.value.status)
+    }
 
     internal fun clearSignaling() {
         firstVisibleMessageId = nextId
@@ -425,7 +484,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
 
     private fun start() {
         if (capture != null) return
-        if (!foreground && !RootDiagPrefs.backgroundEnabled(app)) return
+        if (!DiagRecordingPolicy.shouldListen(currentMode())) return
         attempted = true
         signalState.value = RootSignalState(
             RootDiagStatus.Checking, lastMeasurements.values.toList() + lastConfiguration.values,
@@ -436,18 +495,18 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 captureRecords()
             } finally {
                 capture = null
-                val keep = !pausedByUser && (foreground || RootDiagPrefs.backgroundEnabled(app))
+                val keep = !pausedByUser && DiagRecordingPolicy.shouldListen(currentMode())
                 val retry = CollectorRestartPolicy.shouldRetry(
                     lastEndStatus, lastEndError, hadBeenRunning, restartAttempt,
                 )
                 if (keep && (restartAfterStop || retry)) {
                     restartAfterStop = false
-                    if (retry) {
+                    if (retry && isActive) {
                         val wait = CollectorRestartPolicy.delayMs(restartAttempt)
                         restartAttempt++
                         delay(wait)
                     }
-                    if (!pausedByUser && (foreground || RootDiagPrefs.backgroundEnabled(app))) start()
+                    if (!pausedByUser && DiagRecordingPolicy.shouldListen(currentMode())) start()
                     else syncCollectorService(lastEndStatus)
                 } else {
                     syncCollectorService(lastEndStatus)
@@ -476,8 +535,14 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
     private fun syncCollectorService(status: RootDiagStatus) {
         val active = status == RootDiagStatus.Checking || status == RootDiagStatus.Starting ||
             status == RootDiagStatus.Running
-        if (active && RootDiagPrefs.backgroundEnabled(app)) RootDiagCollectorService.start(app)
-        else if (!active) RootDiagCollectorService.stop(app)
+        val mode = currentMode()
+        val hold = DiagRecordingPolicy.shouldListen(mode) &&
+            DiagRecordingPolicy.shouldHoldService(mode, RootDiagPrefs.overlayWanted(app))
+        if (active && hold) {
+            if (!RootDiagCollectorService.running.value && foreground) RootDiagCollectorService.start(app)
+        } else {
+            RootDiagCollectorService.stop(app)
+        }
     }
 
     private fun currentCapability(): DeviceCapabilitySnapshot {
@@ -497,6 +562,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
             collectorError = signalState.value.errorCode,
             imsProviders = imsProviders.values.toList(),
             bandLock = bandLockProfile,
+            imsEvidence = lastImsEvidence,
         )
     }
 
@@ -506,20 +572,20 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
 
     private fun publishOverlay(status: RootDiagStatus, records: List<DiagRecord>) {
         val serving = records.filter { it.type == "serving" }.maxByOrNull { it.receivedAt }?.data
-        val registration = if (overlayImsAvailable == false) "unavailable" else overlayImsReg
+        val ims = currentCapability().imsStatus
+        val mode = if (status == RootDiagStatus.Running) currentMode() else DiagRecordingPolicy.Mode.Idle
         DiagOverlayState.publish(
             DiagOverlaySnapshot(
-                collecting = status == RootDiagStatus.Running || status == RootDiagStatus.Starting ||
-                    status == RootDiagStatus.Checking,
-                status = status.name,
+                collecting = DiagRecordingPolicy.shouldRecord(mode),
+                status = DiagRecordingPolicy.overlayStatus(mode),
                 rat = serving?.optString("rat").orEmpty(),
                 pci = serving?.optInt("pci", -1)?.takeIf { it >= 0 },
                 rsrp = serving?.optDouble("rsrp")?.takeIf { it.isFinite() },
                 sinr = serving?.optDouble("sinr")?.takeIf { it.isFinite() },
-                imsReg = registration,
-                imsRegSource = if (overlayImsAvailable == false) "unavailable" else overlayImsSource,
-                imsAvailable = overlayImsAvailable,
-                imsCall = overlayImsCall,
+                imsReg = ims.headlineKey,
+                imsRegSource = ims.evidenceSource.orEmpty(),
+                imsAvailable = if (ims.registration == ImsRegistrationUi.Unavailable) false else null,
+                imsCall = ims.call ?: overlayImsCall,
                 decodeDropped = overlayDropped,
             )
         )
@@ -790,36 +856,27 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                         imsProviders[name] = ImsProviderStatus(name, statusName, available, value.optString("detail"))
                         publishCapability()
                     }
-                    if (name == "samsung_logcat") {
-                        overlayImsAvailable = when {
-                            available == false || statusName == "unavailable" -> false
-                            available == true || statusName == "available" -> true
-                            else -> overlayImsAvailable
-                        }
-                        if (overlayImsAvailable == false) {
-                            overlayImsReg = "unavailable"
-                            overlayImsSource = "samsung_logcat"
-                        } else if (overlayImsAvailable == true && overlayImsSource.isBlank()) {
-                            overlayImsSource = "samsung_logcat"
-                        }
-                    }
-                    if (name == "qualcomm_diag" && (available == true || statusName == "available")) {
-                        if (overlayImsAvailable != true) overlayImsSource = "qualcomm_diag"
-                    }
                 }
                 "ims_state", "ims_reg", "ims_call" -> {
-                    if (type == "ims_state" || type == "ims_reg") {
-                        val registration = value.optString("reg").ifBlank { value.optString("result") }
-                        if (overlayImsAvailable != false && registration.isNotBlank()) {
-                            overlayImsReg = registration
-                            overlayImsSource = when {
-                                value.optInt("reg_inferred") == 1 -> "inferred"
-                                value.optString("src").isNotBlank() -> value.optString("src")
-                                else -> overlayImsSource.ifBlank { type }
-                            }
-                        }
+                    val registration = value.optString("reg").ifBlank { value.optString("result") }
+                    val inferred = value.optInt("reg_inferred") == 1 || value.optBoolean("reg_inferred")
+                    val source = when {
+                        inferred -> "inferred"
+                        value.optString("why").isNotBlank() -> value.optString("why")
+                        value.optString("call_src").isNotBlank() -> value.optString("call_src")
+                        value.optString("src").isNotBlank() -> value.optString("src")
+                        else -> type
                     }
-                    value.optString("call").takeIf { it.isNotBlank() }?.let { overlayImsCall = it }
+                    val call = value.optString("call").takeIf { it.isNotBlank() } ?: lastImsEvidence?.call
+                    lastImsEvidence = ImsEvidence(
+                        registration = registration.takeIf { it.isNotBlank() && it != "unknown" },
+                        inferred = inferred,
+                        source = source,
+                        call = call,
+                        why = value.optString("why"),
+                    )
+                    overlayImsCall = call ?: overlayImsCall
+                    publishCapability()
                 }
                 "qmdl" -> {
                     if (qmdlCommand == null) return
@@ -1168,21 +1225,32 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
             val stream = running.inputStream
             do {
                 when {
+                    status == RootDiagStatus.Running && qmdlState.value.phase == QmdlPhase.Idle && qmdlCommand == null -> {
+                        requestQmdlStart(manual = false)
+                    }
                     status == RootDiagStatus.Running && qmdlState.value.phase == QmdlPhase.Starting && qmdlCommand == null -> {
-                        val prepared = withContext(Dispatchers.IO) {
-                            runCatching { qmdlFiles.prepare() }.getOrElse {
-                                timber.log.Timber.w(it, "Could not prepare QMDL file")
-                                false
+                        val taskId = qmdlTaskId
+                        val prepared = taskId != null && taskId == eligibleQmdlTask() &&
+                            withContext(Dispatchers.IO) {
+                                runCatching { recordingSession.start(taskId) }.onFailure {
+                                    timber.log.Timber.w(it, "Could not prepare QMDL file")
+                                }.isSuccess
                             }
-                        }
-                        if (prepared) {
+                        if (prepared && taskId == eligibleQmdlTask() && qmdlState.value.phase == QmdlPhase.Starting) {
                             qmdlCommand = 'Q'
                             qmdlDeadline = SystemClock.elapsedRealtime() + QMDL_ACK_TIMEOUT
                             withContext(Dispatchers.IO) {
                                 running.outputStream.write('Q'.code)
                                 running.outputStream.flush()
                             }
-                        } else finishQmdl(QmdlResult.Error)
+                        } else {
+                            val result = if (!prepared && taskId == eligibleQmdlTask()) QmdlResult.Error
+                                else QmdlResult.Interrupted
+                            withContext(NonCancellable) { finishQmdl(result) }
+                        }
+                    }
+                    qmdlState.value.phase == QmdlPhase.Stopping && qmdlCommand == null -> {
+                        withContext(NonCancellable) { finishQmdl(QmdlResult.Interrupted) }
                     }
                     qmdlState.value.phase == QmdlPhase.Stopping && qmdlCommand == 'Q' -> {
                         qmdlCommand = 'S'
@@ -1227,7 +1295,8 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
                 }
                 if (!running.isAlive && size == 0) break
                 if (qmdlDeadline?.let { now >= it } == true) {
-                    restartAfterStop = (foreground || RootDiagPrefs.backgroundEnabled(app)) && !pausedByUser
+                    blockQmdlAutoStart()
+                    restartAfterStop = DiagRecordingPolicy.shouldListen(currentMode()) && !pausedByUser
                     break
                 }
                 val timeout = if (status == RootDiagStatus.Checking) 25_000 else 16_000
@@ -1275,7 +1344,7 @@ class RootDiagViewModel(application: Application) : AndroidViewModel(application
         // Match DiagCap's executable location so Android uses the same linker configuration.
         // The fresh 0700 directory is owned by root and the child keeps the app's stdin pipe.
         val quotedPath = "'" + helper.absolutePath.replace("'", "'\\''") + "'"
-        val quotedQmdl = "'" + qmdlFiles.active.absolutePath.replace("'", "'\\''") + "'"
+        val quotedQmdl = "'" + recordingSession.activeFile.absolutePath.replace("'", "'\\''") + "'"
         return """
             PATH=/system/bin
             export PATH
