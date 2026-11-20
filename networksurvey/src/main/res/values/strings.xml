@@ -141,6 +141,15 @@
         <item quantity="one">Carrier Aggregation · %1$d carrier · %2$s MHz</item>
         <item quantity="other">Carrier Aggregation · %1$d carriers · %2$s MHz</item>
     </plurals>
+    <string name="ca_endc_bandwidths">LTE+NR reported bandwidths · %1$d · %2$s MHz (possible EN-DC, not a CA carrier count)</string>
+    <string name="ca_lte_bandwidths">LTE reported bandwidths · %1$d · %2$s MHz (ServiceState, not activation)</string>
+    <string name="ca_nr_bandwidths">NR reported bandwidths · %1$d · %2$s MHz (ServiceState, not activation)</string>
+    <string name="ca_multi_bandwidths">Reported bandwidths · %1$d · %2$s MHz (untyped, not activation)</string>
+    <string name="ca_lte_cellinfo">LTE CA (CellInfo secondary) · %1$d carriers</string>
+    <string name="ca_nr_cellinfo">NR CA (CellInfo secondary) · %1$d carriers</string>
+    <string name="ca_endc_cellinfo">EN-DC (CellInfo secondary) · %1$d legs</string>
+    <string name="ca_nr_b825">NR configured carriers (B825) · %1$d (configured, not scheduled)</string>
+    <string name="ca_lte_b193">LTE multi-serving EARFCN (B193) · %1$d (overlapping measurements, not scheduled)</string>
     <string name="network_technology_explanation">These fields describe the technologies your phone is using right now.\n\nThe large line is the network you are on: the radio access technology (RAT), plus whether 5G is Standalone (NR on its own) or Non-Standalone (NSA, NR added onto an LTE anchor).\n\nThe Voice pill is the technology carrying calls; Wi-Fi Calling is detected directly, while VoLTE and VoNR are inferred because Android does not expose them to apps.\n\nThe Data pill is the radio access technology (RAT) carrying data. It often matches the large line above.\n\nThe Branding pill is the label your carrier uses for the status-bar icon (for example showing 5G on a 4G network). It is marketing branding, not the actual RAT, and reads None when your carrier applies none.</string>
 
     <!-- GSM labels -->

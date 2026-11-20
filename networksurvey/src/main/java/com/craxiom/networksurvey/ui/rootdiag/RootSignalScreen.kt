@@ -73,7 +73,9 @@ import com.craxiom.networksurvey.ui.cellular.CellularChartViewModel
 import com.craxiom.networksurvey.ui.cellular.ColoredSignalBar
 import com.craxiom.networksurvey.ui.cellular.rememberSignalBarColors
 import com.craxiom.networksurvey.ui.cellular.SignalBarColors
+import com.craxiom.networksurvey.fragments.model.CarrierAggregationViewState
 import com.craxiom.networksurvey.ui.cellular.ServingCellHeader
+import com.craxiom.networksurvey.util.CarrierAggregation
 import com.craxiom.networksurvey.ui.cellular.ServingSignalMetrics
 import com.craxiom.networksurvey.ui.cellular.SignalSectionCard
 import com.craxiom.networksurvey.ui.cellular.baidumap.isRecent
@@ -235,7 +237,8 @@ internal fun RootSignalScreen(
     ) {
         item("network") {
             RootNetworkHeader(identity, nrMode, status,
-                operator?.name.orEmpty().ifBlank { registeredPlmn?.displayPlmn().orEmpty() })
+                operator?.name.orEmpty().ifBlank { registeredPlmn?.displayPlmn().orEmpty() },
+                records, androidCells)
         }
         if (rat == null || fields == null) {
             return@LazyColumn
@@ -670,14 +673,28 @@ private fun SignalSelection(selected: String, options: List<String>, prefix: Str
 }
 
 @Composable
-private fun RootNetworkHeader(identity: ServingIdentity?, nrMode: NrMode?, status: String, operator: String) {
-    val context = LocalContext.current.applicationContext
-    val cellName by produceState("", identity, context) {
+private fun RootNetworkHeader(
+    identity: ServingIdentity?,
+    nrMode: NrMode?,
+    status: String,
+    operator: String,
+    records: Map<String, List<DiagRecord>>,
+    androidCells: CellularViewModel?,
+) {
+    val context = LocalContext.current
+    val appContext = context.applicationContext
+    val now = SystemClock.elapsedRealtime()
+    val diagSnapshot = remember(records, now / 1_000L) { diagCarrierAggregation(records, now) }
+    val androidCa = androidCells?.getCarrierAggregation()?.observeAsState()?.value
+    val carrierAggregation = if (diagSnapshot.visible) {
+        carrierAggregationViewState(diagSnapshot) { res, n, mhz -> context.getString(res, n, mhz) }
+    } else androidCa
+    val cellName by produceState("", identity, appContext) {
         value = ""
         if (identity != null && identity.cid > 0) {
             value = withContext(Dispatchers.IO) {
                 runCatching {
-                    val database = EngineeringParamDbHelper.getInstance(context)
+                    val database = EngineeringParamDbHelper.getInstance(appContext)
                     database.matchServingIdentity(identity.toStation())
                         ?.let { it.cellName.orEmpty().ifBlank { it.siteName.orEmpty() } }.orEmpty()
                 }.getOrDefault("")
@@ -701,7 +718,7 @@ private fun RootNetworkHeader(identity: ServingIdentity?, nrMode: NrMode?, statu
             voicePill = null,
             dataPill = null,
             brandingPill = status,
-            carrierAggregation = null,
+            carrierAggregation = carrierAggregation,
         )
         if (identity == null) WaitingForDiagData()
     }

@@ -21,6 +21,7 @@ import com.google.protobuf.BoolValue;
 import com.google.protobuf.Descriptors;
 import com.google.protobuf.GeneratedMessage;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -652,6 +653,29 @@ public class CellularUtils
         }
 
         return null;
+    }
+
+    /**
+     * Every record in {@code nrRecords} whose connection status is
+     * {@link ConnectionStatus#SECONDARY_SERVING}. On NR CA there can be more than one SCell;
+     * {@link #selectSecondaryServingNrCell} only returns the first for the secondary-cell card,
+     * but all of them must stay out of the neighbors table.
+     */
+    public static List<NrRecordWrapper> selectAllSecondaryServingNrCells(List<NrRecordWrapper> nrRecords)
+    {
+        if (nrRecords == null || nrRecords.isEmpty()) return List.of();
+        final List<NrRecordWrapper> selected = new ArrayList<>();
+        for (NrRecordWrapper wrapper : nrRecords)
+        {
+            final NrRecordData data = ((NrRecord) wrapper.cellularRecord).getData();
+            if (data.getConnectionStatus() == ConnectionStatus.SECONDARY_SERVING) selected.add(wrapper);
+        }
+        return selected;
+    }
+
+    public static boolean isSecondaryServing(ConnectionStatus status)
+    {
+        return status == ConnectionStatus.SECONDARY_SERVING;
     }
 
     /**
